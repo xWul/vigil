@@ -49,7 +49,7 @@ the UI comes in Phase 4.
 - [x] Spec: `docs/specs/auth-azure-devops.md`
 - [ ] Spec: `docs/specs/auth-github.md`
 - [x] `Result<T, E>` type and helpers (`src/shared/result.ts`)
-- [ ] `AuthProvider` interface
+- [x] `AuthProvider` interface
 - [ ] `TokenStore` interface; keychain implementation via `keytar` or
       `@napi-rs/keyring`
 - [x] PKCE helpers (`pkce.ts`): verifier/challenge generation

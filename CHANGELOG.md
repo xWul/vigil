@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`AuthProvider` interface** (`src/main/auth/AuthProvider.ts`): defines
+  the `AuthSession` discriminated union (`AzureDevOpsSession`, `GitHubSession`,
+  `PATSession`), the `AuthError` discriminated union (six typed failure codes),
+  and the `AuthProvider` interface that all sign-in implementations must satisfy.
 - ADR-0004: OS Keychain for Token Storage — records the choice of
   `@napi-rs/keyring` over `keytar` (archived) and the `FileTokenStore`
   fallback for development/CI environments.
