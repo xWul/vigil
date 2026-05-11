@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **PKCE helpers** (`src/main/auth/pkce.ts`): `generateVerifier`,
+  `deriveChallenge`, and `generatePkce` implement the RFC 7636 S256
+  verifier/challenge pair used in the Azure DevOps OAuth flow.
+- ADR-0003: PKCE Authorization Code Flow for Azure DevOps OAuth —
+  records the flow choice, multi-tenant app registration model, upfront
+  consent scopes, and single-session keychain design.
+- `docs/specs/auth-azure-devops.md`: full specification for the Azure
+  DevOps authentication flow, ready for implementation.
+- `CONTEXT.md`: domain glossary with canonical definitions for
+  AuthSession, AuthError, Account, and Organization.
+
 - Project named **Vigil** — reflects the product's purpose of keeping
   watchful attention on incoming pull requests.
 - Initial project documentation: `ARCHITECTURE.md`, `CLAUDE.md`,
