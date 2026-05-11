@@ -50,8 +50,7 @@ the UI comes in Phase 4.
 - [ ] Spec: `docs/specs/auth-github.md`
 - [x] `Result<T, E>` type and helpers (`src/shared/result.ts`)
 - [x] `AuthProvider` interface
-- [ ] `TokenStore` interface; keychain implementation via `keytar` or
-      `@napi-rs/keyring`
+- [x] `TokenStore` interface; keychain implementation via `@napi-rs/keyring`
 - [x] PKCE helpers (`pkce.ts`): verifier/challenge generation
 - [ ] `AzureDevOpsAuthProvider` using MSAL Node + PKCE
 - [ ] `GitHubAuthProvider` using OAuth Device Flow (no localhost

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`TokenStore` interface and implementations** (`src/main/auth/`):
+  `TokenStore` defines the `save`/`load`/`delete` contract; `KeychainTokenStore`
+  persists sessions to the OS keychain via `@napi-rs/keyring`; `FileTokenStore`
+  provides a plain-JSON fallback for development and CI. Contract tests in
+  `TokenStore.test.ts` run against `FileTokenStore` and can be reused for
+  `KeychainTokenStore` integration tests.
 - **`AuthProvider` interface** (`src/main/auth/AuthProvider.ts`): defines
   the `AuthSession` discriminated union (`AzureDevOpsSession`, `GitHubSession`,
   `PATSession`), the `AuthError` discriminated union (six typed failure codes),
