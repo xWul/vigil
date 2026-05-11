@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`PATAuthProvider`** (`src/main/auth/PATAuthProvider.ts`): implements
+  `AuthProvider` for Personal Access Token sign-in. Accepts a PAT via an
+  injected `askForPAT` callback (no network calls at sign-in), persists
+  it under `"pat-github"` or `"pat-azure-devops"`, and treats the token
+  as non-expiring. Returns `{ code: "cancelled" }` if the callback
+  rejects and `{ code: "auth_failed" }` for empty input. Covered by 22
+  unit tests and the `AuthProvider` contract tests for both platforms.
+- **`docs/specs/auth-pat.md`**: spec for the PAT fallback auth flow.
+
 - **`GitHubAuthProvider`** (`src/main/auth/GitHubAuthProvider.ts`):
   implements `AuthProvider` for the GitHub OAuth Device Flow. Presents a
   user code and verification URI via an injected callback, polls GitHub's

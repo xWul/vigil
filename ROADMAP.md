@@ -55,7 +55,7 @@ the UI comes in Phase 4.
 - [x] `AzureDevOpsAuthProvider` using MSAL Node + PKCE
 - [x] `GitHubAuthProvider` using OAuth Device Flow (no localhost
       listener needed; cleaner UX for CLI/desktop)
-- [ ] `PATAuthProvider` fallback (manual token paste) for both platforms
+- [x] `PATAuthProvider` fallback (manual token paste) for both platforms
 - [ ] Token refresh logic with one automatic retry on 401
 - [x] Tests: unit tests for PKCE, mocked OAuth flows, contract test
       framework (`authProviderContract.ts`) used by `AzureDevOpsAuthProvider`;
