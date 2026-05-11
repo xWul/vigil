@@ -69,6 +69,9 @@ desktop.ini
 .vigil-cache/
 # Local user data during development
 .vigil-dev/
+# Dev auth session files written by scripts/test-auth-*.ts (contain tokens)
+scripts/.github-session.json
+scripts/.ado-session.json
 
 # --- Misc ---
 .cache/
