@@ -10,9 +10,9 @@
 
 Vigil is a desktop application for AI-assisted code review. The user opens it, signs into one or more git hosting platforms (GitHub, Azure DevOps), and reviews pull requests with the help of a large language model that they bring their own API key for.
 
-The name reflects the product's purpose: a vigil is something you *keep* — deliberately, patiently, with full attention. Code review at its best is exactly that.
+The name reflects the product's purpose: a vigil is something you _keep_ — deliberately, patiently, with full attention. Code review at its best is exactly that.
 
-The product thesis: AI-assisted authoring (Claude Code, Cursor, Copilot) has made it dramatically easier to *produce* code than to *review* it. Existing review tools (the GitHub PR page, the Azure DevOps web UI) were built for a world of carefully-authored, carefully-reviewed changes. Vigil is built for a world where the bottleneck is review, not authorship.
+The product thesis: AI-assisted authoring (Claude Code, Cursor, Copilot) has made it dramatically easier to _produce_ code than to _review_ it. Existing review tools (the GitHub PR page, the Azure DevOps web UI) were built for a world of carefully-authored, carefully-reviewed changes. Vigil is built for a world where the bottleneck is review, not authorship.
 
 This document describes how Vigil is structured to deliver on that thesis.
 
@@ -40,19 +40,19 @@ This document describes how Vigil is structured to deliver on that thesis.
 
 ## 3. Stack
 
-| Layer | Choice | Reason |
-|---|---|---|
-| Application shell | Electron | Mature, cross-platform, large ecosystem. We accept the bundle-size tradeoff. (See ADR-0001.) |
-| Language | TypeScript 5.7+ (strict mode, no `any`) | Strong types across the full stack, hireable skill, excellent tooling. |
-| Main process runtime | Node.js 24 LTS ("Krypton") | Active LTS through April 2028. Production-ready while staying current. Node.js 26 is Current but not yet LTS, and native modules in the Electron ecosystem typically lag a new major. |
-| Renderer UI | React 19.2.6+ | Current major. Pin to 19.2.1 or later to avoid the React2Shell vulnerability that affected 19.0.0 through 19.2.0 (we don't use Server Components in a desktop app, but the patched version is still the right floor). |
-| Build tool | Vite 6 + electron-vite | Fast dev loop, modern bundling. |
-| Test runner | Vitest 3 | Fast, ESM-native, good TypeScript support. |
-| Auth library (Microsoft) | MSAL Node (`@azure/msal-node`) | Official Microsoft library; handles PKCE, token cache, refresh. |
-| Auth library (GitHub) | Octokit OAuth helpers | Official GitHub libraries. |
-| Token storage | OS keychain via `keytar` (or `@napi-rs/keyring`) | Native secure storage; never roll our own. |
-| Git operations | `simple-git` (shells out to git) | Reliable; we don't need libgit2-level control. |
-| AI SDKs | `@anthropic-ai/sdk`, `openai` | Official SDKs from each provider. |
+| Layer                    | Choice                                           | Reason                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application shell        | Electron                                         | Mature, cross-platform, large ecosystem. We accept the bundle-size tradeoff. (See ADR-0001.)                                                                                                                          |
+| Language                 | TypeScript 5.7+ (strict mode, no `any`)          | Strong types across the full stack, hireable skill, excellent tooling.                                                                                                                                                |
+| Main process runtime     | Node.js 24 LTS ("Krypton")                       | Active LTS through April 2028. Production-ready while staying current. Node.js 26 is Current but not yet LTS, and native modules in the Electron ecosystem typically lag a new major.                                 |
+| Renderer UI              | React 19.2.6+                                    | Current major. Pin to 19.2.1 or later to avoid the React2Shell vulnerability that affected 19.0.0 through 19.2.0 (we don't use Server Components in a desktop app, but the patched version is still the right floor). |
+| Build tool               | Vite 6 + electron-vite                           | Fast dev loop, modern bundling.                                                                                                                                                                                       |
+| Test runner              | Vitest 3                                         | Fast, ESM-native, good TypeScript support.                                                                                                                                                                            |
+| Auth library (Microsoft) | MSAL Node (`@azure/msal-node`)                   | Official Microsoft library; handles PKCE, token cache, refresh.                                                                                                                                                       |
+| Auth library (GitHub)    | Octokit OAuth helpers                            | Official GitHub libraries.                                                                                                                                                                                            |
+| Token storage            | OS keychain via `keytar` (or `@napi-rs/keyring`) | Native secure storage; never roll our own.                                                                                                                                                                            |
+| Git operations           | `simple-git` (shells out to git)                 | Reliable; we don't need libgit2-level control.                                                                                                                                                                        |
+| AI SDKs                  | `@anthropic-ai/sdk`, `openai`                    | Official SDKs from each provider.                                                                                                                                                                                     |
 
 Anything else (utility libraries, UI components) is decided per-need and recorded in an ADR if non-trivial.
 
@@ -157,6 +157,19 @@ src/
 
 Tests live next to the source they test (`Foo.ts` and `Foo.test.ts` in the same directory). Integration tests that span modules live in `src/test/`.
 
+### TypeScript project structure
+
+The dual-process Electron app has fundamentally different type environments. The renderer is a browser-like environment with DOM types and JSX. The main process is a Node environment with no DOM. Configuration files are a third context — Node types, looser strictness. A single tsconfig cannot express this correctly.
+
+The repository uses **TypeScript project references**:
+
+- `tsconfig.json` — references-only root, no files of its own. `tsc -b` builds all referenced projects.
+- `tsconfig.web.json` — renderer; React + DOM + JSX, `composite: true`.
+- `tsconfig.node.json` — main + preload + shared; Node types, no DOM, `composite: true`.
+- `tsconfig.tools.json` — `electron.vite.config.ts`, `vitest.config.ts`, `eslint.config.js`; standalone (not composite), loose.
+
+ESLint's `projectService` discovers the right tsconfig per file via this layout. Application code resolves to the appropriate composite project for full type-aware linting; root-level config files use a default project with type-checked rules disabled (see `eslint.config.js`).
+
 ---
 
 ## 6. Key abstractions
@@ -165,7 +178,7 @@ Tests live next to the source they test (`Foo.ts` and `Foo.test.ts` in the same 
 
 ```typescript
 interface AuthProvider {
-  readonly id: 'github' | 'azure-devops' | 'pat';
+  readonly id: "github" | "azure-devops" | "pat";
   signIn(): Promise<Result<AuthSession, AuthError>>;
   refresh(session: AuthSession): Promise<Result<AuthSession, AuthError>>;
   signOut(session: AuthSession): Promise<Result<void, AuthError>>;
@@ -190,7 +203,7 @@ The production implementation is keychain-backed. A file-based implementation ex
 
 ```typescript
 interface PlatformProvider {
-  readonly id: 'github' | 'azure-devops';
+  readonly id: "github" | "azure-devops";
   listOpenPullRequests(scope: PRScope): Promise<PullRequest[]>;
   getPullRequest(ref: PRRef): Promise<PullRequest>;
   getDiff(ref: PRRef): Promise<Diff>;
@@ -205,7 +218,7 @@ Each provider translates between the platform's API and our internal normalized 
 
 ```typescript
 interface AIProvider {
-  readonly id: 'anthropic' | 'openai';
+  readonly id: "anthropic" | "openai";
   complete(req: CompletionRequest): Promise<CompletionResult>;
   stream(req: CompletionRequest): AsyncIterable<CompletionChunk>;
 }
@@ -218,9 +231,7 @@ Abstracts the LLM call. Lets the review engine work against either provider, and
 Async functions return `Result<T, E>` instead of throwing across module boundaries. Exceptions are still used for programmer errors and truly unexpected failures, but expected failure modes (network error, auth expired, rate limited) are typed.
 
 ```typescript
-type Result<T, E> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 ```
 
 ---
@@ -309,15 +320,15 @@ No part of this flow exposes tokens or AI keys to the renderer.
 
 The threats we consider, and how we address them:
 
-| Threat | Mitigation |
-|---|---|
-| Token theft from disk | OS keychain only; never written to plain files or logs. |
-| Token leakage to renderer | Strict main/renderer separation; renderer cannot read tokens via any IPC channel. |
-| Token leakage to AI provider | Diffs and code are sent to the AI; tokens are not part of any prompt. We document this clearly. |
-| Code leakage to third parties | Only the configured AI provider receives code. No telemetry, no analytics. |
-| Malicious AI output as code execution | AI responses are rendered as text, never `eval`d. Suggested fixes are displayed as diffs, never auto-applied. |
-| Compromised dependencies | Dependencies are pinned. We document why each one is included. Renovate or similar handles updates with review. |
-| Prompt injection from PR content | Prompts treat PR content as untrusted data, wrapped in clear delimiters, with explicit instructions not to follow instructions found in the diff. |
+| Threat                                | Mitigation                                                                                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token theft from disk                 | OS keychain only; never written to plain files or logs.                                                                                           |
+| Token leakage to renderer             | Strict main/renderer separation; renderer cannot read tokens via any IPC channel.                                                                 |
+| Token leakage to AI provider          | Diffs and code are sent to the AI; tokens are not part of any prompt. We document this clearly.                                                   |
+| Code leakage to third parties         | Only the configured AI provider receives code. No telemetry, no analytics.                                                                        |
+| Malicious AI output as code execution | AI responses are rendered as text, never `eval`d. Suggested fixes are displayed as diffs, never auto-applied.                                     |
+| Compromised dependencies              | Dependencies are pinned. We document why each one is included. Renovate or similar handles updates with review.                                   |
+| Prompt injection from PR content      | Prompts treat PR content as untrusted data, wrapped in clear delimiters, with explicit instructions not to follow instructions found in the diff. |
 
 Cryptographic and storage details for tokens are in [ADR-0004](./docs/adr/0004-keychain-for-token-storage.md).
 
@@ -363,7 +374,7 @@ If we ever add opt-in telemetry, it will be an ADR with explicit user consent in
 These are interesting and may make sense later, but are not v1:
 
 - GitLab and Bitbucket providers (the abstraction supports them; we just don't ship them yet).
-- Semantic diff (understanding what *changed in meaning*, not just text).
+- Semantic diff (understanding what _changed in meaning_, not just text).
 - Repository-wide indexing with embeddings for "find similar code" features.
 - Inline AI suggestions that the user can apply as commits.
 - Team features (shared review templates, organisation-level rules).
@@ -389,8 +400,8 @@ Tracked here until resolved by an ADR or spec:
 
 `ARCHITECTURE.md` describes the system as it actually is, not as it was originally imagined. When a significant change lands:
 
-1. Write or update an ADR in `docs/adr/` capturing the *why*.
-2. Update this document so the *what* and *how* stay accurate.
+1. Write or update an ADR in `docs/adr/` capturing the _why_.
+2. Update this document so the _what_ and _how_ stay accurate.
 3. Keep the diff small and intentional — this file is meant to be read end-to-end.
 
 If you find yourself writing more than a page of detail about one component, that detail probably belongs in a spec under `docs/specs/`, with a one-paragraph summary here that links to it.

@@ -117,8 +117,7 @@ using an LLM. CLI-only at this stage.
   - [ ] `consistency.md`
   - [ ] `summary.md`
 - [ ] Review engine orchestrating the multi-pass pipeline
-- [ ] `ReviewResult` model: findings (with file + line range + severity
-      + evidence), summary, risk score
+- [ ] `ReviewResult` model: findings (with file + line range + severity + evidence), summary, risk score
 - [ ] Prompt-injection defense: untrusted-content delimiters, explicit
       instruction in system prompts
 - [ ] Tests: golden tests against a small corpus of sample PRs (real
@@ -259,7 +258,7 @@ Anything here is a candidate for an RFC if it becomes relevant.
 ## How to use this roadmap
 
 - **One phase at a time.** Don't start Phase 2 before Phase 1 is
-  *done*, including tests and changelog entries.
+  _done_, including tests and changelog entries.
 - **Each phase is shippable.** Even if the only "user" is you, treat
   the end of each phase as a release: tag it, update the changelog,
   write a short retrospective in the commit message of the tag.

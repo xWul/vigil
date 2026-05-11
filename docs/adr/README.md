@@ -7,7 +7,7 @@ consequences.
 
 ## Why ADRs?
 
-Code shows *what* the system does. ADRs explain *why* it does it that way.
+Code shows _what_ the system does. ADRs explain _why_ it does it that way.
 Six months from now, when someone (including future-me) asks "why is this
 an Electron app and not Tauri?" or "why do we have a PlatformProvider
 abstraction when we only support GitHub?", the answer is one click away.
@@ -53,7 +53,7 @@ Numbers are never reused, even if an ADR is superseded.
 
 ## Lifecycle
 
-- Write the ADR *before* implementing the decision when feasible.
+- Write the ADR _before_ implementing the decision when feasible.
 - Once accepted, ADRs are immutable except for status changes.
 - If a decision is reversed, write a new ADR that supersedes the old one
   and update the old one's status to "Superseded by ADR-NNNN".
@@ -66,8 +66,8 @@ draft it. It applies the three-rule criteria above strictly.
 
 ## Index
 
-| #   | Title                                                | Status   |
-| --- | ---------------------------------------------------- | -------- |
+| #                                     | Title                                     | Status   |
+| ------------------------------------- | ----------------------------------------- | -------- |
 | [0001](./0001-electron-over-tauri.md) | Electron over Tauri for the desktop shell | Accepted |
 
 <!-- Append new ADRs to this table as they are written. -->

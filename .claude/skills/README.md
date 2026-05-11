@@ -34,7 +34,7 @@ implementation. Source:
   hard-to-reverse, surprising-without-context, real-trade-off.
 
 **How to invoke:** In Claude Code, say something like
-*"Use grill-with-docs to stress-test my plan for [X]."*
+_"Use grill-with-docs to stress-test my plan for [X]."_
 Claude Code will load the skill and switch into interrogation mode.
 
 ## Adding a new skill

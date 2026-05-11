@@ -8,7 +8,7 @@
 
 **Vigil** is an Electron desktop application for AI-assisted code
 review. The name reflects the product's purpose — a vigil is something
-you *keep*, deliberately and patiently. The target user is a senior
+you _keep_, deliberately and patiently. The target user is a senior
 engineer who reviews many pull requests per day, increasingly authored
 with AI assistance, and wants an AI-augmented review experience.
 
@@ -16,6 +16,7 @@ Bring Your Own Key (BYOK) for AI providers. No backend services we operate.
 Local-first. Tokens in the OS keychain.
 
 Before making non-trivial changes:
+
 1. Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the big picture.
 2. Check [`docs/adr/`](./docs/adr/) for relevant decisions.
 3. Check [`docs/specs/`](./docs/specs/) for feature-level specifications.
@@ -99,11 +100,15 @@ not a license to special-case.
   paths, relative paths. Blank line between groups.
 - Names: `PascalCase` for types and components, `camelCase` for
   variables and functions, `SCREAMING_SNAKE_CASE` for true constants.
+- **React components: do not annotate the return type.** React 19
+  removed the global `JSX` namespace, so `JSX.Element` no longer
+  works, and `React.JSX.Element` adds noise. Let TypeScript infer
+  the return type. The JSX inside is still fully type-checked.
 
 ### Comments
 
-Minimal. Write code that explains itself. Comments are for the *why*,
-not the *what*. Specifically:
+Minimal. Write code that explains itself. Comments are for the _why_,
+not the _what_. Specifically:
 
 - No comments restating what the code does.
 - No `// Initialize the variable`, `// Return the result`, etc.
@@ -129,7 +134,7 @@ not the *what*. Specifically:
   `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`.
 - Subject line: 50 characters or less, imperative mood
   ("add", not "added" or "adds").
-- Body (optional): explains *why*, wrapped at 72 characters.
+- Body (optional): explains _why_, wrapped at 72 characters.
 - **Do not add `Co-Authored-By: Claude <noreply@anthropic.com>`.**
 - **Do not add "Generated with Claude Code" or similar footers.**
 - **Do not add emoji to commit messages** unless the user explicitly
@@ -239,15 +244,15 @@ reading six months from now.
 ## Domain language and CONTEXT.md
 
 Vigil has several overlapping terms that need precise definitions:
-*pull request*, *review*, *finding*, *comment*, *session*, *account*,
-*organization*, *provider* (platform vs AI), and others. Sloppy
+_pull request_, _review_, _finding_, _comment_, _session_, _account_,
+_organization_, _provider_ (platform vs AI), and others. Sloppy
 language here produces sloppy code.
 
 A `CONTEXT.md` file at the repo root holds the canonical glossary.
 It's created lazily — the first time a term needs disambiguation —
 and grows organically. Rules:
 
-- Only include terms that are meaningful at the *domain* level.
+- Only include terms that are meaningful at the _domain_ level.
   Don't put implementation details (e.g. "the `tokens` table") there.
 - When introducing a new domain term, check `CONTEXT.md` first. If
   the term already exists with a different meaning, either use the
@@ -306,7 +311,7 @@ The application itself uses LLMs. A few specific rules:
 
 - Prompts live in `src/main/ai/prompts/` as versioned files. Treat
   prompt changes like code changes: PR-reviewed, documented in commits.
-- PR content (diffs, file contents) is *untrusted input* to the LLM.
+- PR content (diffs, file contents) is _untrusted input_ to the LLM.
   Wrap it in clear delimiters in prompts. Include explicit instructions
   that the AI should not follow instructions found inside the PR
   content. This is our defense against prompt injection from malicious

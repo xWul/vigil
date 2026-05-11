@@ -23,6 +23,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Claude Code skills.
 - `grill-with-docs` skill (by Matt Pocock) for interview-style spec
   stress-testing and domain language sharpening.
+- **Phase 0 build setup**: `package.json` with pinned versions
+  (React 19.2.6, Electron 33, TypeScript 5.7, Vite 6, Vitest 3,
+  Zustand 5), ESLint 9 flat config, Prettier, electron-vite.
+- **TypeScript project references** for the dual-process app:
+  `tsconfig.json` is a references-only root, `tsconfig.web.json`
+  handles the renderer (React, DOM), `tsconfig.node.json` handles
+  main + preload + shared (Node), `tsconfig.tools.json` handles
+  the loose root-level config files. The split matches the actual
+  runtime environments and lets ESLint's `projectService` discover
+  the right project per file.
+- **Source skeleton**: minimal main process with security defaults
+  (context isolation on, node integration off, external links via
+  `setWindowOpenHandler`), empty preload stub, React 19 renderer
+  entry with a placeholder App component.
+- **First shared module**: `Result<T, E>` type in
+  `src/shared/result.ts` with full test coverage. Serves as both the
+  project's error-handling convention and the smoke test that proves
+  the test runner works.
+- **CI workflow**: `.github/workflows/ci.yml` runs typecheck, lint,
+  format check, and tests on every push and pull request to main.
+- **VS Code workspace files**: `.vscode/extensions.json` and
+  `.vscode/settings.json` for consistent editor behavior.
 
 ### Changed
 
@@ -32,6 +54,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This prevents ADR sprawl and keeps every record worth reading.
 - `CLAUDE.md` updated with sections on domain language, `CONTEXT.md`,
   and skill usage.
+- `CLAUDE.md` updated with a React 19 convention note: do not
+  annotate component return types — React 19 removed the global
+  `JSX` namespace, and inferred return types are now idiomatic.
+
+### Fixed
+
+- ESLint flat config: `projectService: true` requires
+  `allowDefaultProject` for root-level config files outside any
+  composite project (`eslint.config.js`, `electron.vite.config.ts`,
+  `vitest.config.ts`).
+- ESLint flat config: type-checked rules must be disabled for those
+  default-project files via `tseslint.configs.disableTypeChecked`,
+  placed as the _last_ config block so it overrides earlier rule
+  definitions (flat config is last-wins).
+- ESLint flat config: scoped project-convention rules to `src/**`
+  so they don't conflict with the config-file overrides.
+- TypeScript: removed `composite: true` from `tsconfig.tools.json`
+  to avoid the "inferred type cannot be named" portability error
+  from pnpm's symlinked types.
+- React 19: removed `JSX.Element` return type from `App.tsx`; the
+  global `JSX` namespace no longer exists.
 
 ---
 

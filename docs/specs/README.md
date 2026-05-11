@@ -1,7 +1,7 @@
 # Feature Specifications
 
 This directory contains specifications for non-trivial features of
-Vigil. Each spec is written *before* the feature is implemented and
+Vigil. Each spec is written _before_ the feature is implemented and
 describes goals, inputs, outputs, edge cases, and acceptance criteria.
 
 See [`CLAUDE.md`](../../CLAUDE.md) § "What to do before writing code"
@@ -32,7 +32,7 @@ Each spec is a markdown file with sections like:
 - **Related** — links to relevant ADRs and other specs
 
 See [`docs/adr/README.md`](../adr/README.md) for a comparison: ADRs
-record *decisions*, specs record *features*.
+record _decisions_, specs record _features_.
 
 ## Index
 

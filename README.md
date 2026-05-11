@@ -2,8 +2,8 @@
 
 A desktop application for AI-assisted code review.
 
-> *Vigil (n.) — a period of keeping watch, especially through the night;
-> staying purposefully awake and attentive.*
+> _Vigil (n.) — a period of keeping watch, especially through the night;
+> staying purposefully awake and attentive._
 
 Vigil is built for the era when developers using Claude Code, Cursor,
 and Copilot are generating far more pull requests than humans can
