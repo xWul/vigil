@@ -19,17 +19,17 @@ not the destination.
 - [x] `CLAUDE.md` written
 - [x] `CHANGELOG.md` initialised
 - [x] `ROADMAP.md` (this file)
-- [ ] `README.md` (one-pager: what, why, status, install)
-- [ ] License chosen and `LICENSE` file added (MIT or Apache 2.0 suggested)
-- [ ] `.gitignore`, `.editorconfig`, `.nvmrc` (Node 24 LTS)
-- [ ] `package.json` with `pnpm` declared, scripts skeleton
-- [ ] TypeScript config (strict mode), ESLint, Prettier set up
-- [ ] Vitest configured, one passing smoke test
-- [ ] CI: GitHub Actions running typecheck + lint + tests on push
+- [x] `README.md` (one-pager: what, why, status, install)
+- [x] License chosen and `LICENSE` file added (MIT or Apache 2.0 suggested)
+- [x] `.gitignore`, `.editorconfig`, `.nvmrc` (Node 24 LTS)
+- [x] `package.json` with `pnpm` declared, scripts skeleton
+- [x] TypeScript config (strict mode), ESLint, Prettier set up
+- [x] Vitest configured, one passing smoke test
+- [x] CI: GitHub Actions running typecheck + lint + tests on push
 - [ ] First ADRs written:
-  - [ ] ADR-0001: Electron over Tauri
+  - [x] ADR-0001: Electron over Tauri
   - [ ] ADR-0002: Platform Provider abstraction
-  - [ ] ADR-0003: PKCE for desktop OAuth
+  - [x] ADR-0003: PKCE for desktop OAuth
   - [ ] ADR-0004: OS keychain for token storage
   - [ ] ADR-0005: Result type for error handling
 
@@ -46,9 +46,9 @@ app remembers them across restarts.
 This phase is deliberately not about the UI. Build the auth core first;
 the UI comes in Phase 4.
 
-- [ ] Spec: `docs/specs/auth-azure-devops.md`
+- [x] Spec: `docs/specs/auth-azure-devops.md`
 - [ ] Spec: `docs/specs/auth-github.md`
-- [ ] `Result<T, E>` type and helpers (`src/shared/result.ts`)
+- [x] `Result<T, E>` type and helpers (`src/shared/result.ts`)
 - [ ] `AuthProvider` interface
 - [ ] `TokenStore` interface; keychain implementation via `keytar` or
       `@napi-rs/keyring`
