@@ -1,0 +1,31 @@
+# https://editorconfig.org/
+# Top-most EditorConfig file
+root = true
+
+# Defaults for every file
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# Markdown — trailing whitespace can be meaningful (line breaks)
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Makefiles require tabs
+[Makefile]
+indent_style = tab
+
+# JSON / YAML — match the 2-space default explicitly
+[*.{json,yml,yaml}]
+indent_size = 2
+
+# TypeScript / JavaScript / TSX / JSX
+[*.{ts,tsx,js,jsx,mjs,cjs}]
+indent_size = 2
+max_line_length = 100

@@ -1,0 +1,76 @@
+# --- Dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- Build output ---
+dist/
+out/
+build/
+release/
+*.tsbuildinfo
+
+# --- Electron ---
+# electron-builder output
+release/
+# electron-vite output
+.vite/
+
+# --- Test / coverage ---
+coverage/
+.nyc_output/
+*.lcov
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- Environment / secrets ---
+# Never commit secrets, API keys, or tokens.
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- OS junk ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Editor / IDE ---
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# --- TypeScript / JavaScript ---
+*.tgz
+.parcel-cache/
+
+# --- Vigil-specific ---
+# Local repo cache (set up in Phase 6)
+.vigil-cache/
+# Local user data during development
+.vigil-dev/
+
+# --- Misc ---
+.cache/
+tmp/
+temp/
