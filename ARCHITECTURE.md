@@ -112,7 +112,9 @@ src/
 │   │   ├── GitHubAuthProvider.ts        # OAuth Device Flow + PKCE
 │   │   ├── PATAuthProvider.ts           # manual token fallback
 │   │   ├── pkce.ts                # verifier/challenge helpers
-│   │   └── tokenStore.ts          # keychain wrapper
+│   │   ├── TokenStore.ts          # interface
+│   │   ├── KeychainTokenStore.ts  # OS keychain via @napi-rs/keyring (production)
+│   │   └── FileTokenStore.ts      # plain-JSON fallback for dev and CI
 │   ├── platforms/
 │   │   ├── PlatformProvider.ts    # interface
 │   │   ├── AzureDevOpsProvider.ts
@@ -197,7 +199,19 @@ interface TokenStore {
 }
 ```
 
-The production implementation is keychain-backed. A file-based implementation exists for development on machines without a keychain.
+Two implementations ship:
+
+- **`KeychainTokenStore`** — production. Delegates to the OS keychain
+  (macOS Keychain Services, Windows Credential Manager, libsecret on Linux)
+  via `@napi-rs/keyring`. Sessions are serialised as JSON strings stored
+  under the service name `"vigil"`.
+- **`FileTokenStore`** — development and CI. Persists a JSON file at a
+  caller-supplied path. Do not use in production; sessions are stored in
+  plain text.
+
+The implementation is chosen at startup based on keychain availability.
+Contract tests in `TokenStore.test.ts` verify both against the same
+behaviour expectations.
 
 ### 6.3 `PlatformProvider`
 
