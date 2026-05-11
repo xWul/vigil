@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`withRefreshRetry`** (`src/main/auth/withRefreshRetry.ts`): generic
+  utility that executes a `Result`-returning call, and on an "unauthorized"
+  result (detected via a caller-supplied predicate), refreshes the session
+  once, persists the new session, and retries exactly once. A second
+  unauthorized after a successful refresh is returned as-is. Covered by 8
+  unit tests.
+- **`docs/specs/auth-refresh-retry.md`**: spec for the retry utility.
+
 - **`PATAuthProvider`** (`src/main/auth/PATAuthProvider.ts`): implements
   `AuthProvider` for Personal Access Token sign-in. Accepts a PAT via an
   injected `askForPAT` callback (no network calls at sign-in), persists

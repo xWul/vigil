@@ -56,7 +56,7 @@ the UI comes in Phase 4.
 - [x] `GitHubAuthProvider` using OAuth Device Flow (no localhost
       listener needed; cleaner UX for CLI/desktop)
 - [x] `PATAuthProvider` fallback (manual token paste) for both platforms
-- [ ] Token refresh logic with one automatic retry on 401
+- [x] Token refresh logic with one automatic retry on 401
 - [x] Tests: unit tests for PKCE, mocked OAuth flows, contract test
       framework (`authProviderContract.ts`) used by `AzureDevOpsAuthProvider`;
       extended to cover `GitHubAuthProvider` when implemented
