@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`GitHubAuthProvider`** (`src/main/auth/GitHubAuthProvider.ts`):
+  implements `AuthProvider` for the GitHub OAuth Device Flow. Presents a
+  user code and verification URI via an injected callback, polls GitHub's
+  token endpoint (handling `authorization_pending`, `slow_down`, `expired_token`,
+  and `access_denied`), fetches the authenticated user's `login` and
+  `displayName`, and persists the session to `TokenStore` under the key
+  `"github"`. Token refresh is a no-op (GitHub OAuth App tokens do not
+  expire); sign-out is local-only. Covered by 18 unit tests and the
+  `AuthProvider` contract tests.
+- **`scripts/test-auth-github.ts`**: Node.js integration script for the
+  GitHub auth Phase 1 exit criterion. Presents the device code, waits for
+  sign-in, prints `login` and `displayName`, and on a second run restores
+  the session from file and prints "Restored from keychain".
+
+- **`AzureDevOpsAuthProvider`** (`src/main/auth/AzureDevOpsAuthProvider.ts`):
+  implements `AuthProvider` for the Microsoft Entra ID / Azure DevOps OAuth
+  flow. Signs in via PKCE Authorization Code flow with a loopback HTTP
+  listener, refreshes tokens via MSAL's `acquireTokenByRefreshToken`, and
+  persists sessions to `TokenStore` under the key `"azure-devops"`. Sign-out
+  is always local-first; server-side revocation is best-effort. Covered by
+  unit tests and the new `AuthProvider` contract test.
+- **`authProviderContract.ts`**: reusable `describeAuthProviderContract`
+  helper that runs structural and behavioral assertions against any
+  `AuthProvider` implementation. Used by `AzureDevOpsAuthProvider.test.ts`;
+  ready to be reused for `GitHubAuthProvider`.
+- **`scripts/test-auth-ado.ts`**: Node.js integration script for the Phase 1
+  exit criterion. Calls `signIn()`, completes the browser flow, prints the
+  `displayName` and `upn`, and on a second run restores the session from file
+  and prints "Restored from keychain".
+
 - **`TokenStore` interface and implementations** (`src/main/auth/`):
   `TokenStore` defines the `save`/`load`/`delete` contract; `KeychainTokenStore`
   persists sessions to the OS keychain via `@napi-rs/keyring`; `FileTokenStore`
