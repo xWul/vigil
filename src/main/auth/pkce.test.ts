@@ -21,9 +21,7 @@ describe("deriveChallenge", () => {
   it("produces the S256 challenge for a known verifier", () => {
     // RFC 7636 Appendix B test vector
     const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-    const expected = createHash("sha256")
-      .update(verifier, "ascii")
-      .digest("base64url");
+    const expected = createHash("sha256").update(verifier, "ascii").digest("base64url");
     expect(deriveChallenge(verifier)).toBe(expected);
   });
 

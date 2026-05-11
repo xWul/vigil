@@ -13,6 +13,7 @@ authenticated API calls on the user's behalf and to refresh those
 credentials when they expire.
 
 For Azure DevOps:
+
 - access token (short-lived)
 - refresh token (long-lived)
 - expiry timestamp

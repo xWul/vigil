@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ADR-0004: OS Keychain for Token Storage — records the choice of
+  `@napi-rs/keyring` over `keytar` (archived) and the `FileTokenStore`
+  fallback for development/CI environments.
+- ADR-0005: Result Type for Expected Failure Modes — records the
+  hand-rolled `Result<T, E>` approach over exceptions or a library
+  dependency for typed async error handling.
 - **PKCE helpers** (`src/main/auth/pkce.ts`): `generateVerifier`,
   `deriveChallenge`, and `generatePkce` implement the RFC 7636 S256
   verifier/challenge pair used in the Azure DevOps OAuth flow.

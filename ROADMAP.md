@@ -30,8 +30,8 @@ not the destination.
   - [x] ADR-0001: Electron over Tauri
   - [ ] ADR-0002: Platform Provider abstraction
   - [x] ADR-0003: PKCE for desktop OAuth
-  - [ ] ADR-0004: OS keychain for token storage
-  - [ ] ADR-0005: Result type for error handling
+  - [x] ADR-0004: OS keychain for token storage
+  - [x] ADR-0005: Result type for error handling
 
 **Exit criteria:** `pnpm install && pnpm test` works on a fresh clone.
 CI is green. The repo looks professional at first glance.
@@ -52,7 +52,7 @@ the UI comes in Phase 4.
 - [ ] `AuthProvider` interface
 - [ ] `TokenStore` interface; keychain implementation via `keytar` or
       `@napi-rs/keyring`
-- [ ] PKCE helpers (`pkce.ts`): verifier/challenge generation
+- [x] PKCE helpers (`pkce.ts`): verifier/challenge generation
 - [ ] `AzureDevOpsAuthProvider` using MSAL Node + PKCE
 - [ ] `GitHubAuthProvider` using OAuth Device Flow (no localhost
       listener needed; cleaner UX for CLI/desktop)
