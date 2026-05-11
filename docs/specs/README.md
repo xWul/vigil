@@ -36,4 +36,6 @@ record _decisions_, specs record _features_.
 
 ## Index
 
-(none yet — first spec lands in Phase 1)
+| Spec | Phase | Status |
+|---|---|---|
+| [auth-azure-devops](./auth-azure-devops.md) | 1 | Ready for implementation |

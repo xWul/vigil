@@ -69,5 +69,6 @@ draft it. It applies the three-rule criteria above strictly.
 | #                                     | Title                                     | Status   |
 | ------------------------------------- | ----------------------------------------- | -------- |
 | [0001](./0001-electron-over-tauri.md) | Electron over Tauri for the desktop shell | Accepted |
+| [0003](./0003-pkce-for-desktop-oauth.md) | PKCE Authorization Code Flow for Azure DevOps OAuth | Accepted |
 
 <!-- Append new ADRs to this table as they are written. -->
