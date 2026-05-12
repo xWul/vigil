@@ -13,10 +13,7 @@ import type { TokenStore } from "./TokenStore.js";
 // Contract tests — run against any TokenStore implementation
 // ---------------------------------------------------------------------------
 
-function describeTokenStoreContract(
-  label: string,
-  makeStore: () => TokenStore,
-) {
+function describeTokenStoreContract(label: string, makeStore: () => TokenStore) {
   const session: AzureDevOpsSession = {
     provider: "azure-devops",
     accessToken: "at-test",
@@ -61,7 +58,12 @@ function describeTokenStoreContract(
 
     it("keys are independent", async () => {
       const store = makeStore();
-      const session2 = { ...session, provider: "github" as const, accessToken: "gh-token", login: "ada" };
+      const session2 = {
+        ...session,
+        provider: "github" as const,
+        accessToken: "gh-token",
+        login: "ada",
+      };
       await store.save("azure-devops", session);
       await store.save("github", session2);
       await store.delete("azure-devops");
@@ -82,9 +84,7 @@ function makeTempPath(): string {
 const filePaths: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    filePaths.splice(0).map((p) => unlink(p).catch(() => undefined)),
-  );
+  await Promise.all(filePaths.splice(0).map((p) => unlink(p).catch(() => undefined)));
 });
 
 describeTokenStoreContract("FileTokenStore", () => {
