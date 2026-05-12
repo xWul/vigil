@@ -5,7 +5,7 @@ import type { TokenStore } from "./TokenStore.js";
 
 // Public client ID — not a secret, safe to ship in source.
 // TODO: replace with the registered GitHub OAuth App client ID before shipping.
-export const GITHUB_CLIENT_ID = "Iv23li00000000000000";
+export const GITHUB_CLIENT_ID = "Ov23liYszuNkzjfiWTiH";
 
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";

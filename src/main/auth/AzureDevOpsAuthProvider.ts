@@ -12,15 +12,16 @@ import type { TokenStore } from "./TokenStore.js";
 
 // Public client ID — not a secret, safe to ship in source. See ADR-0003.
 // TODO: replace with the registered Azure AD app client ID before shipping.
-export const AZURE_CLIENT_ID = "00000000-0000-0000-0000-000000000000";
+export const AZURE_CLIENT_ID = "33c7c9d4-d7c9-4caa-b1f2-c961e4bbed79";
 
 const AUTHORITY = "https://login.microsoftonline.com/common";
+const ADO_RESOURCE = "https://app.vssps.visualstudio.com";
 const SCOPES = [
-  "vso.profile",
-  "vso.project",
-  "vso.code",
-  "vso.threads_full",
-  "vso.code_status",
+  `${ADO_RESOURCE}/vso.profile`,
+  `${ADO_RESOURCE}/vso.project`,
+  `${ADO_RESOURCE}/vso.code`,
+  `${ADO_RESOURCE}/vso.code_write`,
+  `${ADO_RESOURCE}/vso.code_status`,
   "offline_access",
 ];
 const KEYCHAIN_KEY = "azure-devops";
@@ -70,7 +71,7 @@ export function openCallbackListener(timeoutMs: number): Promise<{
       }, timeoutMs);
 
       resolveOuter({
-        redirectUri: `http://localhost:${port}/callback`,
+        redirectUri: `http://localhost:${port}`,
         result: callbackPromise,
       });
     });
