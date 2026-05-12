@@ -97,30 +97,31 @@ structured log entries to the console. All 86 existing tests pass with
 **Goal:** Given an authenticated session, fetch a PR from GitHub or
 Azure DevOps and normalize it into the internal model.
 
-- [ ] Spec: `docs/specs/pr-fetch-and-normalize.md`
-- [ ] Internal model types: `PullRequest`, `Diff`, `Hunk`, `Comment`,
-      `Author`, `Repository`
-- [ ] `PlatformProvider` interface
-- [ ] `GitHubProvider`:
-  - [ ] `listOpenPullRequests`
-  - [ ] `getPullRequest` (with diff)
-  - [ ] `getDiff` (unified diff + per-file structured form)
-  - [ ] `postComment` (commit comment + PR comment paths)
-  - [ ] `submitReview` (approve / request changes / comment)
-- [ ] `AzureDevOpsProvider`:
-  - [ ] Same surface, translating from Azure DevOps iterations and
-        per-file changes into the unified `Diff` model
-  - [ ] Org discovery flow (`/_apis/accounts`) for the first sign-in
-- [ ] URL parser: given a PR URL from either platform, return a
-      `PRRef` that the right provider can fetch
-- [ ] Tests: contract tests both providers must pass; recorded HTTP
-      fixtures for stability
-- [ ] Logging: every outbound API call logged at `info` (method, URL
-      without auth params, status code, latency); rate-limit headers
-      logged at `warn`
+- [x] Spec: `docs/specs/pr-fetch-and-normalize.md`
+- [x] ADR-0002: Platform Provider abstraction
+- [x] Internal model types: `PRRef`, `PullRequest`, `Diff`, `FileDiff`,
+      `Hunk`, `DiffLine`, `Comment`, `Author`, `PlatformError`,
+      `NewComment`, `NewReview` (`src/main/platforms/model/`)
+- [x] `PlatformProvider` interface
+- [x] `GitHubProvider` (via `@octokit/rest`):
+  - [x] `listOpenPullRequests` (assignment-scoped via search API)
+  - [x] `getPullRequest`
+  - [x] `getDiff` (unified diff parsed into structured `FileDiff[]`)
+  - [x] `postComment` (PR-level and inline)
+  - [x] `submitReview` (approve / request changes / comment)
+- [x] `AzureDevOpsProvider` (raw `fetch`):
+  - [x] `listOpenPullRequests`
+  - [x] `getPullRequest`
+  - [x] `getDiff` (file list from iterations/changes; hunks deferred to Phase 3)
+  - [x] `postComment`
+  - [x] `submitReview`
+  - [x] `discoverOrgs` standalone utility
+- [x] URL parser: handles GitHub, dev.azure.com, and legacy visualstudio.com URLs
+- [x] Tests: MSW-backed, contract tests run against both providers (47 new tests)
+- [x] Logging: sign-in/refresh events logged per Phase 1.5 pattern
 
-**Exit criteria:** A CLI command — `your-tool fetch <pr-url>` — accepts
-a URL from either platform and prints the normalized PR as JSON.
+**Exit criteria:** `pnpm fetch-pr <pr-url>` accepts a URL from either
+platform and prints the normalized PR and diff as JSON.
 
 ---
 

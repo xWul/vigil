@@ -9,15 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Phase 2 spec and ADR** (`docs/specs/pr-fetch-and-normalize.md`,
+- **Phase 2 — Platform providers and PR fetching**: `GitHubProvider`
+  fetches PRs and diffs from GitHub using `@octokit/rest` (search-based
+  review queue, per-file unified diff parsing into structured `Diff`).
+  `AzureDevOpsProvider` does the same via raw `fetch` against the ADO
+  REST API (iterations-based diff, file list with change types).
+  `parsePRUrl` normalizes GitHub, dev.azure.com, and legacy
+  visualstudio.com URLs into a typed `PRRef`. `discoverOrgs` returns
+  the list of ADO organizations for a signed-in account. All providers
+  accept a `Logger` for structured observability. 47 new tests using
+  MSW for HTTP mocking; shared contract tests run against both providers.
+- **`pnpm fetch-pr <url>`**: CLI script that accepts a PR URL, fetches
+  the normalized `PullRequest` and `Diff`, and prints them as JSON.
+  Phase 2 exit criterion.
+- **Phase 2 spec and ADR-0002** (`docs/specs/pr-fetch-and-normalize.md`,
   `docs/adr/0002-platform-provider-abstraction.md`): full specification
-  for `PlatformProvider`, internal model types (`PRRef`, `PullRequest`,
-  `Diff`, `FileDiff`, `Hunk`, `DiffLine`, `PlatformError`,
-  `NewComment`, `NewReview`), `GitHubProvider` and `AzureDevOpsProvider`
-  implementation details, URL parser, and MSW-based test strategy.
-  ADR-0002 records the decisions behind the abstraction shape
-  (per-call session injection, assignment-scoped list, separate
-  `getDiff`, discriminated `PRRef`).
+  and design decisions for the `PlatformProvider` abstraction (per-call
+  session injection, assignment-scoped list, separate `getDiff`,
+  discriminated `PRRef`).
 
 - **Observability foundation — Phase 1.5** (`src/shared/logger.ts`):
   `Logger` interface with `error/warn/info/debug` methods; `NoopLogger`
