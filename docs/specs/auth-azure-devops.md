@@ -37,11 +37,11 @@ helpers. Organization discovery and `PlatformProvider` integration are Phase 2.
 ```typescript
 interface AuthSession {
   provider: "azure-devops";
-  accessToken: string;        // short-lived; do not log
-  refreshToken: string;       // long-lived; do not log
-  expiresAt: number;          // Unix timestamp (ms)
-  displayName: string;        // from Entra ID profile
-  upn: string;                // user principal name, e.g. user@company.com
+  accessToken: string; // short-lived; do not log
+  refreshToken: string; // long-lived; do not log
+  expiresAt: number; // Unix timestamp (ms)
+  displayName: string; // from Entra ID profile
+  upn: string; // user principal name, e.g. user@company.com
 }
 ```
 
@@ -124,14 +124,14 @@ the user from signing out.
 
 ## Edge cases
 
-| Scenario | Behavior |
-|---|---|
-| `signIn()` called while a valid session exists | Overwrites the existing session on completion. |
-| User already signed in on second app launch | Load session from keychain; skip browser. (Phase 1: checked by Node script manually. Phase 2: `PlatformProvider` uses `TokenStore.load` on startup.) |
-| Network unavailable during `signIn()` | Browser fails to load the Microsoft page; user closes it; `timeout` is returned after 5 minutes. Could be improved with a faster pre-flight check (deferred). |
-| Entra ID admin conditional access blocks the app | MSAL surfaces an error string; returned as `auth_failed`. |
-| Refresh token is 90+ days old (Microsoft default expiry) | MSAL returns `invalid_grant`; surfaced as `refresh_expired`. |
-| `signOut()` called with a session whose refresh token is already expired | Revocation call fails silently; keychain entry is deleted. Returns success. |
+| Scenario                                                                 | Behavior                                                                                                                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signIn()` called while a valid session exists                           | Overwrites the existing session on completion.                                                                                                                |
+| User already signed in on second app launch                              | Load session from keychain; skip browser. (Phase 1: checked by Node script manually. Phase 2: `PlatformProvider` uses `TokenStore.load` on startup.)          |
+| Network unavailable during `signIn()`                                    | Browser fails to load the Microsoft page; user closes it; `timeout` is returned after 5 minutes. Could be improved with a faster pre-flight check (deferred). |
+| Entra ID admin conditional access blocks the app                         | MSAL surfaces an error string; returned as `auth_failed`.                                                                                                     |
+| Refresh token is 90+ days old (Microsoft default expiry)                 | MSAL returns `invalid_grant`; surfaced as `refresh_expired`.                                                                                                  |
+| `signOut()` called with a session whose refresh token is already expired | Revocation call fails silently; keychain entry is deleted. Returns success.                                                                                   |
 
 ---
 

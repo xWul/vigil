@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-11.
+> **Status:** Living document. Last updated 2026-05-11. Phase 1 in progress.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -30,8 +30,8 @@ not the destination.
   - [x] ADR-0001: Electron over Tauri
   - [ ] ADR-0002: Platform Provider abstraction
   - [x] ADR-0003: PKCE for desktop OAuth
-  - [ ] ADR-0004: OS keychain for token storage
-  - [ ] ADR-0005: Result type for error handling
+  - [x] ADR-0004: OS keychain for token storage
+  - [x] ADR-0005: Result type for error handling
 
 **Exit criteria:** `pnpm install && pnpm test` works on a fresh clone.
 CI is green. The repo looks professional at first glance.
@@ -47,19 +47,19 @@ This phase is deliberately not about the UI. Build the auth core first;
 the UI comes in Phase 4.
 
 - [x] Spec: `docs/specs/auth-azure-devops.md`
-- [ ] Spec: `docs/specs/auth-github.md`
+- [x] Spec: `docs/specs/auth-github.md`
 - [x] `Result<T, E>` type and helpers (`src/shared/result.ts`)
-- [ ] `AuthProvider` interface
-- [ ] `TokenStore` interface; keychain implementation via `keytar` or
-      `@napi-rs/keyring`
-- [ ] PKCE helpers (`pkce.ts`): verifier/challenge generation
-- [ ] `AzureDevOpsAuthProvider` using MSAL Node + PKCE
-- [ ] `GitHubAuthProvider` using OAuth Device Flow (no localhost
+- [x] `AuthProvider` interface
+- [x] `TokenStore` interface; keychain implementation via `@napi-rs/keyring`
+- [x] PKCE helpers (`pkce.ts`): verifier/challenge generation
+- [x] `AzureDevOpsAuthProvider` using MSAL Node + PKCE
+- [x] `GitHubAuthProvider` using OAuth Device Flow (no localhost
       listener needed; cleaner UX for CLI/desktop)
-- [ ] `PATAuthProvider` fallback (manual token paste) for both platforms
-- [ ] Token refresh logic with one automatic retry on 401
-- [ ] Tests: unit tests for PKCE, mocked OAuth flows, contract tests
-      ensuring every `AuthProvider` implementation behaves consistently
+- [x] `PATAuthProvider` fallback (manual token paste) for both platforms
+- [x] Token refresh logic with one automatic retry on 401
+- [x] Tests: unit tests for PKCE, mocked OAuth flows, contract test
+      framework (`authProviderContract.ts`) used by `AzureDevOpsAuthProvider`;
+      extended to cover `GitHubAuthProvider` when implemented
 
 **Exit criteria:** A small Node script can call `signIn()` for either
 provider, complete the OAuth flow in the user's browser, persist the

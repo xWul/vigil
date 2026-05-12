@@ -9,6 +9,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`withRefreshRetry`** (`src/main/auth/withRefreshRetry.ts`): generic
+  utility that executes a `Result`-returning call, and on an "unauthorized"
+  result (detected via a caller-supplied predicate), refreshes the session
+  once, persists the new session, and retries exactly once. A second
+  unauthorized after a successful refresh is returned as-is. Covered by 8
+  unit tests.
+- **`docs/specs/auth-refresh-retry.md`**: spec for the retry utility.
+
+- **`PATAuthProvider`** (`src/main/auth/PATAuthProvider.ts`): implements
+  `AuthProvider` for Personal Access Token sign-in. Accepts a PAT via an
+  injected `askForPAT` callback (no network calls at sign-in), persists
+  it under `"pat-github"` or `"pat-azure-devops"`, and treats the token
+  as non-expiring. Returns `{ code: "cancelled" }` if the callback
+  rejects and `{ code: "auth_failed" }` for empty input. Covered by 22
+  unit tests and the `AuthProvider` contract tests for both platforms.
+- **`docs/specs/auth-pat.md`**: spec for the PAT fallback auth flow.
+
+- **`GitHubAuthProvider`** (`src/main/auth/GitHubAuthProvider.ts`):
+  implements `AuthProvider` for the GitHub OAuth Device Flow. Presents a
+  user code and verification URI via an injected callback, polls GitHub's
+  token endpoint (handling `authorization_pending`, `slow_down`, `expired_token`,
+  and `access_denied`), fetches the authenticated user's `login` and
+  `displayName`, and persists the session to `TokenStore` under the key
+  `"github"`. Token refresh is a no-op (GitHub OAuth App tokens do not
+  expire); sign-out is local-only. Covered by 18 unit tests and the
+  `AuthProvider` contract tests.
+- **`scripts/test-auth-github.ts`**: Node.js integration script for the
+  GitHub auth Phase 1 exit criterion. Presents the device code, waits for
+  sign-in, prints `login` and `displayName`, and on a second run restores
+  the session from file and prints "Restored from keychain".
+
+- **`AzureDevOpsAuthProvider`** (`src/main/auth/AzureDevOpsAuthProvider.ts`):
+  implements `AuthProvider` for the Microsoft Entra ID / Azure DevOps OAuth
+  flow. Signs in via PKCE Authorization Code flow with a loopback HTTP
+  listener, refreshes tokens via MSAL's `acquireTokenByRefreshToken`, and
+  persists sessions to `TokenStore` under the key `"azure-devops"`. Sign-out
+  is always local-first; server-side revocation is best-effort. Covered by
+  unit tests and the new `AuthProvider` contract test.
+- **`authProviderContract.ts`**: reusable `describeAuthProviderContract`
+  helper that runs structural and behavioral assertions against any
+  `AuthProvider` implementation. Used by `AzureDevOpsAuthProvider.test.ts`;
+  ready to be reused for `GitHubAuthProvider`.
+- **`scripts/test-auth-ado.ts`**: Node.js integration script for the Phase 1
+  exit criterion. Calls `signIn()`, completes the browser flow, prints the
+  `displayName` and `upn`, and on a second run restores the session from file
+  and prints "Restored from keychain".
+
+- **`TokenStore` interface and implementations** (`src/main/auth/`):
+  `TokenStore` defines the `save`/`load`/`delete` contract; `KeychainTokenStore`
+  persists sessions to the OS keychain via `@napi-rs/keyring`; `FileTokenStore`
+  provides a plain-JSON fallback for development and CI. Contract tests in
+  `TokenStore.test.ts` run against `FileTokenStore` and can be reused for
+  `KeychainTokenStore` integration tests.
+- **`AuthProvider` interface** (`src/main/auth/AuthProvider.ts`): defines
+  the `AuthSession` discriminated union (`AzureDevOpsSession`, `GitHubSession`,
+  `PATSession`), the `AuthError` discriminated union (six typed failure codes),
+  and the `AuthProvider` interface that all sign-in implementations must satisfy.
+- ADR-0004: OS Keychain for Token Storage — records the choice of
+  `@napi-rs/keyring` over `keytar` (archived) and the `FileTokenStore`
+  fallback for development/CI environments.
+- ADR-0005: Result Type for Expected Failure Modes — records the
+  hand-rolled `Result<T, E>` approach over exceptions or a library
+  dependency for typed async error handling.
+- **PKCE helpers** (`src/main/auth/pkce.ts`): `generateVerifier`,
+  `deriveChallenge`, and `generatePkce` implement the RFC 7636 S256
+  verifier/challenge pair used in the Azure DevOps OAuth flow.
+- ADR-0003: PKCE Authorization Code Flow for Azure DevOps OAuth —
+  records the flow choice, multi-tenant app registration model, upfront
+  consent scopes, and single-session keychain design.
+- `docs/specs/auth-azure-devops.md`: full specification for the Azure
+  DevOps authentication flow, ready for implementation.
+- `CONTEXT.md`: domain glossary with canonical definitions for
+  AuthSession, AuthError, Account, and Organization.
+
 - Project named **Vigil** — reflects the product's purpose of keeping
   watchful attention on incoming pull requests.
 - Initial project documentation: `ARCHITECTURE.md`, `CLAUDE.md`,

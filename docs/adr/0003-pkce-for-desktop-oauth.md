@@ -22,6 +22,7 @@ Grant, and Integrated Windows Authentication. MSAL Node supports all
 three.
 
 Two separate questions needed resolution:
+
 1. Which OAuth flow to use.
 2. Whether the OAuth app registration should be ours (single multi-tenant
    public client) or per-user (BYOK app registration).
@@ -56,13 +57,13 @@ The client ID is not a secret and is safe to ship in source.
 
 All scopes needed through Phase 2 are requested at sign-in time:
 
-| Scope                | Purpose                                      |
-| -------------------- | -------------------------------------------- |
-| `vso.profile`        | Read user display name and UPN for AuthSession |
-| `vso.project`        | List organizations and projects              |
-| `vso.code`           | Read diffs, file contents, branches          |
-| `vso.threads_full`   | Read and post PR review comments             |
-| `vso.code_status`    | Submit review decisions (approve / request changes) |
+| Scope              | Purpose                                             |
+| ------------------ | --------------------------------------------------- |
+| `vso.profile`      | Read user display name and UPN for AuthSession      |
+| `vso.project`      | List organizations and projects                     |
+| `vso.code`         | Read diffs, file contents, branches                 |
+| `vso.threads_full` | Read and post PR review comments                    |
+| `vso.code_status`  | Submit review decisions (approve / request changes) |
 
 Incremental consent is not used. One permission prompt at sign-in is
 the right trade-off for a tool whose entire purpose is accessing code.
