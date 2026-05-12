@@ -32,7 +32,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "auth:github": "tsx scripts/test-auth-github.ts",
     "auth:ado": "tsx scripts/test-auth-ado.ts",
-    "fetch-pr": "node --experimental-strip-types scripts/fetch-pr.ts",
+    "fetch-pr": "tsx scripts/fetch-pr.ts",
     "prepare": "echo 'Vigil ready. Run pnpm dev to start.'"
   },
   "dependencies": {
