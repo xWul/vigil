@@ -81,3 +81,66 @@ The typed failure union returned by `AuthProvider` operations. Six variants:
 - `auth_failed` — catch-all for provider errors, carries a `message` string
 
 ---
+
+## PRRef
+
+A handle that uniquely identifies a pull request. Carries the routing
+information needed to call the correct platform API. Discriminated union:
+
+- GitHub: `{ platform: "github", owner, repo, number }`
+- Azure DevOps: `{ platform: "azure-devops", org, project, repo, id }`
+
+`PRRef` is produced by `parsePRUrl` from a browser URL and consumed by
+`PlatformProvider` methods. The discriminated union makes passing a GitHub
+ref to the Azure DevOps provider a compile-time error.
+
+---
+
+## PullRequest
+
+The normalized internal representation of a pull request. Contains
+metadata (title, author, state, timestamps, branches, web URL) but
+**not** the diff — the diff is fetched separately via
+`PlatformProvider.getDiff`. Both `listOpenPullRequests` and
+`getPullRequest` return this type.
+
+`state` is always `"open"` or `"draft"` — closed and merged PRs are
+filtered server-side and never appear in the queue.
+
+---
+
+## Diff
+
+The structured, normalized representation of all file changes in a PR.
+`Diff` → `FileDiff[]` → `Hunk[]` → `DiffLine[]`. Each `DiffLine`
+carries `oldLine` and `newLine` numbers (null for added/removed lines
+respectively) and a `kind` of `"context"`, `"added"`, or `"removed"`.
+
+There is no raw unified-diff string — providers parse the platform
+response into this structure. The AI pipeline and diff viewer both
+consume the structured form.
+
+---
+
+## PlatformError
+
+The typed failure union returned by `PlatformProvider` operations:
+
+- `not_found` — the PR, repo, or project does not exist
+- `forbidden` — the authenticated user lacks permission
+- `rate_limited` — the platform is throttling requests; carries optional `retryAfterMs`
+- `network` — could not reach the platform API (transient)
+- `platform_error` — catch-all for unexpected API errors, carries a `message` string
+
+HTTP 401 is **not** a `PlatformError`. Token expiry is handled by
+`withRefreshRetry` before it reaches any `PlatformProvider` caller.
+
+---
+
+## ReviewVerdict
+
+The decision the reviewer submits on a PR: `"approved"`,
+`"changes_requested"`, or `"commented"` (a general comment with no
+approval decision). Submitted via `PlatformProvider.submitReview`.
+
+---
