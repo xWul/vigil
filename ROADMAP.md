@@ -130,37 +130,44 @@ platform and prints the normalized PR and diff as JSON.
 **Goal:** Given a normalized PR, produce structured review findings
 using an LLM. CLI-only at this stage.
 
-- [ ] Spec: `docs/specs/ai-review-pipeline.md`
-- [ ] `AIProvider` interface (`complete` and `stream`)
+- [x] Spec: `docs/specs/ai-review-pipeline.md`
+- [x] ADR-0007: Hybrid review pipeline (static analysis + optional AI)
+- [x] ADR-0008: AIProvider streaming via AsyncIterable
+- [ ] `AIProvider` interface (`stream` returning `AsyncIterable<string>`)
 - [ ] `AnthropicProvider` using `@anthropic-ai/sdk`
 - [ ] `OpenAIProvider` using `openai` package
-- [ ] BYOK key storage in keychain (per provider)
-- [ ] Context builder:
-  - [ ] Includes diff
-  - [ ] Includes full content of changed files (truncated to budget)
-  - [ ] Includes neighbouring code for changed regions
-  - [ ] Token-budget aware; chunks by file when over budget
+- [ ] BYOK: API keys read from env vars for Phase 3 (`ANTHROPIC_API_KEY`,
+      `OPENAI_API_KEY`); durable keychain storage deferred to Phase 4
+- [ ] `CodeAnalyzer` interface and three implementations:
+  - [ ] `ComplexityAnalyzer` (cyclomatic complexity via TS compiler API)
+  - [ ] `DuplicationAnalyzer` (line-hash copy-paste detection)
+  - [ ] `SmellsAnalyzer` (long functions, deep nesting, long param lists)
+- [ ] Context builder (`buildReviewContext`):
+  - [ ] Fetches PR metadata + diff
+  - [ ] Fetches full file content at HEAD per changed file
+  - [ ] Token-budget aware; drops whole files when over budget (most-changed first)
+- [ ] `getFileContent` added to `PlatformProvider`; `headSha` added to `PullRequest`
 - [ ] Prompts as versioned files in `src/main/ai/prompts/`:
   - [ ] `correctness.md`
   - [ ] `security.md`
   - [ ] `consistency.md`
   - [ ] `summary.md`
-- [ ] Review engine orchestrating the multi-pass pipeline
-- [ ] `ReviewResult` model: findings (with file + line range + severity + evidence), summary, risk score
-- [ ] Prompt-injection defense: untrusted-content delimiters, explicit
-      instruction in system prompts
-- [ ] Tests: golden tests against a small corpus of sample PRs (real
-      ones, anonymized if needed)
-- [ ] Logging: AI calls logged at `info` (model, estimated input token
-      count, latency); streaming errors and prompt-injection warnings
-      logged at `warn`; full prompt/completion only at `debug` with
-      explicit user opt-in (may contain sensitive diff content)
+- [ ] Review engine (`runReview`): static passes in parallel, AI passes
+      sequential; summary pass receives prior findings only
+- [ ] `ReviewResult` model: `Finding[]` (severity, title, description,
+      evidence, file, lines, pass, source), summary, riskScore
+- [ ] Prompt-injection defense: XML tag delimiters, explicit system
+      prompt instruction
+- [ ] `collectStream` helper for buffering `AsyncIterable<string>`
+- [ ] Tests: golden tests gated behind `VIGIL_RUN_GOLDEN_TESTS=1`;
+      3 fixtures (security bug, logic bug, clean trivial)
+- [ ] Logging: AI calls at `info` (model, latency); parse errors at
+      `warn`; full prompt/completion at `debug` opt-in only
 
-**Exit criteria:** `your-tool review <pr-url>` produces a useful
-review on a real PR in under 60 seconds for typical sizes.
-Try it on at least 5 real PRs from different repos. If the findings
-aren't better than CodeRabbit / Greptile, iterate on prompts before
-moving on. This is the wedge.
+**Exit criteria:** `pnpm review <pr-url>` produces a useful review on
+a real PR in under 60 seconds for typical sizes. Try on at least 5
+real PRs from different repos. If AI findings aren't meaningfully
+better than noise, iterate on prompts before moving on. This is the wedge.
 
 ---
 

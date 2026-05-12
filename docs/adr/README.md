@@ -74,5 +74,7 @@ draft it. It applies the three-rule criteria above strictly.
 | [0004](./0004-keychain-for-token-storage.md)     | OS Keychain for Token Storage                       | Accepted |
 | [0005](./0005-result-type-for-error-handling.md) | Result Type for Expected Failure Modes              | Accepted |
 | [0006](./0006-local-structured-logging.md)       | Local Structured Logging with electron-log          | Accepted |
+| [0007](./0007-hybrid-review-pipeline.md)         | Hybrid Review Pipeline — Static Analysis + AI       | Accepted |
+| [0008](./0008-ai-provider-streaming-interface.md)| AIProvider Streaming via AsyncIterable              | Accepted |
 
 <!-- Append new ADRs to this table as they are written. -->
