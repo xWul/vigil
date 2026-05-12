@@ -39,3 +39,4 @@ record _decisions_, specs record _features_.
 | Spec                                        | Phase | Status                   |
 | ------------------------------------------- | ----- | ------------------------ |
 | [auth-azure-devops](./auth-azure-devops.md) | 1     | Ready for implementation |
+| [observability](./observability.md)         | 1.5   | Ready for implementation |

@@ -67,6 +67,31 @@ session in the keychain, and on second run skip the browser entirely.
 
 ---
 
+## Phase 1.5 — Logger interface (pre-Electron)
+
+**Goal:** Establish the `Logger` abstraction before Phase 2 adds
+network calls. All modules accept a logger by injection from day one;
+no constructor signatures need retrofitting later. The concrete
+Electron transport is wired up in Phase 4.
+
+This phase produces no user-visible feature and no dependency on
+Electron. Its value is that Phase 2 and Phase 3 code is observable
+from the moment it is written — console output during development,
+file output once Electron exists.
+
+- [ ] ADR-0006: observability strategy (split interface/transport)
+- [ ] Spec: `docs/specs/observability.md`
+- [ ] `Logger` interface + `NoopLogger` + `ConsoleLogger`
+      (`src/shared/logger.ts`) — no Electron dependency
+- [ ] Instrument Phase 1 auth flows with log calls (accepting `Logger`
+      as an optional constructor parameter defaulting to `NoopLogger`)
+
+**Exit criteria:** `VIGIL_LOG_LEVEL=debug pnpm auth:ado` prints
+structured log entries to the console. All 86 existing tests pass with
+`NoopLogger` injected (no new test changes required).
+
+---
+
 ## Phase 2 — Platform providers and PR fetching
 
 **Goal:** Given an authenticated session, fetch a PR from GitHub or
@@ -90,6 +115,9 @@ Azure DevOps and normalize it into the internal model.
       `PRRef` that the right provider can fetch
 - [ ] Tests: contract tests both providers must pass; recorded HTTP
       fixtures for stability
+- [ ] Logging: every outbound API call logged at `info` (method, URL
+      without auth params, status code, latency); rate-limit headers
+      logged at `warn`
 
 **Exit criteria:** A CLI command — `your-tool fetch <pr-url>` — accepts
 a URL from either platform and prints the normalized PR as JSON.
@@ -122,6 +150,10 @@ using an LLM. CLI-only at this stage.
       instruction in system prompts
 - [ ] Tests: golden tests against a small corpus of sample PRs (real
       ones, anonymized if needed)
+- [ ] Logging: AI calls logged at `info` (model, estimated input token
+      count, latency); streaming errors and prompt-injection warnings
+      logged at `warn`; full prompt/completion only at `debug` with
+      explicit user opt-in (may contain sensitive diff content)
 
 **Exit criteria:** `your-tool review <pr-url>` produces a useful
 review on a real PR in under 60 seconds for typical sizes.
@@ -147,6 +179,16 @@ moving on. This is the wedge.
 - [ ] Settings screen: AI provider, API key entry, default org
 - [ ] Smoke test: end-to-end Playwright test that builds the app and
       runs a fake auth flow
+- [ ] Logging transport (`src/main/logger.ts`) backed by `electron-log`:
+  - [ ] File transport to `app.getPath('logs')/vigil.log`
+  - [ ] Rotating at 5 MB (keeps one archive)
+  - [ ] Default level: `error`; overridable via `VIGIL_LOG_LEVEL`
+  - [ ] Redaction: fields matching `token|secret|key|password|pat`
+        replaced with `[redacted]` before any transport sees the message
+  - [ ] Inject into all providers at app startup (replaces `ConsoleLogger`)
+- [ ] Logging: IPC handler calls logged at `debug`; IPC errors logged
+      at `error`; Settings screen exposes the log level toggle and
+      an "Open log file" button
 
 **Exit criteria:** A real desktop app launches. Users can sign in.
 Settings persist. No business logic in the renderer.
@@ -206,7 +248,9 @@ the AI's evidence references the relevant file by name.
 - [ ] `electron-builder` configured for macOS / Windows / Linux
 - [ ] Code signing (macOS at minimum if you have an Apple Developer account)
 - [ ] First-run onboarding flow
-- [ ] "Copy diagnostics" button for bug reports (redacted)
+- [ ] "Copy diagnostics" button: reads the log file produced by the
+      Phase 1.5 logger, applies the same redaction rules, and copies
+      the result to the clipboard for pasting into a GitHub issue
 - [ ] README polished: screenshots, install instructions, how-to
 - [ ] Demo video or animated GIF
 - [ ] First GitHub Release: `v0.1.0` with installers

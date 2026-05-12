@@ -375,9 +375,16 @@ Out of scope for v1. For an open-source portfolio project, GitHub Releases is su
 
 For a local-first BYOK desktop app, classic SaaS observability doesn't apply. We instead provide:
 
-- **Structured logs** to a local rotating file (`~/.your-app/logs/`). Off by default beyond errors; user can enable verbose logging in Settings.
+- **Structured logs** via `electron-log` to a local rotating file
+  (`~/Library/Logs/vigil/` on macOS; platform default elsewhere).
+  Off by default beyond errors; user can enable verbose logging via
+  `VIGIL_LOG_LEVEL` env var or the Settings screen (Phase 4+).
 - **No telemetry** to any server we operate. Period.
-- **Error reporting** is manual: users can click "Copy diagnostics" in the app to get a redacted bundle they paste into a GitHub issue.
+- **Error reporting** is manual: users can click "Copy diagnostics"
+  in the app (Phase 7) to get a redacted log bundle they paste into
+  a GitHub issue.
+- **Redaction**: tokens, secrets, and keys are stripped before any
+  log entry is written, even at `debug` level. See ADR-0006.
 
 If we ever add opt-in telemetry, it will be an ADR with explicit user consent in-app.
 
