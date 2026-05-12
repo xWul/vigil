@@ -25,29 +25,24 @@ interface Finding {
   readonly evidence: string;
   readonly file: string;
   readonly lines: { start: number; end: number } | null;
-  readonly pass: "correctness" | "security" | "consistency"
-               | "complexity" | "duplication" | "smells";
+  readonly pass: "correctness" | "security" | "consistency" | "complexity" | "duplication" | "smells";
   readonly source: "static" | "ai";
 }
 
 interface ReviewResult {
   readonly findings: readonly Finding[];
   readonly summary: string;
-  readonly riskScore: 1 | 2 | 3 | 4 | 5 | null;  // null when AI is not configured
+  readonly riskScore: 1 | 2 | 3 | 4 | 5 | null; // null when AI is not configured
 }
 
 interface ReviewContext {
   readonly pr: PullRequest;
   readonly diff: Diff;
-  readonly files: ReadonlyMap<string, string>;   // path → file content at HEAD
+  readonly files: ReadonlyMap<string, string>; // path → file content at HEAD
   readonly tokenBudget: number;
 }
 
-type ReviewError =
-  | { readonly code: "ai_unavailable"; readonly message: string }
-  | { readonly code: "model_error"; readonly message: string }
-  | { readonly code: "context_too_large" }
-  | { readonly code: "network"; readonly cause: string };
+type ReviewError = { readonly code: "ai_unavailable"; readonly message: string } | { readonly code: "model_error"; readonly message: string } | { readonly code: "context_too_large" } | { readonly code: "network"; readonly cause: string };
 ```
 
 ---
@@ -122,12 +117,7 @@ blocks the review.
 Lives in `src/main/ai/buildReviewContext.ts`.
 
 ```ts
-async function buildReviewContext(
-  session: AuthSession,
-  provider: PlatformProvider,
-  ref: PRRef,
-  tokenBudget: number,
-): Promise<Result<ReviewContext, ReviewError>>
+async function buildReviewContext(session: AuthSession, provider: PlatformProvider, ref: PRRef, tokenBudget: number): Promise<Result<ReviewContext, ReviewError>>;
 ```
 
 Steps:
@@ -171,12 +161,7 @@ getFileContent(
 Lives in `src/main/ai/runReview.ts`.
 
 ```ts
-async function runReview(
-  context: ReviewContext,
-  analyzers: readonly CodeAnalyzer[],
-  aiProvider: AIProvider | null,
-  options: { model: string; maxTokensPerPass: number },
-): Promise<Result<ReviewResult, ReviewError>>
+async function runReview(context: ReviewContext, analyzers: readonly CodeAnalyzer[], aiProvider: AIProvider | null, options: { model: string; maxTokensPerPass: number }): Promise<Result<ReviewResult, ReviewError>>;
 ```
 
 ### Execution order
@@ -240,6 +225,7 @@ prose."
 ```
 
 The summary system prompt asks the model to respond with:
+
 ```json
 { "summary": "...", "riskScore": 3 }
 ```
@@ -294,15 +280,15 @@ src/main/ai/
 Per Phase 1.5 pattern — all modules accept an optional `Logger`
 defaulting to `NoopLogger`.
 
-| Event | Level |
-|---|---|
-| Review start (model, file count, token estimate) | `info` |
-| Each AI pass start/complete (pass name, latency) | `info` |
-| Each analyzer complete (id, finding count, latency) | `info` |
-| JSON parse failure, retry attempt | `warn` |
-| Prompt injection instruction detected in diff | `warn` |
-| AI pass error | `error` |
-| Full prompt + completion | `debug` (explicit user opt-in only) |
+| Event                                               | Level                               |
+| --------------------------------------------------- | ----------------------------------- |
+| Review start (model, file count, token estimate)    | `info`                              |
+| Each AI pass start/complete (pass name, latency)    | `info`                              |
+| Each analyzer complete (id, finding count, latency) | `info`                              |
+| JSON parse failure, retry attempt                   | `warn`                              |
+| Prompt injection instruction detected in diff       | `warn`                              |
+| AI pass error                                       | `error`                             |
+| Full prompt + completion                            | `debug` (explicit user opt-in only) |
 
 Full prompts and completions are logged only at `debug` level and only
 when `VIGIL_LOG_LEVEL=debug` — diff content may include sensitive code.

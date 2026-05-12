@@ -92,6 +92,31 @@ function stripRefPrefix(ref: string): string {
   return ref.replace(/^refs\/heads\//, "");
 }
 
+async function adoRequestText(
+  url: string,
+  accessToken: string,
+): Promise<Result<string, PlatformError>> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "text/plain",
+      },
+    });
+  } catch (e) {
+    return err({ code: "network", cause: e instanceof Error ? e.message : String(e) });
+  }
+
+  if (!response.ok) {
+    if (response.status === 404) return err({ code: "not_found" });
+    if (response.status === 403) return err({ code: "forbidden" });
+    return err({ code: "platform_error", message: `HTTP ${response.status}` });
+  }
+
+  return ok(await response.text());
+}
+
 async function adoRequest<T>(
   url: string,
   accessToken: string,
@@ -162,6 +187,7 @@ function adoPrToModel(pr: AdoPullRequest, org: string): PullRequest {
     url: webUrl,
     targetBranch: stripRefPrefix(pr.targetRefName),
     sourceBranch: stripRefPrefix(pr.sourceRefName),
+    headSha: pr.lastMergeSourceCommit?.commitId ?? "",
   };
 }
 
@@ -372,6 +398,24 @@ export class AzureDevOpsProvider implements PlatformProvider {
     if (!result.ok) return result;
 
     return ok(undefined);
+  }
+
+  async getFileContent(
+    session: AuthSession,
+    ref: PRRef,
+    path: string,
+    commitSha: string,
+  ): Promise<Result<string, PlatformError>> {
+    if (ref.platform !== "azure-devops") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+
+    const encodedPath = encodeURIComponent(path);
+    const url = adoUrl(
+      `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/items`,
+      `?path=${encodedPath}&versionDescriptor.version=${commitSha}&versionDescriptor.versionType=commit`,
+    );
+    return adoRequestText(url, session.accessToken);
   }
 }
 

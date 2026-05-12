@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 3 — AI review pipeline**: hybrid static-analysis + AI review
+  pipeline. Three `CodeAnalyzer` implementations run unconditionally
+  (no API key required): `ComplexityAnalyzer` (cyclomatic complexity via
+  TypeScript compiler API), `DuplicationAnalyzer` (sliding-window line
+  hash), `SmellsAnalyzer` (long functions, deep nesting, too many
+  parameters). Optional `AIProvider` layer adds three sequential AI
+  passes (correctness, security, consistency) plus a summary pass that
+  produces a 3–5 sentence summary and a 1–5 risk score. `AnthropicProvider`
+  (`@anthropic-ai/sdk`) and `OpenAIProvider` (`openai`) both stream via
+  `AsyncIterable<string>`. Context builder fetches file contents at HEAD
+  via the new `PlatformProvider.getFileContent` method, respecting a
+  160k-token budget. Prompt-injection defense: all untrusted PR content
+  wrapped in XML tags with explicit system-prompt instructions.
+  `pnpm review <pr-url>` is the Phase 3 exit criterion. 20 new tests.
+- `PlatformProvider.getFileContent(session, ref, path, commitSha)`:
+  fetches file content at a specific commit. `GitHubProvider` uses
+  `octokit.rest.repos.getContent`; `AzureDevOpsProvider` uses the ADO
+  items API with a raw text response.
+- `PullRequest.headSha`: head commit SHA, populated by `getPullRequest`
+  for both providers. Required by the context builder for file fetching.
+- ADR-0007: Hybrid Review Pipeline — records the decision to run static
+  analysis alongside (optional) AI, making the tool useful without an
+  API key.
+- ADR-0008: AIProvider Streaming via AsyncIterable — records the single
+  `stream` method design over a `complete` + `stream` pair.
+
 - **Phase 2 — Platform providers and PR fetching**: `GitHubProvider`
   fetches PRs and diffs from GitHub using `@octokit/rest` (search-based
   review queue, per-file unified diff parsing into structured `Diff`).

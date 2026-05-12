@@ -133,35 +133,35 @@ using an LLM. CLI-only at this stage.
 - [x] Spec: `docs/specs/ai-review-pipeline.md`
 - [x] ADR-0007: Hybrid review pipeline (static analysis + optional AI)
 - [x] ADR-0008: AIProvider streaming via AsyncIterable
-- [ ] `AIProvider` interface (`stream` returning `AsyncIterable<string>`)
-- [ ] `AnthropicProvider` using `@anthropic-ai/sdk`
-- [ ] `OpenAIProvider` using `openai` package
-- [ ] BYOK: API keys read from env vars for Phase 3 (`ANTHROPIC_API_KEY`,
+- [x] `AIProvider` interface (`stream` returning `AsyncIterable<string>`)
+- [x] `AnthropicProvider` using `@anthropic-ai/sdk`
+- [x] `OpenAIProvider` using `openai` package
+- [x] BYOK: API keys read from env vars for Phase 3 (`ANTHROPIC_API_KEY`,
       `OPENAI_API_KEY`); durable keychain storage deferred to Phase 4
-- [ ] `CodeAnalyzer` interface and three implementations:
-  - [ ] `ComplexityAnalyzer` (cyclomatic complexity via TS compiler API)
-  - [ ] `DuplicationAnalyzer` (line-hash copy-paste detection)
-  - [ ] `SmellsAnalyzer` (long functions, deep nesting, long param lists)
-- [ ] Context builder (`buildReviewContext`):
-  - [ ] Fetches PR metadata + diff
-  - [ ] Fetches full file content at HEAD per changed file
-  - [ ] Token-budget aware; drops whole files when over budget (most-changed first)
-- [ ] `getFileContent` added to `PlatformProvider`; `headSha` added to `PullRequest`
-- [ ] Prompts as versioned files in `src/main/ai/prompts/`:
-  - [ ] `correctness.md`
-  - [ ] `security.md`
-  - [ ] `consistency.md`
-  - [ ] `summary.md`
-- [ ] Review engine (`runReview`): static passes in parallel, AI passes
+- [x] `CodeAnalyzer` interface and three implementations:
+  - [x] `ComplexityAnalyzer` (cyclomatic complexity via TS compiler API)
+  - [x] `DuplicationAnalyzer` (line-hash copy-paste detection)
+  - [x] `SmellsAnalyzer` (long functions, deep nesting, long param lists)
+- [x] Context builder (`buildReviewContext`):
+  - [x] Fetches PR metadata + diff
+  - [x] Fetches full file content at HEAD per changed file
+  - [x] Token-budget aware; drops whole files when over budget (most-changed first)
+- [x] `getFileContent` added to `PlatformProvider`; `headSha` added to `PullRequest`
+- [x] Prompts as versioned files in `src/main/ai/prompts/`:
+  - [x] `correctness.md`
+  - [x] `security.md`
+  - [x] `consistency.md`
+  - [x] `summary.md`
+- [x] Review engine (`runReview`): static passes in parallel, AI passes
       sequential; summary pass receives prior findings only
-- [ ] `ReviewResult` model: `Finding[]` (severity, title, description,
+- [x] `ReviewResult` model: `Finding[]` (severity, title, description,
       evidence, file, lines, pass, source), summary, riskScore
-- [ ] Prompt-injection defense: XML tag delimiters, explicit system
+- [x] Prompt-injection defense: XML tag delimiters, explicit system
       prompt instruction
-- [ ] `collectStream` helper for buffering `AsyncIterable<string>`
+- [x] `collectStream` helper for buffering `AsyncIterable<string>`
 - [ ] Tests: golden tests gated behind `VIGIL_RUN_GOLDEN_TESTS=1`;
       3 fixtures (security bug, logic bug, clean trivial)
-- [ ] Logging: AI calls at `info` (model, latency); parse errors at
+- [x] Logging: AI calls at `info` (model, latency); parse errors at
       `warn`; full prompt/completion at `debug` opt-in only
 
 **Exit criteria:** `pnpm review <pr-url>` produces a useful review on

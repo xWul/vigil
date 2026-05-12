@@ -34,4 +34,11 @@ export interface PlatformProvider {
     ref: PRRef,
     review: NewReview,
   ): Promise<Result<void, PlatformError>>;
+
+  getFileContent(
+    session: AuthSession,
+    ref: PRRef,
+    path: string,
+    commitSha: string,
+  ): Promise<Result<string, PlatformError>>;
 }
