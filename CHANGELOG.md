@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 2 spec and ADR** (`docs/specs/pr-fetch-and-normalize.md`,
+  `docs/adr/0002-platform-provider-abstraction.md`): full specification
+  for `PlatformProvider`, internal model types (`PRRef`, `PullRequest`,
+  `Diff`, `FileDiff`, `Hunk`, `DiffLine`, `PlatformError`,
+  `NewComment`, `NewReview`), `GitHubProvider` and `AzureDevOpsProvider`
+  implementation details, URL parser, and MSW-based test strategy.
+  ADR-0002 records the decisions behind the abstraction shape
+  (per-call session injection, assignment-scoped list, separate
+  `getDiff`, discriminated `PRRef`).
+
 - **Observability foundation — Phase 1.5** (`src/shared/logger.ts`):
   `Logger` interface with `error/warn/info/debug` methods; `NoopLogger`
   (used by all tests — silent, zero dependencies); `ConsoleLogger`

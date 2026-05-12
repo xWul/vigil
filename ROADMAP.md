@@ -28,7 +28,7 @@ not the destination.
 - [x] CI: GitHub Actions running typecheck + lint + tests on push
 - [ ] First ADRs written:
   - [x] ADR-0001: Electron over Tauri
-  - [ ] ADR-0002: Platform Provider abstraction
+  - [x] ADR-0002: Platform Provider abstraction
   - [x] ADR-0003: PKCE for desktop OAuth
   - [x] ADR-0004: OS keychain for token storage
   - [x] ADR-0005: Result type for error handling

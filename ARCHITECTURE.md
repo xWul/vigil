@@ -218,15 +218,15 @@ behaviour expectations.
 ```typescript
 interface PlatformProvider {
   readonly id: "github" | "azure-devops";
-  listOpenPullRequests(scope: PRScope): Promise<PullRequest[]>;
-  getPullRequest(ref: PRRef): Promise<PullRequest>;
-  getDiff(ref: PRRef): Promise<Diff>;
-  postComment(ref: PRRef, comment: NewComment): Promise<Comment>;
-  submitReview(ref: PRRef, review: NewReview): Promise<void>;
+  listOpenPullRequests(session: AuthSession): Promise<Result<readonly PullRequest[], PlatformError>>;
+  getPullRequest(session: AuthSession, ref: PRRef): Promise<Result<PullRequest, PlatformError>>;
+  getDiff(session: AuthSession, ref: PRRef): Promise<Result<Diff, PlatformError>>;
+  postComment(session: AuthSession, ref: PRRef, comment: NewComment): Promise<Result<Comment, PlatformError>>;
+  submitReview(session: AuthSession, ref: PRRef, review: NewReview): Promise<Result<void, PlatformError>>;
 }
 ```
 
-Each provider translates between the platform's API and our internal normalized model. The rest of the application never sees a GitHub-specific or Azure-specific shape.
+Each provider translates between the platform's API and our internal normalized model. The rest of the application never sees a GitHub-specific or Azure-specific shape. Session is passed per-call (not at construction) so the provider is stateless with respect to credentials. See ADR-0002 and `docs/specs/pr-fetch-and-normalize.md`.
 
 ### 6.4 `AIProvider`
 
