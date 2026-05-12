@@ -16,7 +16,8 @@
 import { join } from "node:path";
 
 import { FileTokenStore } from "../src/main/auth/FileTokenStore.js";
-import { GitHubAuthProvider } from "../src/main/auth/GitHubAuthProvider.js";
+import { createGitHubAuthProvider } from "../src/main/auth/GitHubAuthProvider.js";
+import { ConsoleLogger } from "../src/shared/logger.js";
 
 const SESSION_FILE = join(import.meta.dirname, ".github-session.json");
 
@@ -41,7 +42,7 @@ async function main(): Promise<void> {
 
   console.log("No existing session found — starting Device Flow sign-in...");
 
-  const provider = new GitHubAuthProvider(tokenStore, presentDeviceCode);
+  const provider = createGitHubAuthProvider(tokenStore, presentDeviceCode, ConsoleLogger.fromEnv());
   const result = await provider.signIn();
 
   if (!result.ok) {

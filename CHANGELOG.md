@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Observability foundation — Phase 1.5** (`src/shared/logger.ts`):
+  `Logger` interface with `error/warn/info/debug` methods; `NoopLogger`
+  (used by all tests — silent, zero dependencies); `ConsoleLogger`
+  (structured stderr output, respects `VIGIL_LOG_LEVEL` env var,
+  defaults to `error` level); `redact()` helper that strips values of
+  keys matching `token|secret|key|password|pat` before any log is
+  written. No Electron dependency — safe to import in Node.js scripts
+  and test environments.
+- **Auth flow instrumentation**: all Phase 1 providers
+  (`AzureDevOpsAuthProvider`, `GitHubAuthProvider`, `PATAuthProvider`,
+  `withRefreshRetry`) accept an optional `Logger` parameter defaulting
+  to `NoopLogger`. Key lifecycle events (sign-in start/complete/failed,
+  refresh attempt/outcome, sign-out) are logged per the event table in
+  `docs/specs/observability.md`. Factory functions (`createAzureDevOpsAuthProvider`,
+  `createGitHubAuthProvider`, `createPATAuthProvider`) updated to
+  accept an optional `logger` argument.
+- **Dev scripts wired up**: `pnpm auth:ado` and `pnpm auth:github` now
+  inject `ConsoleLogger.fromEnv()` — set `VIGIL_LOG_LEVEL=info` (or
+  `debug`) to see structured log output when running auth flows
+  manually.
+
 - **`withRefreshRetry`** (`src/main/auth/withRefreshRetry.ts`): generic
   utility that executes a `Result`-returning call, and on an "unauthorized"
   result (detected via a caller-supplied predicate), refreshes the session
