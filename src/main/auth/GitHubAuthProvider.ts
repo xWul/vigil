@@ -1,5 +1,7 @@
 import { err, ok } from "../../shared/result.js";
 import type { Result } from "../../shared/result.js";
+import { NoopLogger } from "../../shared/logger.js";
+import type { Logger } from "../../shared/logger.js";
 import type { AuthError, AuthProvider, AuthSession, GitHubSession } from "./AuthProvider.js";
 import type { TokenStore } from "./TokenStore.js";
 
@@ -82,11 +84,15 @@ async function pollForToken(
   intervalMs: number,
   fetchFn: FetchFn,
   sleep: SleepFn,
+  logger: Logger,
 ): Promise<PollResult> {
   let currentIntervalMs = intervalMs;
+  let attempt = 0;
 
   while (true) {
     await sleep(currentIntervalMs);
+    attempt++;
+    logger.debug("github.signIn.polling", { attempt });
 
     let response: Response;
     try {
@@ -172,21 +178,41 @@ export class GitHubAuthProvider implements AuthProvider {
     ) => Promise<void>,
     private readonly fetchFn: FetchFn = fetch,
     private readonly sleep: SleepFn = (ms) => new Promise((r) => setTimeout(r, ms)),
+    private readonly logger: Logger = new NoopLogger(),
   ) {}
 
   async signIn(): Promise<Result<AuthSession, AuthError>> {
-    const deviceCodeResult = await requestDeviceCode(this.fetchFn);
-    if (!deviceCodeResult.ok) return deviceCodeResult;
+    this.logger.info("github.signIn.start");
 
-    const { device_code, user_code, verification_uri, interval } = deviceCodeResult.value;
+    const deviceCodeResult = await requestDeviceCode(this.fetchFn);
+    if (!deviceCodeResult.ok) {
+      this.logger.error("github.signIn.failed", { code: deviceCodeResult.error.code });
+      return deviceCodeResult;
+    }
+
+    const { device_code, user_code, verification_uri, expires_in, interval } =
+      deviceCodeResult.value;
+    this.logger.info("github.signIn.deviceCodeIssued", { expiresIn: expires_in });
 
     await this.presentDeviceCode(user_code, verification_uri);
 
-    const pollResult = await pollForToken(device_code, interval * 1_000, this.fetchFn, this.sleep);
-    if (!pollResult.ok) return err(pollResult.error);
+    const pollResult = await pollForToken(
+      device_code,
+      interval * 1_000,
+      this.fetchFn,
+      this.sleep,
+      this.logger,
+    );
+    if (!pollResult.ok) {
+      this.logger.error("github.signIn.failed", { code: pollResult.error.code });
+      return err(pollResult.error);
+    }
 
     const userResult = await fetchUser(pollResult.accessToken, this.fetchFn);
-    if (!userResult.ok) return userResult;
+    if (!userResult.ok) {
+      this.logger.error("github.signIn.failed", { code: userResult.error.code });
+      return userResult;
+    }
 
     const { login, name } = userResult.value;
     const session: GitHubSession = {
@@ -197,6 +223,7 @@ export class GitHubAuthProvider implements AuthProvider {
     };
 
     await this.tokenStore.save(KEYCHAIN_KEY, session);
+    this.logger.info("github.signIn.complete", { login });
     return ok(session);
   }
 
@@ -205,6 +232,7 @@ export class GitHubAuthProvider implements AuthProvider {
       return Promise.resolve(err({ code: "auth_failed", message: "session provider mismatch" }));
     }
     // GitHub OAuth App tokens do not expire. See docs/specs/auth-github.md.
+    this.logger.debug("github.refresh.noop");
     return Promise.resolve(ok(session));
   }
 
@@ -215,6 +243,7 @@ export class GitHubAuthProvider implements AuthProvider {
     // Local-only: no client_secret means no programmatic revocation.
     // See docs/specs/auth-github.md § Sign-out.
     await this.tokenStore.delete(KEYCHAIN_KEY);
+    this.logger.info("github.signOut");
     return ok(undefined);
   }
 }
@@ -222,6 +251,7 @@ export class GitHubAuthProvider implements AuthProvider {
 export function createGitHubAuthProvider(
   tokenStore: TokenStore,
   presentDeviceCode: (userCode: string, verificationUri: string) => Promise<void>,
+  logger?: Logger,
 ): GitHubAuthProvider {
-  return new GitHubAuthProvider(tokenStore, presentDeviceCode);
+  return new GitHubAuthProvider(tokenStore, presentDeviceCode, undefined, undefined, logger);
 }

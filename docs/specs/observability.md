@@ -35,11 +35,13 @@ button (Phase 7) reads and redacts this file to produce a bug report.
 ## Outputs
 
 **Phases 1.5–3 (console only):**
+
 - Structured output to `process.stderr` when `VIGIL_LOG_LEVEL` is set.
 - Silent by default (`NoopLogger` in tests; `ConsoleLogger` only when
   injected explicitly in scripts).
 
 **Phase 4+ (Electron file transport):**
+
 - A log file at the platform's default log path:
   - macOS: `~/Library/Logs/vigil/main.log`
   - Windows: `%AppData%\vigil\logs\main.log`
@@ -74,10 +76,12 @@ export interface Logger {
   debug(msg: string, meta?: Record<string, unknown>): void;
 }
 
-export class NoopLogger implements Logger { /* all methods no-op */ }
+export class NoopLogger implements Logger {
+  /* all methods no-op */
+}
 
 export class ConsoleLogger implements Logger {
-  constructor(private readonly level: "error"|"warn"|"info"|"debug" = "error") {}
+  constructor(private readonly level: "error" | "warn" | "info" | "debug" = "error") {}
   // wraps console.error / console.warn / console.info / console.debug
   // respects level hierarchy; honours VIGIL_LOG_LEVEL env var at construction
 }
@@ -101,15 +105,17 @@ development. See "Electron transport configuration" below.
 
 ## Log levels
 
-| Level   | When to use                                          | Default on? |
-| ------- | ---------------------------------------------------- | ----------- |
-| `error` | Unrecoverable failures; unexpected errors            | Yes         |
-| `warn`  | Recoverable problems; things that are worth watching | Yes (file)  |
-| `info`  | Key lifecycle events (sign-in, API call, refresh)    | No          |
-| `debug` | Low-level detail useful only when diagnosing a bug   | No          |
+| Level   | When to use                                          | ConsoleLogger default | electron-log default |
+| ------- | ---------------------------------------------------- | --------------------- | -------------------- |
+| `error` | Unrecoverable failures; unexpected errors            | Yes                   | Yes                  |
+| `warn`  | Recoverable problems; things that are worth watching | No                    | Yes                  |
+| `info`  | Key lifecycle events (sign-in, API call, refresh)    | No                    | No                   |
+| `debug` | Low-level detail useful only when diagnosing a bug   | No                    | No                   |
 
-The default level is `error`. Set `VIGIL_LOG_LEVEL=info` or
-`VIGIL_LOG_LEVEL=debug` to see more.
+`ConsoleLogger` (Phases 1.5–3) defaults to `error` — completely silent
+unless actively debugging. `electron-log` file transport (Phase 4)
+defaults to `warn` — errors and warnings written to disk without any
+configuration. Both are overridden by `VIGIL_LOG_LEVEL`.
 
 ---
 
@@ -121,7 +127,7 @@ helper replaces the **value** of any key matching
 This runs before the message reaches any transport, even at `debug`.
 
 ```typescript
-redact({ accessToken: "ghp_abc", login: "wesleymoura" })
+redact({ accessToken: "ghp_abc", login: "wesleymoura" });
 // → { accessToken: "[redacted]", login: "wesleymoura" }
 ```
 
@@ -135,58 +141,58 @@ secrets inside non-sensitive keys).
 
 ### Auth flows (Phase 1)
 
-| Event                            | Level   | Meta fields                    |
-| -------------------------------- | ------- | ------------------------------ |
-| `github.signIn.start`            | `info`  | —                              |
-| `github.signIn.deviceCodeIssued` | `info`  | `expiresIn` (seconds)          |
-| `github.signIn.polling`          | `debug` | `attempt`                      |
-| `github.signIn.complete`         | `info`  | `login`                        |
-| `github.signIn.failed`           | `error` | `code`                         |
-| `github.refresh.noop`            | `debug` | —                              |
-| `github.signOut`                 | `info`  | —                              |
-| `ado.signIn.start`               | `info`  | —                              |
-| `ado.signIn.listenerReady`       | `debug` | `port`                         |
-| `ado.signIn.browserOpened`       | `info`  | —                              |
-| `ado.signIn.callbackReceived`    | `debug` | —                              |
-| `ado.signIn.complete`            | `info`  | `upn`, `displayName`           |
-| `ado.signIn.failed`              | `error` | `code`                         |
-| `ado.refresh.start`              | `debug` | —                              |
-| `ado.refresh.complete`           | `info`  | `expiresAt` (ISO timestamp)    |
-| `ado.refresh.failed`             | `warn`  | `code`                         |
-| `ado.signOut`                    | `info`  | —                              |
-| `pat.signIn.complete`            | `info`  | `platform`                     |
-| `pat.signIn.failed`              | `warn`  | `code`                         |
-| `pat.signOut`                    | `info`  | `platform`                     |
-| `auth.refreshRetry.attempt`      | `debug` | `provider`                     |
-| `auth.refreshRetry.success`      | `info`  | `provider`                     |
-| `auth.refreshRetry.failed`       | `warn`  | `provider`, `code`             |
-| `auth.refreshRetry.secondUnauth` | `warn`  | `provider`                     |
+| Event                            | Level   | Meta fields                 |
+| -------------------------------- | ------- | --------------------------- |
+| `github.signIn.start`            | `info`  | —                           |
+| `github.signIn.deviceCodeIssued` | `info`  | `expiresIn` (seconds)       |
+| `github.signIn.polling`          | `debug` | `attempt`                   |
+| `github.signIn.complete`         | `info`  | `login`                     |
+| `github.signIn.failed`           | `error` | `code`                      |
+| `github.refresh.noop`            | `debug` | —                           |
+| `github.signOut`                 | `info`  | —                           |
+| `ado.signIn.start`               | `info`  | —                           |
+| `ado.signIn.listenerReady`       | `debug` | `port`                      |
+| `ado.signIn.browserOpened`       | `info`  | —                           |
+| `ado.signIn.callbackReceived`    | `debug` | —                           |
+| `ado.signIn.complete`            | `info`  | `upn`, `displayName`        |
+| `ado.signIn.failed`              | `error` | `code`                      |
+| `ado.refresh.start`              | `debug` | —                           |
+| `ado.refresh.complete`           | `info`  | `expiresAt` (ISO timestamp) |
+| `ado.refresh.failed`             | `warn`  | `code`                      |
+| `ado.signOut`                    | `info`  | —                           |
+| `pat.signIn.complete`            | `info`  | `platform`                  |
+| `pat.signIn.failed`              | `warn`  | `code`                      |
+| `pat.signOut`                    | `info`  | `platform`                  |
+| `auth.refreshRetry.attempt`      | `debug` | `provider`                  |
+| `auth.refreshRetry.success`      | `info`  | `provider`                  |
+| `auth.refreshRetry.failed`       | `warn`  | `provider`, `code`          |
+| `auth.refreshRetry.secondUnauth` | `warn`  | `provider`                  |
 
 ### Platform API calls (Phase 2)
 
-| Event               | Level  | Meta fields                          |
-| ------------------- | ------ | ------------------------------------ |
-| `api.request`       | `info` | `method`, `url` (no auth params), `provider` |
-| `api.response`      | `info` | `status`, `latencyMs`, `provider`    |
-| `api.rateLimit`     | `warn` | `remaining`, `resetAt`, `provider`   |
-| `api.error`         | `error`| `status`, `code`, `provider`         |
+| Event           | Level   | Meta fields                                  |
+| --------------- | ------- | -------------------------------------------- |
+| `api.request`   | `info`  | `method`, `url` (no auth params), `provider` |
+| `api.response`  | `info`  | `status`, `latencyMs`, `provider`            |
+| `api.rateLimit` | `warn`  | `remaining`, `resetAt`, `provider`           |
+| `api.error`     | `error` | `status`, `code`, `provider`                 |
 
 ### AI pipeline (Phase 3)
 
-| Event                  | Level   | Meta fields                              |
-| ---------------------- | ------- | ---------------------------------------- |
-| `ai.call.start`        | `info`  | `model`, `estimatedInputTokens`          |
-| `ai.call.complete`     | `info`  | `model`, `latencyMs`, `outputTokens`     |
-| `ai.call.streamError`  | `warn`  | `model`, `error`                         |
-| `ai.call.failed`       | `error` | `model`, `code`                          |
-| `ai.prompt.full`       | `debug` | `prompt` — only when user opts in        |
+| Event                 | Level   | Meta fields                          |
+| --------------------- | ------- | ------------------------------------ |
+| `ai.call.start`       | `info`  | `model`, `estimatedInputTokens`      |
+| `ai.call.complete`    | `info`  | `model`, `latencyMs`, `outputTokens` |
+| `ai.call.streamError` | `warn`  | `model`, `error`                     |
+| `ai.call.failed`      | `error` | `model`, `code`                      |
+| `ai.prompt.full`      | `debug` | `prompt` — only when user opts in    |
 
 ### IPC handlers (Phase 4)
 
-| Event            | Level   | Meta fields              |
-| ---------------- | ------- | ------------------------ |
-| `ipc.call`       | `debug` | `channel`                |
-| `ipc.error`      | `error` | `channel`, `message`     |
+| Event       | Level   | Meta fields          |
+| ----------- | ------- | -------------------- |
+| `ipc.call`  | `debug` | `channel`            |
+| `ipc.error` | `error` | `channel`, `message` |
 
 ---
 
@@ -206,22 +212,22 @@ secrets inside non-sensitive keys).
 ### Phase 1.5
 
 - [ ] `VIGIL_LOG_LEVEL=info pnpm auth:ado` prints `ado.signIn.start`
-  and `ado.signIn.complete` to the console.
+      and `ado.signIn.complete` to the console.
 - [ ] `VIGIL_LOG_LEVEL=debug` produces `ado.signIn.listenerReady` and
-  `auth.refreshRetry.attempt` entries.
+      `auth.refreshRetry.attempt` entries.
 - [ ] Without `VIGIL_LOG_LEVEL` set, no output is produced (NoopLogger
-  default).
+      default).
 - [ ] All existing tests pass; no `electron-log` import anywhere in the
-  test environment.
+      test environment.
 
 ### Phase 4
 
 - [ ] Running the Electron app and signing in writes entries to
-  `~/Library/Logs/vigil/main.log` (macOS).
+      `~/Library/Logs/vigil/main.log` (macOS).
 - [ ] The log file contains no string matching a real access token.
 - [ ] Log file rotation works: file is archived at 5 MB.
 - [ ] Settings screen shows the active log level and an "Open log file"
-  button.
+      button.
 
 ---
 

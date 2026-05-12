@@ -6,6 +6,8 @@ import type { AuthenticationResult, Configuration } from "@azure/msal-node";
 
 import { err, ok } from "../../shared/result.js";
 import type { Result } from "../../shared/result.js";
+import { NoopLogger } from "../../shared/logger.js";
+import type { Logger } from "../../shared/logger.js";
 import type { AuthError, AuthProvider, AuthSession, AzureDevOpsSession } from "./AuthProvider.js";
 import { generatePkce } from "./pkce.js";
 import type { TokenStore } from "./TokenStore.js";
@@ -132,20 +134,27 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
     private readonly openBrowser: (url: string) => Promise<void>,
     private readonly createMsalClient: () => PublicClientApplication = makeMsalClient,
     private readonly listenForCallback: CallbackListenerFn = openCallbackListener,
+    private readonly logger: Logger = new NoopLogger(),
   ) {}
 
   async signIn(): Promise<Result<AuthSession, AuthError>> {
+    this.logger.info("ado.signIn.start");
+
     const pkce = generatePkce();
     let listener: Awaited<ReturnType<CallbackListenerFn>>;
 
     try {
       listener = await this.listenForCallback(SIGN_IN_TIMEOUT_MS);
     } catch (e) {
+      this.logger.error("ado.signIn.failed", { code: "auth_failed" });
       return err({
         code: "auth_failed",
         message: e instanceof Error ? e.message : String(e),
       });
     }
+
+    const port = Number(new URL(listener.redirectUri).port);
+    this.logger.debug("ado.signIn.listenerReady", { port });
 
     const msal = this.createMsalClient();
     let authUrl: string;
@@ -157,6 +166,7 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
         codeChallengeMethod: "S256",
       });
     } catch (e) {
+      this.logger.error("ado.signIn.failed", { code: "network" });
       return err({
         code: "network",
         cause: e instanceof Error ? e.message : String(e),
@@ -164,12 +174,21 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
     }
 
     await this.openBrowser(authUrl);
+    this.logger.info("ado.signIn.browserOpened");
 
     const callbackResult = await listener.result;
+    this.logger.debug("ado.signIn.callbackReceived");
 
     if (!callbackResult.ok) {
-      if (callbackResult.error === "timeout") return err({ code: "timeout" });
-      if (callbackResult.error === "access_denied") return err({ code: "consent_denied" });
+      if (callbackResult.error === "timeout") {
+        this.logger.error("ado.signIn.failed", { code: "timeout" });
+        return err({ code: "timeout" });
+      }
+      if (callbackResult.error === "access_denied") {
+        this.logger.error("ado.signIn.failed", { code: "consent_denied" });
+        return err({ code: "consent_denied" });
+      }
+      this.logger.error("ado.signIn.failed", { code: "auth_failed" });
       return err({
         code: "auth_failed",
         message: callbackResult.description || callbackResult.error,
@@ -186,8 +205,10 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
       });
     } catch (e) {
       if (isMsalError(e) && NETWORK_ERROR_PATTERN.test(e.message)) {
+        this.logger.error("ado.signIn.failed", { code: "network" });
         return err({ code: "network", cause: e.message });
       }
+      this.logger.error("ado.signIn.failed", { code: "auth_failed" });
       return err({
         code: "auth_failed",
         message: isMsalError(e) ? e.message : String(e),
@@ -195,6 +216,7 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
     }
 
     if (!msalResult) {
+      this.logger.error("ado.signIn.failed", { code: "auth_failed" });
       return err({ code: "auth_failed", message: "no response from token endpoint" });
     }
 
@@ -202,6 +224,7 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
     try {
       refreshToken = extractRefreshToken(msal);
     } catch (e) {
+      this.logger.error("ado.signIn.failed", { code: "auth_failed" });
       return err({
         code: "auth_failed",
         message: e instanceof Error ? e.message : String(e),
@@ -210,6 +233,7 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
 
     const session = msalResultToSession(msalResult, refreshToken);
     await this.tokenStore.save(KEYCHAIN_KEY, session);
+    this.logger.info("ado.signIn.complete", { upn: session.upn, displayName: session.displayName });
     return ok(session);
   }
 
@@ -217,6 +241,8 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
     if (session.provider !== "azure-devops") {
       return err({ code: "auth_failed", message: "session provider mismatch" });
     }
+
+    this.logger.debug("ado.refresh.start");
 
     const msal = this.createMsalClient();
     let msalResult: AuthenticationResult | null;
@@ -227,16 +253,23 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
       });
     } catch (e) {
       if (isMsalError(e)) {
-        if (e.errorCode === "invalid_grant") return err({ code: "refresh_expired" });
+        if (e.errorCode === "invalid_grant") {
+          this.logger.warn("ado.refresh.failed", { code: "refresh_expired" });
+          return err({ code: "refresh_expired" });
+        }
         if (NETWORK_ERROR_PATTERN.test(e.message)) {
+          this.logger.warn("ado.refresh.failed", { code: "network" });
           return err({ code: "network", cause: e.message });
         }
+        this.logger.warn("ado.refresh.failed", { code: "auth_failed" });
         return err({ code: "auth_failed", message: e.message });
       }
+      this.logger.warn("ado.refresh.failed", { code: "auth_failed" });
       return err({ code: "auth_failed", message: String(e) });
     }
 
     if (!msalResult) {
+      this.logger.warn("ado.refresh.failed", { code: "refresh_expired" });
       return err({ code: "refresh_expired" });
     }
 
@@ -250,6 +283,9 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
 
     const newSession = msalResultToSession(msalResult, newRefreshToken);
     await this.tokenStore.save(KEYCHAIN_KEY, newSession);
+    this.logger.info("ado.refresh.complete", {
+      expiresAt: new Date(newSession.expiresAt).toISOString(),
+    });
     return ok(newSession);
   }
 
@@ -275,6 +311,7 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
     }
 
     await this.tokenStore.delete(KEYCHAIN_KEY);
+    this.logger.info("ado.signOut");
     return ok(undefined);
   }
 }
@@ -282,6 +319,7 @@ export class AzureDevOpsAuthProvider implements AuthProvider {
 export function createAzureDevOpsAuthProvider(
   tokenStore: TokenStore,
   openBrowser: (url: string) => Promise<void>,
+  logger?: Logger,
 ): AzureDevOpsAuthProvider {
-  return new AzureDevOpsAuthProvider(tokenStore, openBrowser);
+  return new AzureDevOpsAuthProvider(tokenStore, openBrowser, undefined, undefined, logger);
 }

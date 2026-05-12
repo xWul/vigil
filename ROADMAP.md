@@ -79,11 +79,11 @@ Electron. Its value is that Phase 2 and Phase 3 code is observable
 from the moment it is written — console output during development,
 file output once Electron exists.
 
-- [ ] ADR-0006: observability strategy (split interface/transport)
-- [ ] Spec: `docs/specs/observability.md`
-- [ ] `Logger` interface + `NoopLogger` + `ConsoleLogger`
+- [x] ADR-0006: observability strategy (split interface/transport)
+- [x] Spec: `docs/specs/observability.md`
+- [x] `Logger` interface + `NoopLogger` + `ConsoleLogger`
       (`src/shared/logger.ts`) — no Electron dependency
-- [ ] Instrument Phase 1 auth flows with log calls (accepting `Logger`
+- [x] Instrument Phase 1 auth flows with log calls (accepting `Logger`
       as an optional constructor parameter defaulting to `NoopLogger`)
 
 **Exit criteria:** `VIGIL_LOG_LEVEL=debug pnpm auth:ado` prints

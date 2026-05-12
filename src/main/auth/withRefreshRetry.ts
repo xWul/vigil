@@ -1,4 +1,6 @@
 import type { Result } from "../../shared/result.js";
+import { NoopLogger } from "../../shared/logger.js";
+import type { Logger } from "../../shared/logger.js";
 import type { AuthError, AuthProvider, AuthSession } from "./AuthProvider.js";
 import type { TokenStore } from "./TokenStore.js";
 
@@ -17,6 +19,7 @@ export async function withRefreshRetry<T, E>(
   tokenKey: string,
   call: (session: AuthSession) => Promise<Result<T, E>>,
   isUnauthorized: (error: E) => boolean,
+  logger: Logger = new NoopLogger(),
 ): Promise<Result<T, E | AuthError>> {
   const first = await call(session);
 
@@ -24,12 +27,23 @@ export async function withRefreshRetry<T, E>(
     return first;
   }
 
+  logger.debug("auth.refreshRetry.attempt", { provider: session.provider });
+
   const refreshResult = await provider.refresh(session);
   if (!refreshResult.ok) {
+    logger.warn("auth.refreshRetry.failed", {
+      provider: session.provider,
+      code: refreshResult.error.code,
+    });
     return refreshResult;
   }
 
   await tokenStore.save(tokenKey, refreshResult.value);
+  logger.info("auth.refreshRetry.success", { provider: session.provider });
 
-  return call(refreshResult.value);
+  const second = await call(refreshResult.value);
+  if (!second.ok && isUnauthorized(second.error)) {
+    logger.warn("auth.refreshRetry.secondUnauth", { provider: session.provider });
+  }
+  return second;
 }

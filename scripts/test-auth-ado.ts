@@ -16,8 +16,9 @@ import { exec } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { AzureDevOpsAuthProvider } from "../src/main/auth/AzureDevOpsAuthProvider.js";
+import { createAzureDevOpsAuthProvider } from "../src/main/auth/AzureDevOpsAuthProvider.js";
 import { FileTokenStore } from "../src/main/auth/FileTokenStore.js";
+import { ConsoleLogger } from "../src/shared/logger.js";
 
 const execAsync = promisify(exec);
 const SESSION_FILE = join(import.meta.dirname, ".ado-session.json");
@@ -46,7 +47,7 @@ async function main(): Promise<void> {
 
   console.log("No existing session found — starting sign-in flow...");
 
-  const provider = new AzureDevOpsAuthProvider(tokenStore, openBrowser);
+  const provider = createAzureDevOpsAuthProvider(tokenStore, openBrowser, ConsoleLogger.fromEnv());
   const result = await provider.signIn();
 
   if (!result.ok) {
