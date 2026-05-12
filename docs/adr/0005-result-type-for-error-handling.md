@@ -25,7 +25,7 @@ Options considered:
 - **Return `Result<T, E>`** (discriminated union) — failure modes are part of
   the function signature; the compiler enforces handling.
 - **Return `T | null`** — distinguishes success from failure but loses the
-  error type entirely; no way to tell the caller *why* it failed.
+  error type entirely; no way to tell the caller _why_ it failed.
 - **Use a library** (`neverthrow`, `fp-ts`, `true-myth`) — rich Result
   combinators, but adds a dependency and a learning curve for a type that is
   straightforward to write in 30 lines.
@@ -71,14 +71,14 @@ modes that are part of the domain.
 
 ### Where the line is drawn
 
-| Situation | Approach |
-|---|---|
-| Network error fetching a PR | `Result` — expected, typed |
-| OAuth token expired | `Result` — expected, typed |
-| Keychain entry not found | `Result` — expected, typed |
-| Null pointer dereference | throw — programmer error |
-| Unrecognised IPC channel | throw — programmer error |
-| JSON.parse on trusted internal data | throw — should never fail |
+| Situation                           | Approach                   |
+| ----------------------------------- | -------------------------- |
+| Network error fetching a PR         | `Result` — expected, typed |
+| OAuth token expired                 | `Result` — expected, typed |
+| Keychain entry not found            | `Result` — expected, typed |
+| Null pointer dereference            | throw — programmer error   |
+| Unrecognised IPC channel            | throw — programmer error   |
+| JSON.parse on trusted internal data | throw — should never fail  |
 
 ## Alternatives Considered
 

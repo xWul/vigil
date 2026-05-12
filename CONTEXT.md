@@ -20,10 +20,28 @@ For Azure DevOps:
 - user display name (from Entra ID)
 - user principal name / UPN (e.g. `user@company.com`)
 
-An `AuthSession` is **identity-scoped, not org-scoped**. One Microsoft
-account can belong to many Azure DevOps organizations; org membership is
-discovered separately (Phase 2). An `AuthSession` answers "who are you?"
-not "which org are you in?"
+For Azure DevOps:
+
+- access token (short-lived)
+- refresh token (long-lived)
+- expiry timestamp
+- user display name (from Entra ID)
+- user principal name / UPN (e.g. `user@company.com`)
+
+For GitHub:
+
+- access token (does not expire — GitHub OAuth App tokens have no expiry)
+- display name (GitHub `name`; falls back to `login` if unset)
+- login (GitHub username, e.g. `ada`)
+
+No refresh token or expiry timestamp for GitHub. If a GitHub token is
+revoked, the caller receives a 401 from the platform API and must
+trigger a new `signIn()`.
+
+An `AuthSession` is **identity-scoped, not org-scoped**. One account
+can belong to many organizations; org membership is discovered separately
+(Phase 2). An `AuthSession` answers "who are you?" not "which org are
+you in?"
 
 `AuthSession` values are persisted to the OS keychain via `TokenStore`
 and never exposed to the renderer process.
@@ -56,10 +74,10 @@ is out of scope for Phase 1 (auth); it is handled by the
 The typed failure union returned by `AuthProvider` operations. Six variants:
 
 - `cancelled` — user closed the browser without completing the flow (not a user-facing error; dismiss silently)
-- `timeout` — local loopback listener waited too long for the OAuth callback
-- `network` — could not reach Microsoft's token endpoint (transient)
+- `timeout` — the OAuth callback or Device Flow code expired before the user completed sign-in
+- `network` — could not reach the platform's auth endpoint (transient)
 - `consent_denied` — user declined the permission prompt
-- `refresh_expired` — the long-lived refresh token is no longer valid; user must sign in again
-- `auth_failed` — catch-all for MSAL errors, carries a `message` string
+- `refresh_expired` — the long-lived credential is no longer valid; user must sign in again (Azure DevOps only — GitHub tokens do not expire)
+- `auth_failed` — catch-all for provider errors, carries a `message` string
 
 ---
