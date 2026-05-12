@@ -93,13 +93,13 @@ Also ensure **Allow public client flows** is set to **Yes**.
 Go to **API permissions → Add a permission → APIs my organization uses**,
 search for **Azure DevOps**, and add the following **Delegated** permissions:
 
-| Permission | Purpose |
-|---|---|
-| `vso.profile` | Read user profile |
-| `vso.project` | List projects |
-| `vso.code` | Read repositories and pull requests |
-| `vso.threads_full` | Read and write PR comments |
-| `vso.code_status` | Post commit statuses |
+| Permission         | Purpose                             |
+| ------------------ | ----------------------------------- |
+| `vso.profile`      | Read user profile                   |
+| `vso.project`      | List projects                       |
+| `vso.code`         | Read repositories and pull requests |
+| `vso.threads_full` | Read and write PR comments          |
+| `vso.code_status`  | Post commit statuses                |
 
 `offline_access` is a standard Microsoft scope — it is added automatically
 for refresh token support and does not need to be added manually.
