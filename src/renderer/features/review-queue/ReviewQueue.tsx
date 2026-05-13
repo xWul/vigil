@@ -605,20 +605,27 @@ export function ReviewQueue({
   const [sort, setSort] = useState<SortKey>("risk");
   const [selected, setSelected] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [loadKey, setLoadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Load PRs and cached reviews on mount
+  const triggerRefresh = () => setLoadKey((k) => k + 1);
+
+  // Load PRs and cached reviews; silent=true keeps current rows visible while refreshing
   useEffect(() => {
     let mounted = true;
+    const silent = loadKey > 0;
+    if (silent) setRefreshing(true);
 
     async function load() {
       const listResult = await api.invoke("platform:listPRs");
       if (!mounted) return;
 
       if (!listResult.ok) {
-        setScreen({ status: "error", message: listResult.error.code });
+        if (!silent) setScreen({ status: "error", message: listResult.error.code });
+        setRefreshing(false);
         return;
       }
 
@@ -635,12 +642,19 @@ export function ReviewQueue({
 
       setScreen({ status: "ready", rows });
       setSyncedAt(new Date());
+      setRefreshing(false);
     }
 
     void load();
     return () => {
       mounted = false;
     };
+  }, [loadKey]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    const id = setInterval(triggerRefresh, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   const visibleRows = useMemo(() => {
@@ -723,6 +737,9 @@ export function ReviewQueue({
       const row = visibleRows[idx];
       if (row) onOpenPR(row.pr);
     }
+    if (e.key === "r") {
+      triggerRefresh();
+    }
   }
 
   const cssVars = {
@@ -776,6 +793,44 @@ export function ReviewQueue({
           <TrafficLights t={t} />
         </div>
         <div style={{ flex: 1 }} />
+        <button
+          onClick={triggerRefresh}
+          disabled={refreshing}
+          title="Refresh (r)"
+          style={
+            {
+              WebkitAppRegion: "no-drag",
+              background: "none",
+              border: "none",
+              padding: 4,
+              cursor: refreshing ? "default" : "pointer",
+              color: refreshing ? t.accent : t.textFaint,
+              display: "flex",
+              alignItems: "center",
+              borderRadius: 4,
+            } as React.CSSProperties
+          }
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              display: "block",
+              animation: refreshing ? "vigil-spin 0.8s linear infinite" : "none",
+            }}
+          >
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M8 16H3v5" />
+          </svg>
+        </button>
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}

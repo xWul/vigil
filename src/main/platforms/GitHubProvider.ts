@@ -87,7 +87,7 @@ export class GitHubProvider implements PlatformProvider {
 
     try {
       const { data } = await octokit.rest.search.issuesAndPullRequests({
-        q: "is:open is:pr review-requested:@me",
+        q: "is:open is:pr involves:@me",
         per_page: 100,
       });
 
