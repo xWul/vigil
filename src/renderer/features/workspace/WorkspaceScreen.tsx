@@ -1,6 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 
-import type { Diff, FileDiff, Hunk, NewReview, PullRequest, ReviewVerdict } from "../../../shared/model/index.js";
+import type {
+  Diff,
+  FileDiff,
+  Hunk,
+  NewReview,
+  PullRequest,
+  ReviewVerdict,
+} from "../../../shared/model/index.js";
 import type { Finding, FindingPass } from "../../../shared/review.js";
 import { api } from "../../api.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
@@ -61,25 +68,6 @@ function fallbackRiskScore(findings: readonly Finding[]): 1 | 2 | 3 | 4 | 5 {
 function formatFindingComment(f: Finding): string {
   return `**[${f.severity.toUpperCase()}] ${f.title}**\n\n${f.description}${f.evidence ? `\n\n\`\`\`\n${f.evidence}\n\`\`\`` : ""}`;
 }
-
-// ── TrafficLights ─────────────────────────────────────────────────────────────
-
-function TrafficLights() {
-  const t = TOKENS.dark;
-  const dot = (c: string) => (
-    <span
-      style={{ width: 12, height: 12, borderRadius: "50%", background: c, display: "inline-block" }}
-    />
-  );
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      {dot(t.trafficR)}
-      {dot(t.trafficY)}
-      {dot(t.trafficG)}
-    </div>
-  );
-}
-
 // ── SeverityBadge ─────────────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: Finding["severity"] }) {
@@ -250,13 +238,12 @@ function HunkView({
       {hunk.lines.map((line, i) => {
         const lineFindings =
           line.newLine !== null ? (findingMap.get(`${file.newPath}:${line.newLine}`) ?? []) : [];
-        const isFocused =
-          focusedFinding !== null && lineFindings.includes(focusedFinding);
+        const isFocused = focusedFinding !== null && lineFindings.includes(focusedFinding);
         const isAdded = line.kind === "added";
         const isRemoved = line.kind === "removed";
 
         const bgColor = isFocused
-          ? `${severityColor(focusedFinding!.severity)}22`
+          ? `${severityColor(focusedFinding.severity)}22`
           : isAdded
             ? "rgba(46,160,67,0.10)"
             : isRemoved
@@ -266,8 +253,7 @@ function HunkView({
         const prefixColor = isAdded ? t.green : isRemoved ? t.red : t.textFaint;
         const prefix = isAdded ? "+" : isRemoved ? "-" : " ";
 
-        const id =
-          line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
+        const id = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
 
         return (
           <div
@@ -368,13 +354,15 @@ function FileView({
   const [collapsed, setCollapsed] = useState(false);
 
   const statusColor =
-    file.status === "added"
-      ? t.green
-      : file.status === "deleted"
-        ? t.red
-        : t.amber;
+    file.status === "added" ? t.green : file.status === "deleted" ? t.red : t.amber;
   const statusLabel =
-    file.status === "added" ? "A" : file.status === "deleted" ? "D" : file.status === "renamed" ? "R" : "M";
+    file.status === "added"
+      ? "A"
+      : file.status === "deleted"
+        ? "D"
+        : file.status === "renamed"
+          ? "R"
+          : "M";
 
   return (
     <div style={{ marginBottom: 8 }}>
@@ -439,6 +427,117 @@ function FileView({
             onSelectFinding={onSelectFinding}
           />
         ))}
+    </div>
+  );
+}
+
+// ── FindingList ───────────────────────────────────────────────────────────────
+
+function FindingList({
+  findings,
+  selectedIdx,
+  reviewDone,
+  onSelect,
+}: {
+  findings: readonly Finding[];
+  selectedIdx: number | null;
+  reviewDone: boolean;
+  onSelect: (f: Finding) => void;
+}) {
+  const t = TOKENS.dark;
+
+  if (!reviewDone && findings.length === 0) {
+    return (
+      <div style={{ padding: "24px 16px", fontFamily: SANS, fontSize: 12, color: t.textFaint }}>
+        Review running…
+      </div>
+    );
+  }
+
+  if (reviewDone && findings.length === 0) {
+    return (
+      <div style={{ padding: "24px 16px", fontFamily: SANS, fontSize: 12, color: t.textFaint }}>
+        No findings — this PR looks clean.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
+      <div
+        style={{
+          padding: "10px 16px 8px",
+          fontFamily: SANS,
+          fontSize: 11,
+          color: t.textFaint,
+          borderBottom: `1px solid ${t.border}`,
+          flexShrink: 0,
+        }}
+      >
+        {findings.length} finding{findings.length !== 1 ? "s" : ""} · j/k to navigate · Enter to open
+      </div>
+      <div style={{ overflowY: "auto", flex: 1 }}>
+        {findings.map((f, i) => {
+          const isSelected = i === selectedIdx;
+          const color = severityColor(f.severity);
+          const file = f.file ? f.file.split("/").pop() ?? f.file : "";
+          const loc = f.lines ? `:${f.lines.start}` : "";
+          return (
+            <div
+              key={i}
+              onClick={() => onSelect(f)}
+              style={{
+                padding: "8px 16px",
+                cursor: "pointer",
+                background: isSelected ? t.selected : "transparent",
+                borderLeft: `2px solid ${isSelected ? color : "transparent"}`,
+                borderBottom: `1px solid ${t.border}`,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 3,
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: color,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>
+                  {passLabel(f.pass)}
+                </span>
+                {file && (
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint, marginLeft: "auto" }}>
+                    {file}{loc}
+                  </span>
+                )}
+              </div>
+              <div
+                style={{
+                  fontFamily: SANS,
+                  fontSize: 12,
+                  color: isSelected ? t.text : t.textDim,
+                  lineHeight: 1.3,
+                  paddingLeft: 13,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap" as const,
+                }}
+              >
+                {f.title}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -656,9 +755,7 @@ function ReviewDraftPanel({
                 {c.finding.title}
               </span>
               <button
-                onClick={() =>
-                  onChange({ comments: draft.comments.filter((_, j) => j !== i) })
-                }
+                onClick={() => onChange({ comments: draft.comments.filter((_, j) => j !== i) })}
                 style={{
                   background: "none",
                   border: "none",
@@ -738,13 +835,7 @@ function ReviewDraftPanel({
 
 // ── WorkspaceScreen ───────────────────────────────────────────────────────────
 
-export function WorkspaceScreen({
-  pr,
-  onBack,
-}: {
-  pr: PullRequest;
-  onBack: () => void;
-}) {
+export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
   const t = TOKENS.dark;
 
   const [diff, setDiff] = useState<Diff | null>(null);
@@ -771,10 +862,8 @@ export function WorkspaceScreen({
     [findings],
   );
 
-  const prLevelFindings = useMemo(() => findings.filter((f) => f.lines === null), [findings]);
 
-  const focusedFinding =
-    selectedIdx !== null ? (sortedFindings[selectedIdx] ?? null) : null;
+  const focusedFinding = selectedIdx !== null ? (sortedFindings[selectedIdx] ?? null) : null;
 
   // Map from "file:line" → Finding[] for gutter dots
   const findingMap = useMemo(() => {
@@ -821,8 +910,7 @@ export function WorkspaceScreen({
         setHasAI(
           (settingsResult.value.aiProvider === "anthropic" &&
             settingsResult.value.hasAnthropicKey) ||
-            (settingsResult.value.aiProvider === "openai" &&
-              settingsResult.value.hasOpenAIKey),
+            (settingsResult.value.aiProvider === "openai" && settingsResult.value.hasOpenAIKey),
         );
       }
 
@@ -875,31 +963,34 @@ export function WorkspaceScreen({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const inField =
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement;
+        e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
       if (inField) return;
 
       if (e.key === "Escape") {
-        onBack();
+        if (selectedIdx !== null) {
+          setSelectedIdx(null);
+        } else {
+          onBack();
+        }
+        return;
+      }
+      if (e.key === "Enter" && selectedIdx === null && sortedFindings.length > 0) {
+        setSelectedIdx(0);
         return;
       }
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIdx((i) =>
-          i === null ? 0 : Math.min(sortedFindings.length - 1, i + 1),
-        );
+        setSelectedIdx((i) => (i === null ? 0 : Math.min(sortedFindings.length - 1, i + 1)));
       }
       if (e.key === "k" || e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIdx((i) =>
-          i === null ? 0 : Math.max(0, i - 1),
-        );
+        setSelectedIdx((i) => (i === null ? 0 : Math.max(0, i - 1)));
       }
       if (e.key === "a" && focusedFinding) {
         handleAddToReview(focusedFinding);
       }
     },
-    [sortedFindings.length, focusedFinding, onBack],
+    [sortedFindings.length, selectedIdx, focusedFinding, onBack],
   );
 
   function handleAddToReview(f: Finding) {
@@ -938,11 +1029,7 @@ export function WorkspaceScreen({
 
   const riskScore = findings.length > 0 ? fallbackRiskScore(findings) : null;
   const riskColor =
-    riskScore !== null && riskScore >= 4
-      ? t.red
-      : riskScore === 3
-        ? t.amber
-        : t.green;
+    riskScore !== null && riskScore >= 4 ? t.red : riskScore === 3 ? t.amber : t.green;
 
   return (
     <div
@@ -974,9 +1061,15 @@ export function WorkspaceScreen({
         }
       >
         <div
-          style={{ WebkitAppRegion: "no-drag", display: "flex", alignItems: "center", gap: 12 } as React.CSSProperties}
+          style={
+            {
+              WebkitAppRegion: "no-drag",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            } as React.CSSProperties
+          }
         >
-          <TrafficLights />
           <button
             onClick={onBack}
             style={{
@@ -1016,31 +1109,35 @@ export function WorkspaceScreen({
         </div>
         {riskScore !== null && (
           <div
-            style={{
-              WebkitAppRegion: "no-drag",
-              fontFamily: MONO,
-              fontSize: 11,
-              fontWeight: 700,
-              color: riskColor,
-              background: `${riskColor}18`,
-              border: `1px solid ${riskColor}44`,
-              borderRadius: 4,
-              padding: "3px 8px",
-              flexShrink: 0,
-            } as React.CSSProperties}
+            style={
+              {
+                WebkitAppRegion: "no-drag",
+                fontFamily: MONO,
+                fontSize: 11,
+                fontWeight: 700,
+                color: riskColor,
+                background: `${riskColor}18`,
+                border: `1px solid ${riskColor}44`,
+                borderRadius: 4,
+                padding: "3px 8px",
+                flexShrink: 0,
+              } as React.CSSProperties
+            }
           >
             Risk {riskScore}/5
           </div>
         )}
         {findings.length > 0 && (
           <div
-            style={{
-              WebkitAppRegion: "no-drag",
-              fontFamily: SANS,
-              fontSize: 11,
-              color: t.textFaint,
-              flexShrink: 0,
-            } as React.CSSProperties}
+            style={
+              {
+                WebkitAppRegion: "no-drag",
+                fontFamily: SANS,
+                fontSize: 11,
+                color: t.textFaint,
+                flexShrink: 0,
+              } as React.CSSProperties
+            }
           >
             {findings.length} finding{findings.length !== 1 ? "s" : ""}
           </div>
@@ -1114,61 +1211,49 @@ export function WorkspaceScreen({
             flex: "0 0 35%",
             display: "flex",
             flexDirection: "column",
-            overflowY: "auto",
+            overflow: "hidden",
+            borderLeft: `1px solid ${t.border}`,
           }}
         >
-          {/* PR-level findings */}
-          {prLevelFindings.length > 0 && (
-            <div style={{ padding: "12px 16px 0" }}>
-              {prLevelFindings.map((f, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: "8px 10px",
-                    background: t.surface,
-                    border: `1px solid ${t.border}`,
-                    borderRadius: 6,
-                    marginBottom: 8,
-                    cursor: "pointer",
-                  }}
-                  onClick={() => handleSelectFinding(f)}
-                >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}
-                  >
-                    <SeverityBadge severity={f.severity} />
-                    <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>
-                      {passLabel(f.pass)}
-                    </span>
-                  </div>
-                  <div style={{ fontFamily: SANS, fontSize: 12, color: t.textDim }}>
-                    {f.title}
-                  </div>
-                </div>
-              ))}
-              <div style={{ height: 1, background: t.border, margin: "4px -16px 0" }} />
-            </div>
-          )}
-
-          {/* Focused finding detail */}
-          {focusedFinding && (
-            <FindingDetail finding={focusedFinding} hasAI={hasAI} onAddToReview={handleAddToReview} />
-          )}
-
-          {/* Empty state */}
-          {!focusedFinding && prLevelFindings.length === 0 && (
-            <div style={{ padding: "24px 16px 0" }}>
-              <div style={{ fontFamily: SANS, fontSize: 12, color: t.textFaint, lineHeight: 1.6 }}>
-                {reviewDone && findings.length === 0
-                  ? "No findings — this PR looks clean."
-                  : reviewDone
-                    ? `Use j/k to navigate ${sortedFindings.length} finding${sortedFindings.length !== 1 ? "s" : ""}.`
-                    : "Review running…"}
+          {focusedFinding ? (
+            <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
+              <button
+                onClick={() => setSelectedIdx(null)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 16px",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: `1px solid ${t.border}`,
+                  cursor: "pointer",
+                  fontFamily: SANS,
+                  fontSize: 11,
+                  color: t.textFaint,
+                  textAlign: "left" as const,
+                  flexShrink: 0,
+                }}
+              >
+                ← All findings
+              </button>
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                <FindingDetail
+                  finding={focusedFinding}
+                  hasAI={hasAI}
+                  onAddToReview={handleAddToReview}
+                />
               </div>
             </div>
+          ) : (
+            <FindingList
+              findings={sortedFindings}
+              selectedIdx={selectedIdx}
+              reviewDone={reviewDone}
+              onSelect={handleSelectFinding}
+            />
           )}
 
-          <div style={{ flex: 1 }} />
           <div style={{ height: 1, background: t.border }} />
 
           <ReviewDraftPanel
