@@ -21,7 +21,7 @@ import { ChangeClassifierAnalyzer } from "../ai/analyzers/ChangeClassifierAnalyz
 import { SilentRegressionAnalyzer } from "../ai/analyzers/SilentRegressionAnalyzer.js";
 import { buildReviewContext } from "../ai/buildReviewContext.js";
 import { runReview } from "../ai/runReview.js";
-import { ReviewCache } from "../ai/ReviewCache.js";
+import type { ReviewCache } from "../ai/ReviewCache.js";
 import { AzureDevOpsProvider } from "../platforms/AzureDevOpsProvider.js";
 import { GitHubProvider } from "../platforms/GitHubProvider.js";
 import type { Logger } from "../../shared/logger.js";
