@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { ReviewResult } from "./CodeAnalyzer.js";
+import type { ReviewResult } from "./CodeAnalyzer";
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
