@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-11. Phase 1 in progress.
+> **Status:** Living document. Last updated 2026-05-13. Phase 4 in progress.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -175,18 +175,27 @@ better than noise, iterate on prompts before moving on. This is the wedge.
 
 **Goal:** Wrap everything built so far in a desktop app with a real UI.
 
-- [ ] ADR: IPC contract pattern
-- [ ] Spec: `docs/specs/ipc-contract.md`
-- [ ] Electron main + renderer scaffolded with electron-vite
-- [ ] Typed IPC contract (`src/shared/ipc-contract.ts`)
-- [ ] Main process exposes auth, platform, and AI capabilities via IPC
-- [ ] Renderer API client (`src/renderer/api.ts`) mirroring the contract
-- [ ] React Router or similar for navigation
-- [ ] State management (Zustand recommended for simplicity)
+- [x] ADR-0009: IPC contract pattern (`docs/adr/0009-typed-ipc-contract.md`)
+- [x] Spec: `docs/specs/ipc-contract.md`
+- [x] Electron main + renderer scaffolded with electron-vite
+- [x] Typed IPC contract (`src/shared/ipc-contract.ts`) with all 14 channels
+- [x] Main process exposes auth, platform, review, and settings via IPC
+      (`src/main/ipc/handlers.ts` + `src/main/ipc/index.ts`)
+- [x] Preload bridge (`src/preload/index.ts`) — typed `invoke` + `on`
+      via `contextBridge`
+- [x] Renderer API client (`src/renderer/api.ts`) mirroring the contract
+- [x] `SecretStore` interface + `KeychainSecretStore` + `FileSecretStore`
+- [x] `SettingsStore` (reads settings.json + checks SecretStore for key presence)
+- [x] Tailwind v4 (`@tailwindcss/vite`) with `@theme inline` bridging `--v-*`
+      design tokens to Tailwind utilities; Geist fonts
+- [x] Feature-slice renderer layout (`features/`, `shared/`)
+- [x] Review Queue screen: search, sort, keyboard nav (j/k/? /), risk dots,
+      PR list with cached review summaries, help overlay, footer
+      (`src/renderer/features/review-queue/`)
 - [ ] Auth screen: pick provider, run sign-in flow
 - [ ] Settings screen: AI provider, API key entry, default org
-- [ ] Smoke test: end-to-end Playwright test that builds the app and
-      runs a fake auth flow
+- [ ] Navigation (React Router or lightweight router between screens)
+- [ ] Smoke test: end-to-end Playwright test
 - [ ] Logging transport (`src/main/logger.ts`) backed by `electron-log`:
   - [ ] File transport to `app.getPath('logs')/vigil.log`
   - [ ] Rotating at 5 MB (keeps one archive)
@@ -194,9 +203,6 @@ better than noise, iterate on prompts before moving on. This is the wedge.
   - [ ] Redaction: fields matching `token|secret|key|password|pat`
         replaced with `[redacted]` before any transport sees the message
   - [ ] Inject into all providers at app startup (replaces `ConsoleLogger`)
-- [ ] Logging: IPC handler calls logged at `debug`; IPC errors logged
-      at `error`; Settings screen exposes the log level toggle and
-      an "Open log file" button
 
 **Exit criteria:** A real desktop app launches. Users can sign in.
 Settings persist. No business logic in the renderer.
@@ -209,11 +215,14 @@ Settings persist. No business logic in the renderer.
 
 - [ ] Spec: `docs/specs/review-queue.md`
 - [ ] Spec: `docs/specs/review-workspace.md`
-- [ ] Review Queue:
-  - [ ] List of pending PRs across connected platforms
-  - [ ] Per-PR metadata: title, author, age, risk indicator, summary
-  - [ ] Sort/filter (by risk, age, platform)
-  - [ ] Keyboard navigation
+- [x] Review Queue (shipped early in Phase 4):
+  - [x] List of pending PRs across connected platforms
+  - [x] Per-PR metadata: title, author, age, risk dot from cached review, summary
+  - [x] Sort by risk / age / blocking
+  - [x] Search across title, repo, author, review summary
+  - [x] Keyboard navigation (j/k/↑↓, /, ?, Esc)
+  - [x] Loading / error / empty states
+  - [x] Dark + light theme via design token system
 - [ ] Review Workspace:
   - [ ] Diff view (syntax-highlighted, hunk-collapsible)
   - [ ] Inline AI findings attached to relevant lines
