@@ -92,27 +92,6 @@ function RiskDot({ risk, t }: { risk: RiskLevel; t: Tokens }) {
   );
 }
 
-function TrafficLights({ t }: { t: Tokens }) {
-  const dot = (c: string) => (
-    <span
-      style={{
-        width: 12,
-        height: 12,
-        borderRadius: "50%",
-        background: c,
-        display: "inline-block",
-      }}
-    />
-  );
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      {dot(t.trafficR)}
-      {dot(t.trafficY)}
-      {dot(t.trafficG)}
-    </div>
-  );
-}
-
 function Kbd({ children }: { children: React.ReactNode }) {
   return <span className="vigil-kbd">{children}</span>;
 }
@@ -293,11 +272,13 @@ function Row({
   row,
   selected,
   onClick,
+  onDoubleClick,
   t,
 }: {
   row: PRRow;
   selected: boolean;
   onClick: () => void;
+  onDoubleClick: () => void;
   t: Tokens;
 }) {
   const { pr, review } = row;
@@ -307,6 +288,7 @@ function Row({
     <div
       className={`vigil-row ${selected ? "is-selected" : ""}`}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       style={{
         position: "relative",
         display: "grid",
@@ -789,9 +771,6 @@ export function ReviewQueue({
           } as React.CSSProperties
         }
       >
-        <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          <TrafficLights t={t} />
-        </div>
         <div style={{ flex: 1 }} />
         <button
           onClick={triggerRefresh}
@@ -891,6 +870,7 @@ export function ReviewQueue({
                 row={row}
                 selected={i === clampedSelected}
                 onClick={() => setSelected(i)}
+                onDoubleClick={() => { setSelected(i); onOpenPR?.(row.pr); }}
                 t={t}
               />
             ))
