@@ -21,6 +21,7 @@ import { ChangeClassifierAnalyzer } from "../ai/analyzers/ChangeClassifierAnalyz
 import { SilentRegressionAnalyzer } from "../ai/analyzers/SilentRegressionAnalyzer.js";
 import { buildReviewContext } from "../ai/buildReviewContext.js";
 import { runReview } from "../ai/runReview.js";
+import { ReviewCache } from "../ai/ReviewCache.js";
 import { AzureDevOpsProvider } from "../platforms/AzureDevOpsProvider.js";
 import { GitHubProvider } from "../platforms/GitHubProvider.js";
 import type { Logger } from "../../shared/logger.js";
@@ -59,6 +60,7 @@ export function registerHandlers(
   tokenStore: TokenStore,
   settingsStore: SettingsStore,
   logger: Logger,
+  reviewCache: ReviewCache,
 ): void {
   // ── Auth ────────────────────────────────────────────────────────────────
 
@@ -250,6 +252,8 @@ export function registerHandlers(
     const result = await runReview(context, analyzers, aiProvider, { model }, logger);
     if (!result.ok) return result;
 
+    reviewCache.set(reviewId, result.value);
+
     for (const finding of result.value.findings) {
       emit("review:finding", { reviewId, finding });
     }
@@ -257,9 +261,8 @@ export function registerHandlers(
     return result;
   });
 
-  handle("review:getCached", (_ref, _headSha) =>
-    // Cache lookup is file-based; implement when cache path is wired through app deps
-    Promise.resolve(ok(null)),
+  handle("review:getCached", (_ref, headSha) =>
+    Promise.resolve(ok(reviewCache.get(headSha))),
   );
 
   handle("review:challenge", async (_ref, finding, hunkContext, messages) => {

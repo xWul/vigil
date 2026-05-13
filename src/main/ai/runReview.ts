@@ -24,6 +24,12 @@ function loadPrompt(name: string): string {
   return readFileSync(join(PROMPTS_DIR, `${name}.md`), "utf-8");
 }
 
+const TEST_FILE_RE = /\.(test|spec)\.[jt]sx?$/;
+
+function filterTestFiles(diff: Diff): Diff {
+  return { files: diff.files.filter((f) => !TEST_FILE_RE.test(f.newPath)) };
+}
+
 function renderDiff(diff: Diff): string {
   return diff.files
     .map((file: FileDiff) => {
@@ -258,9 +264,13 @@ export async function runReview(
   const allFindings: Finding[] = [];
   const start = Date.now();
 
+  const filteredContext = { ...context, diff: filterTestFiles(context.diff) };
+  const skippedCount = context.diff.files.length - filteredContext.diff.files.length;
+
   logger.info("review.start", {
     pr: context.pr.title,
-    fileCount: context.diff.files.length,
+    fileCount: filteredContext.diff.files.length,
+    skippedTestFiles: skippedCount,
     hasAI: aiProvider !== null,
   });
 
@@ -268,7 +278,7 @@ export async function runReview(
     analyzers.map(async (analyzer) => {
       const analyzerStart = Date.now();
       try {
-        const result = await analyzer.analyze(context);
+        const result = await analyzer.analyze(filteredContext);
         if (result.ok) {
           logger.info("analyzer.complete", {
             id: analyzer.id,
@@ -303,7 +313,7 @@ export async function runReview(
   for (const pass of ["correctness", "security", "consistency"] as const) {
     const passResult = await runAIPass(
       aiProvider,
-      context,
+      filteredContext,
       pass,
       options.model,
       maxTokensPerPass,
