@@ -5,10 +5,7 @@ interface RendererApi {
     channel: K,
     ...args: Parameters<IpcContract[K]>
   ): Promise<ReturnType<IpcContract[K]>>;
-  on<K extends keyof IpcEvents>(
-    channel: K,
-    handler: (payload: IpcEvents[K]) => void,
-  ): () => void;
+  on<K extends keyof IpcEvents>(channel: K, handler: (payload: IpcEvents[K]) => void): () => void;
 }
 
 declare global {

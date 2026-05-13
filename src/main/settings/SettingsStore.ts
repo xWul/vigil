@@ -21,7 +21,10 @@ export class SettingsStore {
 
   private read(): WritableSettings {
     try {
-      return { ...DEFAULTS, ...(JSON.parse(readFileSync(this.filePath, "utf-8")) as Partial<WritableSettings>) };
+      return {
+        ...DEFAULTS,
+        ...(JSON.parse(readFileSync(this.filePath, "utf-8")) as Partial<WritableSettings>),
+      };
     } catch {
       return { ...DEFAULTS };
     }

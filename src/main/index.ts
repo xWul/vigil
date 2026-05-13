@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, nativeImage, shell } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,6 +56,13 @@ function createWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  if (process.platform === "darwin") {
+    const icon = nativeImage.createFromPath(
+      join(app.getAppPath(), "assets", "icons", "1024x1024.png"),
+    );
+    if (!icon.isEmpty()) app.dock.setIcon(icon);
+  }
+
   const mainWindow = createWindow();
   registerHandlers(mainWindow, tokenStore, settingsStore, logger);
 

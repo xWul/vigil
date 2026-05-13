@@ -192,9 +192,9 @@ better than noise, iterate on prompts before moving on. This is the wedge.
 - [x] Review Queue screen: search, sort, keyboard nav (j/k/? /), risk dots,
       PR list with cached review summaries, help overlay, footer
       (`src/renderer/features/review-queue/`)
-- [ ] Auth screen: pick provider, run sign-in flow
-- [ ] Settings screen: AI provider, API key entry, default org
-- [ ] Navigation (React Router or lightweight router between screens)
+- [x] Auth screen: pick provider, run sign-in flow
+- [x] Settings screen: AI provider, API key entry, sign-out per account
+- [x] Navigation (lightweight route state in App — checking → auth → queue ↔ settings)
 - [ ] Smoke test: end-to-end Playwright test
 - [ ] Logging transport (`src/main/logger.ts`) backed by `electron-log`:
   - [ ] File transport to `app.getPath('logs')/vigil.log`

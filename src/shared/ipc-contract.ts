@@ -16,25 +16,31 @@ import type {
 
 export interface IpcContract {
   // Auth
-  "auth:signIn":        (platform: "github" | "azure-devops") => Result<ConnectedAccount, AuthError>;
-  "auth:signInWithPAT": (platform: "github" | "azure-devops", token: string) => Result<ConnectedAccount, AuthError>;
-  "auth:signOut":       (platform: "github" | "azure-devops") => Result<void, AuthError>;
-  "auth:getAccounts":   () => Result<readonly ConnectedAccount[], never>;
+  "auth:signIn": (platform: "github" | "azure-devops") => Result<ConnectedAccount, AuthError>;
+  "auth:signInWithPAT": (
+    platform: "github" | "azure-devops",
+    token: string,
+  ) => Result<ConnectedAccount, AuthError>;
+  "auth:signOut": (platform: "github" | "azure-devops") => Result<void, AuthError>;
+  "auth:getAccounts": () => Result<readonly ConnectedAccount[], never>;
 
   // Platform
-  "platform:listPRs":       () => Result<readonly PullRequest[], PlatformError>;
+  "platform:listPRs": () => Result<readonly PullRequest[], PlatformError>;
   "platform:getPRWithDiff": (ref: PRRef) => Result<{ pr: PullRequest; diff: Diff }, PlatformError>;
-  "platform:submitReview":  (ref: PRRef, review: NewReview) => Result<void, PlatformError>;
-  "platform:postComment":   (ref: PRRef, comment: NewComment) => Result<Comment, PlatformError>;
+  "platform:submitReview": (ref: PRRef, review: NewReview) => Result<void, PlatformError>;
+  "platform:postComment": (ref: PRRef, comment: NewComment) => Result<Comment, PlatformError>;
 
   // Review
-  "review:run":       (ref: PRRef) => Result<ReviewResult, ReviewError>;
+  "review:run": (ref: PRRef) => Result<ReviewResult, ReviewError>;
   "review:getCached": (ref: PRRef, headSha: string) => Result<ReviewResult | null, never>;
 
   // Settings
-  "settings:get":          () => Result<Settings, never>;
-  "settings:set":          (update: Partial<WritableSettings>) => Result<void, SettingsError>;
-  "settings:setApiKey":    (provider: "anthropic" | "openai", key: string) => Result<void, SettingsError>;
+  "settings:get": () => Result<Settings, never>;
+  "settings:set": (update: Partial<WritableSettings>) => Result<void, SettingsError>;
+  "settings:setApiKey": (
+    provider: "anthropic" | "openai",
+    key: string,
+  ) => Result<void, SettingsError>;
   "settings:deleteApiKey": (provider: "anthropic" | "openai") => Result<void, SettingsError>;
 }
 
@@ -42,5 +48,10 @@ export interface IpcContract {
 
 export interface IpcEvents {
   "review:finding": { readonly reviewId: string; readonly finding: Finding };
-  "review:pass":    { readonly reviewId: string; readonly pass: FindingPass; readonly status: "start" | "complete"; readonly count: number };
+  "review:pass": {
+    readonly reviewId: string;
+    readonly pass: FindingPass;
+    readonly status: "start" | "complete";
+    readonly count: number;
+  };
 }

@@ -1,9 +1,7 @@
 export type Theme = "dark" | "light";
 
-export const SANS =
-  '"Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
-export const MONO =
-  '"Geist Mono", "SF Mono", ui-monospace, Menlo, monospace';
+export const SANS = '"Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
+export const MONO = '"Geist Mono", "SF Mono", ui-monospace, Menlo, monospace';
 
 export const TOKENS = {
   dark: {

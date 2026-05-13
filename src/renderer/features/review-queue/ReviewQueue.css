@@ -1,5 +1,10 @@
 .vigil-root {
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-family:
+    "Geist",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Helvetica Neue",
+    sans-serif;
   font-feature-settings: "ss01", "cv11";
 }
 .vigil-root *::selection {
@@ -25,7 +30,12 @@
   background: transparent;
   border: 0;
   color: var(--v-text);
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-family:
+    "Geist",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Helvetica Neue",
+    sans-serif;
   font-size: 13px;
   width: 100%;
 }

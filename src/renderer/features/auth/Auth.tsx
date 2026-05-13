@@ -73,11 +73,7 @@ function PlatformButton({
   const t = TOKENS.dark;
   const isGitHub = platform === "github";
   const label = isGitHub ? "Sign in with GitHub" : "Sign in with Azure DevOps";
-  const icon = isGitHub ? (
-    <GitHubIcon color={t.text} />
-  ) : (
-    <AzureIcon color={t.text} />
-  );
+  const icon = isGitHub ? <GitHubIcon color={t.text} /> : <AzureIcon color={t.text} />;
 
   return (
     <button
@@ -138,9 +134,7 @@ function PATField({
         background: t.surface,
       }}
     >
-      <div
-        style={{ fontFamily: SANS, fontSize: 12.5, color: t.textDim }}
-      >
+      <div style={{ fontFamily: SANS, fontSize: 12.5, color: t.textDim }}>
         Paste your {platformLabel} personal access token
       </div>
       <input
@@ -225,8 +219,7 @@ function AuthRow({
 }) {
   const t = TOKENS.dark;
   const busy =
-    state.status === "browser" ||
-    (state.status === "pat" && state.platform === platform);
+    state.status === "browser" || (state.status === "pat" && state.platform === platform);
   const patOpen = state.status === "pat" && state.platform === platform;
 
   return (
@@ -234,12 +227,7 @@ function AuthRow({
       <PlatformButton platform={platform} busy={busy} onClick={onOAuth} />
 
       {patOpen ? (
-        <PATField
-          platform={platform}
-          onSubmit={onPATSubmit}
-          onCancel={onPATCancel}
-          busy={busy}
-        />
+        <PATField platform={platform} onSubmit={onPATSubmit} onCancel={onPATCancel} busy={busy} />
       ) : (
         <button
           onClick={onPATOpen}
@@ -283,9 +271,7 @@ function BusyBanner({ platform }: { platform: Platform }) {
       }}
     >
       <Spinner color={t.accent} />
-      <span style={{ fontFamily: SANS, fontSize: 13, color: t.textDim }}>
-        {label}
-      </span>
+      <span style={{ fontFamily: SANS, fontSize: 13, color: t.textDim }}>{label}</span>
     </div>
   );
 }
@@ -312,7 +298,11 @@ function Spinner({ color }: { color: string }) {
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
-export function Auth({ onAuthenticated }: { onAuthenticated: (accounts: readonly ConnectedAccount[]) => void }) {
+export function Auth({
+  onAuthenticated,
+}: {
+  onAuthenticated: (accounts: readonly ConnectedAccount[]) => void;
+}) {
   const t = TOKENS.dark;
   const [state, setState] = useState<SignInState>({ status: "idle" });
 
@@ -323,9 +313,10 @@ export function Auth({ onAuthenticated }: { onAuthenticated: (accounts: readonly
       setState({
         status: "error",
         platform,
-        message: result.error.code === "cancelled"
-          ? "Sign-in cancelled."
-          : `Sign-in failed: ${result.error.code}`,
+        message:
+          result.error.code === "cancelled"
+            ? "Sign-in cancelled."
+            : `Sign-in failed: ${result.error.code}`,
       });
       return;
     }
@@ -353,27 +344,29 @@ export function Auth({ onAuthenticated }: { onAuthenticated: (accounts: readonly
 
   return (
     <div
-      style={{
-        width: "100%",
-        height: "100%",
-        background: t.bg,
-        color: t.text,
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
-        // CSS vars for any utility classes
-        "--v-bg": t.bg,
-        "--v-surface": t.surface,
-        "--v-selected": t.selected,
-        "--v-border": t.border,
-        "--v-text": t.text,
-        "--v-text-dim": t.textDim,
-        "--v-text-faint": t.textFaint,
-        "--v-accent": t.accent,
-        "--v-accent-dim": t.accentDim,
-        "--v-kbd-bg": t.kbdBg,
-        "--v-kbd-border": t.kbdBorder,
-      } as React.CSSProperties}
+      style={
+        {
+          width: "100%",
+          height: "100%",
+          background: t.bg,
+          color: t.text,
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+          // CSS vars for any utility classes
+          "--v-bg": t.bg,
+          "--v-surface": t.surface,
+          "--v-selected": t.selected,
+          "--v-border": t.border,
+          "--v-text": t.text,
+          "--v-text-dim": t.textDim,
+          "--v-text-faint": t.textFaint,
+          "--v-accent": t.accent,
+          "--v-accent-dim": t.accentDim,
+          "--v-kbd-bg": t.kbdBg,
+          "--v-kbd-border": t.kbdBorder,
+        } as React.CSSProperties
+      }
     >
       {/* Titlebar */}
       <div style={{ padding: "12px 16px", height: 36, flexShrink: 0 }}>
@@ -422,9 +415,13 @@ export function Auth({ onAuthenticated }: { onAuthenticated: (accounts: readonly
             <AuthRow
               platform="github"
               state={state}
-              onOAuth={() => { void signInOAuth("github"); }}
+              onOAuth={() => {
+                void signInOAuth("github");
+              }}
               onPATOpen={() => setState({ status: "pat", platform: "github" })}
-              onPATSubmit={(token) => { void signInPAT("github", token); }}
+              onPATSubmit={(token) => {
+                void signInPAT("github", token);
+              }}
               onPATCancel={() => setState({ status: "idle" })}
             />
 
@@ -448,9 +445,13 @@ export function Auth({ onAuthenticated }: { onAuthenticated: (accounts: readonly
             <AuthRow
               platform="azure-devops"
               state={state}
-              onOAuth={() => { void signInOAuth("azure-devops"); }}
+              onOAuth={() => {
+                void signInOAuth("azure-devops");
+              }}
               onPATOpen={() => setState({ status: "pat", platform: "azure-devops" })}
-              onPATSubmit={(token) => { void signInPAT("azure-devops", token); }}
+              onPATSubmit={(token) => {
+                void signInPAT("azure-devops", token);
+              }}
               onPATCancel={() => setState({ status: "idle" })}
             />
           </div>
@@ -477,9 +478,7 @@ export function Auth({ onAuthenticated }: { onAuthenticated: (accounts: readonly
                 border: `0.5px solid ${t.red}40`,
               }}
             >
-              <span style={{ fontFamily: SANS, fontSize: 12.5, color: t.red }}>
-                {errorMessage}
-              </span>
+              <span style={{ fontFamily: SANS, fontSize: 12.5, color: t.red }}>{errorMessage}</span>
               <button
                 onClick={() => setState({ status: "idle" })}
                 style={{

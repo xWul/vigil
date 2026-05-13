@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Settings screen** (`src/renderer/features/settings/`): AI provider selection (Anthropic / OpenAI),
+  API key entry and removal per provider (stored in OS keychain), and per-account sign-out. Accessible
+  via the gear icon in the Review Queue titlebar. Signing out the last connected account redirects to
+  the Auth screen.
+- **App-level navigation**: lightweight route state machine in `App.tsx` — `checking → auth → queue ↔ settings`.
+  No router dependency.
+- **Dock icon**: Vigil icon now appears in the macOS dock during development using `app.dock.setIcon()`
+  with `assets/icons/1024x1024.png` on launch.
+
 - **Silent Regression Detector** (`SilentRegressionAnalyzer`): a new diff-aware `CodeAnalyzer` that
   flags behavioral changes matching known high-risk patterns using "paired hunk analysis" — comparing
   adjacent removed→added blocks within hunks rather than scanning lines in isolation. Five detectors:
@@ -27,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Extended static analyzers** (`DebugArtifactsAnalyzer`, `TypeSafetyAnalyzer`, `ChangeClassifierAnalyzer`):
   three new diff-aware `CodeAnalyzer` implementations. Unlike the existing full-file analyzers, these
-  operate on the diff itself — flagging only what the PR *introduced*, not pre-existing debt.
+  operate on the diff itself — flagging only what the PR _introduced_, not pre-existing debt.
   `DebugArtifactsAnalyzer` flags newly added `console.*` calls (low), `debugger` statements (medium),
   and `TODO`/`FIXME`/`HACK`/`XXX` markers (info). `TypeSafetyAnalyzer` flags `as any` and double-cast
   patterns (medium), `@ts-ignore` (medium), `@ts-expect-error` (info), and non-null assertions (low)

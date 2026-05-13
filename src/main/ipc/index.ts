@@ -93,7 +93,12 @@ export function registerHandlers(
   });
 
   handle("auth:signInWithPAT", async (platform, token) => {
-    const provider = createPATAuthProvider(platform, tokenStore, () => Promise.resolve(token), logger);
+    const provider = createPATAuthProvider(
+      platform,
+      tokenStore,
+      () => Promise.resolve(token),
+      logger,
+    );
     const result = await provider.signIn();
     if (!result.ok) return result;
     return ok(sessionToAccount(result.value));
@@ -139,10 +144,7 @@ export function registerHandlers(
 
     const adoSession = await loadSession(tokenStore, "azure-devops");
     if (adoSession && adoSession.provider === "azure-devops") {
-      const provider = new AzureDevOpsProvider(
-        adoSession.upn.split("@")[1] ?? "",
-        logger,
-      );
+      const provider = new AzureDevOpsProvider(adoSession.upn.split("@")[1] ?? "", logger);
       const r = await provider.listOpenPullRequests(adoSession);
       if (r.ok) results.push(...r.value);
     }
@@ -231,7 +233,9 @@ export function registerHandlers(
       if (key) aiProvider = new OpenAIProvider(key, logger);
     }
 
-    const model = settings.model ?? (settings.aiProvider === "anthropic" ? "claude-sonnet-4-6" : "gpt-4.1-mini");
+    const model =
+      settings.model ??
+      (settings.aiProvider === "anthropic" ? "claude-sonnet-4-6" : "gpt-4.1-mini");
 
     const analyzers = [
       new ComplexityAnalyzer(),
@@ -269,7 +273,10 @@ export function registerHandlers(
       await settingsStore.set(update);
       return ok(undefined);
     } catch (e) {
-      return err({ code: "write_failed", message: e instanceof Error ? e.message : String(e) } as const);
+      return err({
+        code: "write_failed",
+        message: e instanceof Error ? e.message : String(e),
+      } as const);
     }
   });
 
@@ -278,7 +285,10 @@ export function registerHandlers(
       await settingsStore.setApiKey(provider, key);
       return ok(undefined);
     } catch (e) {
-      return err({ code: "write_failed", message: e instanceof Error ? e.message : String(e) } as const);
+      return err({
+        code: "write_failed",
+        message: e instanceof Error ? e.message : String(e),
+      } as const);
     }
   });
 
@@ -287,7 +297,10 @@ export function registerHandlers(
       await settingsStore.deleteApiKey(provider);
       return ok(undefined);
     } catch (e) {
-      return err({ code: "write_failed", message: e instanceof Error ? e.message : String(e) } as const);
+      return err({
+        code: "write_failed",
+        message: e instanceof Error ? e.message : String(e),
+      } as const);
     }
   });
 }

@@ -11,13 +11,11 @@ const api = {
     return ipcRenderer.invoke(channel, ...args) as Promise<ReturnType<IpcContract[K]>>;
   },
 
-  on<K extends keyof IpcEvents>(
-    channel: K,
-    handler: (payload: IpcEvents[K]) => void,
-  ): () => void {
+  on<K extends keyof IpcEvents>(channel: K, handler: (payload: IpcEvents[K]) => void): () => void {
     const listener = (_event: IpcRendererEvent, payload: IpcEvents[K]) => handler(payload);
     ipcRenderer.on(channel, listener as Parameters<typeof ipcRenderer.on>[1]);
-    return () => ipcRenderer.removeListener(channel, listener as Parameters<typeof ipcRenderer.on>[1]);
+    return () =>
+      ipcRenderer.removeListener(channel, listener as Parameters<typeof ipcRenderer.on>[1]);
   },
 };
 

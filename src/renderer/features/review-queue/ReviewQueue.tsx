@@ -196,20 +196,9 @@ function Header({
           background: t.surface,
         }}
       >
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 13 13"
-          fill="none"
-          style={{ flexShrink: 0 }}
-        >
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
           <circle cx="5.5" cy="5.5" r="4" stroke={t.textDim} strokeWidth="1.2" />
-          <path
-            d="M8.6 8.6l3 3"
-            stroke={t.textDim}
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          />
+          <path d="M8.6 8.6l3 3" stroke={t.textDim} strokeWidth="1.2" strokeLinecap="round" />
         </svg>
         <input
           ref={searchRef}
@@ -361,9 +350,7 @@ function Row({
             textOverflow: "ellipsis",
           }}
         >
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-            {pr.title}
-          </span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{pr.title}</span>
           <span
             style={{
               fontFamily: MONO,
@@ -498,10 +485,7 @@ function HelpOverlay({ t, onClose }: { t: Tokens; onClose: () => void }) {
           }}
         >
           {SHORTCUTS.map((s, i) => (
-            <div
-              key={i}
-              style={{ display: "contents" }}
-            >
+            <div key={i} style={{ display: "contents" }}>
               <span style={{ fontSize: 13, color: t.textDim }}>{s.label}</span>
               <span style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                 {s.keys.map((k, j) => (
@@ -604,7 +588,13 @@ function LoadingState({ t }: { t: Tokens }) {
 
 // ── ReviewQueue ──────────────────────────────────────────────────────────────
 
-export function ReviewQueue({ theme = "dark" }: { theme?: Theme }) {
+export function ReviewQueue({
+  theme = "dark",
+  onOpenSettings,
+}: {
+  theme?: Theme;
+  onOpenSettings?: () => void;
+}) {
   const t = TOKENS[theme];
 
   const [screen, setScreen] = useState<ScreenState>({ status: "loading" });
@@ -763,16 +753,55 @@ export function ReviewQueue({ theme = "dark" }: { theme?: Theme }) {
     >
       {/* macOS titlebar drag region */}
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          padding: "12px 16px",
-          height: 36,
-          flexShrink: 0,
-        }}
+        style={
+          {
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "12px 16px",
+            height: 36,
+            flexShrink: 0,
+            WebkitAppRegion: "drag",
+          } as React.CSSProperties
+        }
       >
-        <TrafficLights t={t} />
+        <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <TrafficLights t={t} />
+        </div>
+        <div style={{ flex: 1 }} />
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            title="Settings"
+            style={
+              {
+                WebkitAppRegion: "no-drag",
+                background: "none",
+                border: "none",
+                padding: 4,
+                cursor: "pointer",
+                color: t.textFaint,
+                display: "flex",
+                alignItems: "center",
+                borderRadius: 4,
+              } as React.CSSProperties
+            }
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 15 15"
+              fill="currentColor"
+              style={{ display: "block" }}
+            >
+              <path
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M7.07 0.65c-.397 0-.741.275-.829.662L6.004 2.362a5.04 5.04 0 00-.92.448L4.013 2.236a.875.875 0 00-1.054.118l-.606.606a.875.875 0 00-.118 1.054l.575.911a5.04 5.04 0 00-.449.924L1.312 6.243A.875.875 0 00.65 7.072v.857c0 .397.275.741.662.829l1.05.238c.11.379.261.74.447 1.079l-.574.911a.875.875 0 00.118 1.054l.606.606c.28.28.717.329 1.054.118l.911-.574c.339.186.7.337 1.079.447l.238 1.05c.088.387.432.662.829.662h.857c.397 0 .741-.275.829-.662l.238-1.05a5.04 5.04 0 001.079-.447l.911.574c.337.211.774.162 1.054-.118l.606-.606a.875.875 0 00.118-1.054l-.574-.911c.186-.339.337-.7.447-1.079l1.05-.238A.875.875 0 0014.35 7.93v-.857a.875.875 0 00-.662-.829l-1.05-.238a5.04 5.04 0 00-.447-1.079l.574-.911a.875.875 0 00-.118-1.054l-.606-.606a.875.875 0 00-1.054-.118l-.911.574a5.04 5.04 0 00-1.079-.447L8.757 1.312A.875.875 0 007.928.65H7.07zm.43 9.1a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5z"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       <Header

@@ -52,35 +52,32 @@ Implementation types (`GitHubProvider`, `AnthropicProvider`,
 import type { Result } from "./result.js";
 import type { AuthError, ConnectedAccount } from "./auth.js";
 import type { Settings, SettingsError, WritableSettings } from "./settings.js";
-import type {
-  Comment, Diff, FindingPass, NewComment, NewReview,
-  PRRef, PullRequest,
-} from "./model/index.js";
+import type { Comment, Diff, FindingPass, NewComment, NewReview, PRRef, PullRequest } from "./model/index.js";
 import type { Finding, ReviewError, ReviewResult } from "./review.js";
 
 // ── Invoke channels (renderer → main, returns Promise<Result<T, E>>) ────────
 
 export interface IpcContract {
   // Auth
-  "auth:signIn":        (platform: "github" | "azure-devops") => Result<ConnectedAccount, AuthError>;
+  "auth:signIn": (platform: "github" | "azure-devops") => Result<ConnectedAccount, AuthError>;
   "auth:signInWithPAT": (platform: "github" | "azure-devops", token: string) => Result<ConnectedAccount, AuthError>;
-  "auth:signOut":       (platform: "github" | "azure-devops") => Result<void, AuthError>;
-  "auth:getAccounts":   () => Result<readonly ConnectedAccount[], never>;
+  "auth:signOut": (platform: "github" | "azure-devops") => Result<void, AuthError>;
+  "auth:getAccounts": () => Result<readonly ConnectedAccount[], never>;
 
   // Platform
-  "platform:listPRs":       () => Result<readonly PullRequest[], PlatformError>;
+  "platform:listPRs": () => Result<readonly PullRequest[], PlatformError>;
   "platform:getPRWithDiff": (ref: PRRef) => Result<{ pr: PullRequest; diff: Diff }, PlatformError>;
-  "platform:submitReview":  (ref: PRRef, review: NewReview) => Result<void, PlatformError>;
-  "platform:postComment":   (ref: PRRef, comment: NewComment) => Result<Comment, PlatformError>;
+  "platform:submitReview": (ref: PRRef, review: NewReview) => Result<void, PlatformError>;
+  "platform:postComment": (ref: PRRef, comment: NewComment) => Result<Comment, PlatformError>;
 
   // Review
-  "review:run":       (ref: PRRef) => Result<ReviewResult, ReviewError>;
+  "review:run": (ref: PRRef) => Result<ReviewResult, ReviewError>;
   "review:getCached": (ref: PRRef, headSha: string) => Result<ReviewResult | null, never>;
 
   // Settings
-  "settings:get":          () => Result<Settings, never>;
-  "settings:set":          (update: Partial<WritableSettings>) => Result<void, SettingsError>;
-  "settings:setApiKey":    (provider: "anthropic" | "openai", key: string) => Result<void, SettingsError>;
+  "settings:get": () => Result<Settings, never>;
+  "settings:set": (update: Partial<WritableSettings>) => Result<void, SettingsError>;
+  "settings:setApiKey": (provider: "anthropic" | "openai", key: string) => Result<void, SettingsError>;
   "settings:deleteApiKey": (provider: "anthropic" | "openai") => Result<void, SettingsError>;
 }
 
@@ -88,7 +85,7 @@ export interface IpcContract {
 
 export interface IpcEvents {
   "review:finding": { reviewId: string; finding: Finding };
-  "review:pass":    { reviewId: string; pass: FindingPass; status: "start" | "complete"; count: number };
+  "review:pass": { reviewId: string; pass: FindingPass; status: "start" | "complete"; count: number };
 }
 ```
 
@@ -143,6 +140,7 @@ process calls the appropriate provider.
 ### `review:run(ref)`
 
 Runs the full review pipeline for the given PR. Invoke semantics:
+
 - The returned Promise resolves with `Result<ReviewResult, ReviewError>`
   when the review is complete (all static + AI passes done).
 - While running, the main process emits `review:finding` and `review:pass`
@@ -198,9 +196,12 @@ const result = await api.invoke("auth:signIn", "github");
 if (!result.ok) {
   // result.error is fully typed
   switch (result.error.code) {
-    case "cancelled": /* dismiss */ break;
-    case "network":   /* retry button */ break;
-    case "timeout":   /* expired message */ break;
+    case "cancelled":
+      /* dismiss */ break;
+    case "network":
+      /* retry button */ break;
+    case "timeout":
+      /* expired message */ break;
   }
   return;
 }
@@ -243,11 +244,8 @@ The shared contract type drives two generated helpers:
 **Main-side handler registration** (`src/main/ipc/handlers.ts`):
 
 ```typescript
-function handle<K extends keyof IpcContract>(
-  channel: K,
-  handler: (...args: Parameters<IpcContract[K]>) => Promise<ReturnType<IpcContract[K]>>,
-): void {
-  ipcMain.handle(channel, (_event, ...args) => handler(...args as Parameters<IpcContract[K]>));
+function handle<K extends keyof IpcContract>(channel: K, handler: (...args: Parameters<IpcContract[K]>) => Promise<ReturnType<IpcContract[K]>>): void {
+  ipcMain.handle(channel, (_event, ...args) => handler(...(args as Parameters<IpcContract[K]>)));
 }
 ```
 
@@ -255,16 +253,10 @@ function handle<K extends keyof IpcContract>(
 
 ```typescript
 const api = {
-  invoke<K extends keyof IpcContract>(
-    channel: K,
-    ...args: Parameters<IpcContract[K]>
-  ): Promise<ReturnType<IpcContract[K]>> {
+  invoke<K extends keyof IpcContract>(channel: K, ...args: Parameters<IpcContract[K]>): Promise<ReturnType<IpcContract[K]>> {
     return ipcRenderer.invoke(channel, ...args);
   },
-  on<K extends keyof IpcEvents>(
-    channel: K,
-    handler: (payload: IpcEvents[K]) => void,
-  ): () => void {
+  on<K extends keyof IpcEvents>(channel: K, handler: (payload: IpcEvents[K]) => void): () => void {
     const listener = (_event: IpcRendererEvent, payload: IpcEvents[K]) => handler(payload);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.off(channel, listener);

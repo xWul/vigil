@@ -5,11 +5,13 @@ import { api } from "./api.js";
 import { TOKENS, SANS } from "./shared/theme.js";
 import { Auth } from "./features/auth/Auth.js";
 import { ReviewQueue } from "./features/review-queue/ReviewQueue.js";
+import { Settings } from "./features/settings/Settings.js";
 
 type Route =
   | { screen: "checking" }
   | { screen: "auth" }
-  | { screen: "queue"; accounts: readonly ConnectedAccount[] };
+  | { screen: "queue"; accounts: readonly ConnectedAccount[] }
+  | { screen: "settings"; accounts: readonly ConnectedAccount[] };
 
 function CheckingScreen() {
   const t = TOKENS.dark;
@@ -61,11 +63,29 @@ export function App() {
     setRoute({ screen: "queue", accounts });
   }
 
+  function handleSettingsClose(accounts: readonly ConnectedAccount[]) {
+    if (accounts.length === 0) {
+      setRoute({ screen: "auth" });
+    } else {
+      setRoute({ screen: "queue", accounts });
+    }
+  }
+
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
       {route.screen === "checking" && <CheckingScreen />}
       {route.screen === "auth" && <Auth onAuthenticated={handleAuthenticated} />}
-      {route.screen === "queue" && <ReviewQueue theme="dark" />}
+      {route.screen === "queue" && (
+        <ReviewQueue
+          theme="dark"
+          onOpenSettings={() =>
+            setRoute({ screen: "settings", accounts: route.accounts })
+          }
+        />
+      )}
+      {route.screen === "settings" && (
+        <Settings accounts={route.accounts} onClose={handleSettingsClose} />
+      )}
     </div>
   );
 }
