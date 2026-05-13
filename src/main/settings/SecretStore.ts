@@ -34,9 +34,7 @@ export class KeychainSecretStore implements SecretStore {
   }
 }
 
-interface SecretFile {
-  [key: string]: string;
-}
+type SecretFile = Record<string, string>;
 
 export class FileSecretStore implements SecretStore {
   constructor(private readonly filePath: string) {}
@@ -54,18 +52,19 @@ export class FileSecretStore implements SecretStore {
     writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf-8");
   }
 
-  async set(key: string, value: string): Promise<void> {
+  set(key: string, value: string): Promise<void> {
     this.write({ ...this.read(), [key]: value });
+    return Promise.resolve();
   }
 
-  async get(key: string): Promise<string | null> {
-    return this.read()[key] ?? null;
+  get(key: string): Promise<string | null> {
+    return Promise.resolve(this.read()[key] ?? null);
   }
 
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     const data = this.read();
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete data[key];
     this.write(data);
+    return Promise.resolve();
   }
 }

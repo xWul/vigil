@@ -8,7 +8,7 @@ import type { PullRequest } from "../../shared/model/index.js";
 import { createAzureDevOpsAuthProvider } from "../auth/AzureDevOpsAuthProvider.js";
 import { createGitHubAuthProvider } from "../auth/GitHubAuthProvider.js";
 import { createPATAuthProvider } from "../auth/PATAuthProvider.js";
-import type { AuthSession, AzureDevOpsSession, GitHubSession } from "../auth/AuthProvider.js";
+import type { AuthSession } from "../auth/AuthProvider.js";
 import type { TokenStore } from "../auth/TokenStore.js";
 import { AnthropicProvider } from "../ai/AnthropicProvider.js";
 import { OpenAIProvider } from "../ai/OpenAIProvider.js";
@@ -33,12 +33,10 @@ import { handle } from "./handlers.js";
 
 function sessionToAccount(session: AuthSession): ConnectedAccount {
   if (session.provider === "github") {
-    const s = session as GitHubSession;
-    return { platform: "github", displayName: s.displayName, login: s.login };
+    return { platform: "github", displayName: session.displayName, login: session.login };
   }
   if (session.provider === "azure-devops") {
-    const s = session as AzureDevOpsSession;
-    return { platform: "azure-devops", displayName: s.displayName, login: s.upn };
+    return { platform: "azure-devops", displayName: session.displayName, login: session.upn };
   }
   return { platform: session.platform, displayName: "PAT user", login: "pat" };
 }
@@ -95,7 +93,7 @@ export function registerHandlers(
   });
 
   handle("auth:signInWithPAT", async (platform, token) => {
-    const provider = createPATAuthProvider(platform, tokenStore, async () => token, logger);
+    const provider = createPATAuthProvider(platform, tokenStore, () => Promise.resolve(token), logger);
     const result = await provider.signIn();
     if (!result.ok) return result;
     return ok(sessionToAccount(result.value));
@@ -106,7 +104,7 @@ export function registerHandlers(
     if (!session) return ok(undefined);
 
     if (platform === "github") {
-      const provider = createGitHubAuthProvider(tokenStore, async () => {}, logger);
+      const provider = createGitHubAuthProvider(tokenStore, () => Promise.resolve(), logger);
       return provider.signOut(session);
     }
     const provider = createAzureDevOpsAuthProvider(
@@ -118,7 +116,7 @@ export function registerHandlers(
   });
 
   handle("auth:getAccounts", async () => {
-    const platforms: Array<"github" | "azure-devops"> = ["github", "azure-devops"];
+    const platforms: ("github" | "azure-devops")[] = ["github", "azure-devops"];
     const accounts: ConnectedAccount[] = [];
     for (const platform of platforms) {
       const session = await loadSession(tokenStore, platform);
@@ -142,7 +140,7 @@ export function registerHandlers(
     const adoSession = await loadSession(tokenStore, "azure-devops");
     if (adoSession && adoSession.provider === "azure-devops") {
       const provider = new AzureDevOpsProvider(
-        (adoSession as AzureDevOpsSession).upn.split("@")[1] ?? "",
+        adoSession.upn.split("@")[1] ?? "",
         logger,
       );
       const r = await provider.listOpenPullRequests(adoSession);
@@ -255,10 +253,10 @@ export function registerHandlers(
     return result;
   });
 
-  handle("review:getCached", async (_ref, _headSha) => {
+  handle("review:getCached", (_ref, _headSha) =>
     // Cache lookup is file-based; implement when cache path is wired through app deps
-    return ok(null);
-  });
+    Promise.resolve(ok(null)),
+  );
 
   // ── Settings ──────────────────────────────────────────────────────────────
 

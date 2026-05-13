@@ -1,0 +1,58 @@
+.vigil-root {
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-feature-settings: "ss01", "cv11";
+}
+.vigil-root *::selection {
+  background: var(--v-accent-dim);
+  color: var(--v-text);
+}
+.vigil-root :focus {
+  outline: none;
+}
+.vigil-row {
+  transition: background 0.08s linear;
+}
+.vigil-row:hover .vigil-actions {
+  opacity: 0.55;
+}
+.vigil-row.is-selected .vigil-actions {
+  opacity: 1;
+}
+.vigil-search::placeholder {
+  color: var(--v-text-faint);
+}
+.vigil-search {
+  background: transparent;
+  border: 0;
+  color: var(--v-text);
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  width: 100%;
+}
+.vigil-sort:hover {
+  background: var(--v-surface);
+}
+.vigil-kbd {
+  font-family: "Geist Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  padding: 1px 5px 2px;
+  border-radius: 3px;
+  background: var(--v-kbd-bg);
+  color: var(--v-text-dim);
+  border: 0.5px solid var(--v-kbd-border);
+}
+.vigil-help-backdrop {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.vigil-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.vigil-scroll::-webkit-scrollbar-thumb {
+  background: var(--v-border);
+  border-radius: 6px;
+}
+.vigil-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

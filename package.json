@@ -48,6 +48,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.17.0",
+    "@tailwindcss/vite": "^4.3.0",
     "@types/node": "24.0.0",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
@@ -65,6 +66,7 @@
     "globals": "15.14.0",
     "msw": "^2.14.6",
     "prettier": "3.4.2",
+    "tailwindcss": "^4.3.0",
     "tsx": "^4.21.0",
     "typescript": "5.7.2",
     "typescript-eslint": "8.18.0",

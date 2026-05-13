@@ -41,8 +41,9 @@ export class SettingsStore {
     return { ...persisted, hasAnthropicKey, hasOpenAIKey };
   }
 
-  async set(update: Partial<WritableSettings>): Promise<void> {
+  set(update: Partial<WritableSettings>): Promise<void> {
     this.write({ ...this.read(), ...update });
+    return Promise.resolve();
   }
 
   async setApiKey(provider: "anthropic" | "openai", key: string): Promise<void> {
