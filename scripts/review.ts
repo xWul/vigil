@@ -222,21 +222,18 @@ if (cached) {
   const reviewResult = await runReview(context, analyzers, aiProvider, { model }, logger);
   if (!reviewResult.ok) {
     const { error } = reviewResult;
-    if (
-      error.code === "network" &&
-      /request too large|tokens per min/i.test(error.cause)
-    ) {
+    if (error.code === "network" && /request too large|tokens per min/i.test(error.cause)) {
       console.error(
         `Review failed: the request exceeded the provider's token limit.\n` +
-        `  Requested: ~${effectiveBudget.toLocaleString()} tokens of context\n` +
-        `  Fix: set a lower budget, e.g.:\n` +
-        `    VIGIL_TOKEN_BUDGET=20000 pnpm review <pr-url>`,
+          `  Requested: ~${effectiveBudget.toLocaleString()} tokens of context\n` +
+          `  Fix: set a lower budget, e.g.:\n` +
+          `    VIGIL_TOKEN_BUDGET=20000 pnpm review <pr-url>`,
       );
     } else if (error.code === "context_too_large") {
       console.error(
         `Review failed: the PR diff alone exceeds the token budget (${effectiveBudget.toLocaleString()}).\n` +
-        `  This PR is too large to review in one pass.\n` +
-        `  For AI review, upgrade to a plan with a higher TPM limit.`,
+          `  This PR is too large to review in one pass.\n` +
+          `  For AI review, upgrade to a plan with a higher TPM limit.`,
       );
     } else {
       console.error("Review failed:", error);
@@ -281,7 +278,9 @@ if (result.summary) {
 
 if (shouldPost) {
   const review = buildReview(result);
-  console.error(`\nPosting review (${review.comments.length} inline comment(s), verdict: ${review.verdict})…`);
+  console.error(
+    `\nPosting review (${review.comments.length} inline comment(s), verdict: ${review.verdict})…`,
+  );
 
   const postResult = await platformProvider.submitReview(session, ref, review);
   if (!postResult.ok) {

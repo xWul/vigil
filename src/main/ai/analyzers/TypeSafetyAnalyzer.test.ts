@@ -5,10 +5,19 @@ import type { ReviewContext } from "../CodeAnalyzer.js";
 import { TypeSafetyAnalyzer } from "./TypeSafetyAnalyzer.js";
 
 function makeLine(content: string, kind: DiffLine["kind"] = "added", newLine = 1): DiffLine {
-  return { kind, content, oldLine: kind === "added" ? null : 1, newLine: kind === "removed" ? null : newLine };
+  return {
+    kind,
+    content,
+    oldLine: kind === "added" ? null : 1,
+    newLine: kind === "removed" ? null : newLine,
+  };
 }
 
-function makeFile(path: string, lines: DiffLine[], status: FileDiff["status"] = "modified"): FileDiff {
+function makeFile(
+  path: string,
+  lines: DiffLine[],
+  status: FileDiff["status"] = "modified",
+): FileDiff {
   return {
     status,
     oldPath: null,
@@ -60,7 +69,9 @@ describe("TypeSafetyAnalyzer", () => {
   });
 
   it("flags as unknown as at medium severity", async () => {
-    const context = makeContext([makeFile("src/foo.ts", [makeLine("const x = value as unknown as Foo;")])]);
+    const context = makeContext([
+      makeFile("src/foo.ts", [makeLine("const x = value as unknown as Foo;")]),
+    ]);
     const result = await analyzer.analyze(context);
     expect(result.ok).toBe(true);
     if (result.ok) {

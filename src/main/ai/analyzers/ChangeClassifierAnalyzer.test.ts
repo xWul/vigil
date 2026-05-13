@@ -5,7 +5,12 @@ import type { ReviewContext } from "../CodeAnalyzer.js";
 import { ChangeClassifierAnalyzer } from "./ChangeClassifierAnalyzer.js";
 
 function makeLine(content: string, kind: DiffLine["kind"] = "added"): DiffLine {
-  return { kind, content, oldLine: kind === "added" ? null : 1, newLine: kind === "removed" ? null : 1 };
+  return {
+    kind,
+    content,
+    oldLine: kind === "added" ? null : 1,
+    newLine: kind === "removed" ? null : 1,
+  };
 }
 
 function makeFile(
@@ -87,9 +92,7 @@ describe("ChangeClassifierAnalyzer", () => {
   });
 
   it("classifies a file with control-flow in added lines as behavior", async () => {
-    const context = makeContext([
-      makeFile("src/foo.ts", [makeLine("if (x > 0) {")]),
-    ]);
+    const context = makeContext([makeFile("src/foo.ts", [makeLine("if (x > 0) {")])]);
     const result = await analyzer.analyze(context);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -100,9 +103,7 @@ describe("ChangeClassifierAnalyzer", () => {
   });
 
   it("classifies a file with control-flow in removed lines as behavior", async () => {
-    const context = makeContext([
-      makeFile("src/foo.ts", [makeLine("return old;", "removed")]),
-    ]);
+    const context = makeContext([makeFile("src/foo.ts", [makeLine("return old;", "removed")])]);
     const result = await analyzer.analyze(context);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -112,9 +113,7 @@ describe("ChangeClassifierAnalyzer", () => {
   });
 
   it("classifies a file without control-flow as refactor", async () => {
-    const context = makeContext([
-      makeFile("src/foo.ts", [makeLine("const newName = value;")]),
-    ]);
+    const context = makeContext([makeFile("src/foo.ts", [makeLine("const newName = value;")])]);
     const result = await analyzer.analyze(context);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -204,10 +203,7 @@ describe("ChangeClassifierAnalyzer", () => {
   it("detects all intent keywords", async () => {
     const titles = ["chore: cleanup", "rename types", "tidy up imports", "cleanup dead code"];
     for (const title of titles) {
-      const context = makeContext(
-        [makeFile("src/foo.ts", [makeLine("if (x) {")])],
-        title,
-      );
+      const context = makeContext([makeFile("src/foo.ts", [makeLine("if (x) {")])], title);
       const result = await analyzer.analyze(context);
       expect(result.ok).toBe(true);
       if (result.ok) {

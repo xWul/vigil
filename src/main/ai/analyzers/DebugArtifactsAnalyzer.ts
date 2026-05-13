@@ -53,8 +53,7 @@ export class DebugArtifactsAnalyzer implements CodeAnalyzer {
               description: pattern.description,
               evidence: line.content.trim(),
               file: file.newPath,
-              lines:
-                line.newLine !== null ? { start: line.newLine, end: line.newLine } : null,
+              lines: line.newLine !== null ? { start: line.newLine, end: line.newLine } : null,
               pass: "debug-artifacts",
               source: "static",
             });

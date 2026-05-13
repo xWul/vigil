@@ -7,7 +7,8 @@ type FileLabel = "behavior" | "refactor" | "test" | "config";
 
 const TEST_PATTERN = /\.(test|spec)\.(ts|tsx|js|jsx)$/;
 const CONFIG_PATTERN = /\.(json|yaml|yml|md|env)$|\.env\./;
-const CONTROL_FLOW = /\b(if|else|while|for|switch|case|try|catch|throw|return|break|continue|yield|await)\b/;
+const CONTROL_FLOW =
+  /\b(if|else|while|for|switch|case|try|catch|throw|return|break|continue|yield|await)\b/;
 const INTENT_KEYWORDS = /\b(refactor|rename|cleanup|clean\s+up|tidy|chore)\b/i;
 
 function classifyFile(file: FileDiff): FileLabel {
@@ -56,9 +57,7 @@ export class ChangeClassifierAnalyzer implements CodeAnalyzer {
         : "Change breakdown: no files changed";
 
     const behaviorDetail =
-      behaviorFiles.length > 0
-        ? `Behavior files: ${behaviorFiles.join(", ")}. `
-        : "";
+      behaviorFiles.length > 0 ? `Behavior files: ${behaviorFiles.join(", ")}. ` : "";
     const refactorDetail = counts.refactor > 0 ? `Refactor-only: ${counts.refactor} files. ` : "";
     const testDetail = counts.test > 0 ? `Test: ${counts.test} files. ` : "";
     const configDetail = counts.config > 0 ? `Config: ${counts.config} files. ` : "";

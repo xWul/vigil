@@ -11,7 +11,7 @@ The existing analyzers (`ComplexityAnalyzer`, `DuplicationAnalyzer`,
 the current state of each changed file. The new analyzers take a different
 approach: two of them work on the **diff itself** (added lines only), and
 one classifies the entire PR by scanning both added and removed lines.
-This makes them diff-aware: they flag what the PR *introduced*, not
+This makes them diff-aware: they flag what the PR _introduced_, not
 pre-existing debt.
 
 ---
@@ -37,15 +37,15 @@ should not appear in a submitted PR: debug output statements, hard
 breakpoints, and unresolved debt markers.
 
 By scanning only added lines, it avoids re-flagging pre-existing artifacts
-in unchanged code. A PR that *removes* a `console.log` produces no findings.
+in unchanged code. A PR that _removes_ a `console.log` produces no findings.
 
 ### Patterns
 
-| Pattern | Match (case-sensitive) | Severity |
-|---|---|---|
-| Console output | `console.log`, `console.error`, `console.warn`, `console.debug`, `console.info` | `low` |
-| Hard breakpoint | `debugger` | `medium` |
-| Debt markers | `TODO`, `FIXME`, `HACK`, `XXX` (with or without trailing `:`) | `info` |
+| Pattern         | Match (case-sensitive)                                                          | Severity |
+| --------------- | ------------------------------------------------------------------------------- | -------- |
+| Console output  | `console.log`, `console.error`, `console.warn`, `console.debug`, `console.info` | `low`    |
+| Hard breakpoint | `debugger`                                                                      | `medium` |
+| Debt markers    | `TODO`, `FIXME`, `HACK`, `XXX` (with or without trailing `:`)                   | `info`   |
 
 Console methods are flagged because the correct approach in Vigil is the
 injected `Logger` interface, not direct `console.*` calls. `debugger` is
@@ -83,13 +83,13 @@ pre-existing unsafe code.
 
 ### Patterns
 
-| Pattern | Match | Severity |
-|---|---|---|
-| Type erasure | `as any` | `medium` |
-| Double-cast escape | `as unknown as` | `medium` |
-| Error suppression | `@ts-ignore` | `medium` |
-| Expected error (tests) | `@ts-expect-error` | `info` |
-| Non-null assertion | `!.` or `!` immediately before `;`, `,`, `)`, or `]` | `low` |
+| Pattern                | Match                                                | Severity |
+| ---------------------- | ---------------------------------------------------- | -------- |
+| Type erasure           | `as any`                                             | `medium` |
+| Double-cast escape     | `as unknown as`                                      | `medium` |
+| Error suppression      | `@ts-ignore`                                         | `medium` |
+| Expected error (tests) | `@ts-expect-error`                                   | `info`   |
+| Non-null assertion     | `!.` or `!` immediately before `;`, `,`, `)`, or `]` | `low`    |
 
 `as X` casts in general (e.g. `as "POST"`, `as ReadonlyArray<string>`) are
 **not** flagged — they are often legitimate type narrowings. Only `as any`
@@ -139,12 +139,12 @@ on `PullRequest` and fetching base file content).
 
 Rules applied per file, in priority order:
 
-| Label | Condition |
-|---|---|
-| `"test"` | `newPath` matches `*.test.ts`, `*.spec.ts`, `*.test.tsx`, `*.spec.tsx`, `*.test.js`, `*.spec.js` |
-| `"config"` | `newPath` matches `*.json`, `*.yaml`, `*.yml`, `*.md`, `*.env`, `*.env.*` |
-| `"behavior"` | Any added or removed line (not context) contains a control-flow keyword |
-| `"refactor"` | All other files with changes |
+| Label        | Condition                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------ |
+| `"test"`     | `newPath` matches `*.test.ts`, `*.spec.ts`, `*.test.tsx`, `*.spec.tsx`, `*.test.js`, `*.spec.js` |
+| `"config"`   | `newPath` matches `*.json`, `*.yaml`, `*.yml`, `*.md`, `*.env`, `*.env.*`                        |
+| `"behavior"` | Any added or removed line (not context) contains a control-flow keyword                          |
+| `"refactor"` | All other files with changes                                                                     |
 
 Control-flow keywords: `if`, `else`, `while`, `for`, `switch`, `case`,
 `try`, `catch`, `throw`, `return`, `break`, `continue`, `yield`, `await`.
@@ -172,10 +172,10 @@ A PR-level overview of the classification breakdown.
 - `title`: `"Change breakdown: {N} behavior, {M} refactor-only, {P} test, {Q} config"`
 - `description`: Lists the file paths of behavior-change files specifically.
   For refactor/test/config files, counts only.
-  Example: *"Behavior files: src/main/auth/withRefreshRetry.ts,
+  Example: _"Behavior files: src/main/auth/withRefreshRetry.ts,
   src/main/platforms/GitHubProvider.ts. Refactor-only: 4 files.
   Test: 2 files. Config: 1 file. Note: classification is heuristic —
-  rename-heavy PRs may show false behavior positives."*
+  rename-heavy PRs may show false behavior positives."_
 - `evidence`: `""`
 - `pass`: `"change-classification"`
 - `source`: `"static"`
@@ -183,6 +183,7 @@ A PR-level overview of the classification breakdown.
 #### 2. Intent mismatch (conditional)
 
 Emitted only when **both** conditions are true:
+
 1. `pr.title` contains any of: `refactor`, `rename`, `cleanup`, `clean up`,
    `tidy`, `chore` (case-insensitive, word-boundary match)
 2. At least one file is classified as `"behavior"`

@@ -67,8 +67,7 @@ export class TypeSafetyAnalyzer implements CodeAnalyzer {
               description: pattern.description,
               evidence: line.content.trim(),
               file: file.newPath,
-              lines:
-                line.newLine !== null ? { start: line.newLine, end: line.newLine } : null,
+              lines: line.newLine !== null ? { start: line.newLine, end: line.newLine } : null,
               pass: "type-safety",
               source: "static",
             });

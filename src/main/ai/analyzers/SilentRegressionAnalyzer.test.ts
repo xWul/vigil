@@ -20,14 +20,19 @@ function context(content: string): DiffLine {
   return { kind: "context", content, oldLine: 1, newLine: 1 };
 }
 
-function makeFile(path: string, lines: DiffLine[], status: FileDiff["status"] = "modified"): FileDiff {
+function makeFile(
+  path: string,
+  lines: DiffLine[],
+  status: FileDiff["status"] = "modified",
+): FileDiff {
   return {
     status,
     oldPath: null,
     newPath: path,
-    hunks: lines.length > 0
-      ? [{ oldStart: 1, oldCount: lines.length, newStart: 1, newCount: lines.length, lines }]
-      : [],
+    hunks:
+      lines.length > 0
+        ? [{ oldStart: 1, oldCount: lines.length, newStart: 1, newCount: lines.length, lines }]
+        : [],
   };
 }
 
@@ -87,10 +92,12 @@ describe("SilentRegressionAnalyzer", () => {
 
 describe("detectConditionChanges", () => {
   it("flags >= changed to === in an if condition", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  if (attempt >= retries) {"),
-      added("  if (attempt === retries) {"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  if (attempt >= retries) {"),
+        added("  if (attempt === retries) {"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -102,10 +109,9 @@ describe("detectConditionChanges", () => {
   });
 
   it("flags || changed to && in an if condition", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  if (a || b) {"),
-      added("  if (a && b) {"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed("  if (a || b) {"), added("  if (a && b) {")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -114,10 +120,12 @@ describe("detectConditionChanges", () => {
   });
 
   it("does not flag when no conditional marker present", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed('const label = count >= 10 ? "many" : "few";'),
-      added('const label = count === 10 ? "many" : "few";'),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed('const label = count >= 10 ? "many" : "few";'),
+        added('const label = count === 10 ? "many" : "few";'),
+      ]),
+    ]);
     // ternary with ? and : IS a conditional marker — this should trigger
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
@@ -128,10 +136,12 @@ describe("detectConditionChanges", () => {
   });
 
   it("does not flag when lines are too structurally different", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  if (attempt >= retries) {"),
-      added("  while (queue.length > 0 && !done) {"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  if (attempt >= retries) {"),
+        added("  while (queue.length > 0 && !done) {"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -140,10 +150,9 @@ describe("detectConditionChanges", () => {
   });
 
   it("does not flag operator changes outside conditional context", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("const ok = x >= 0;"),
-      added("const ok = x === 0;"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed("const ok = x >= 0;"), added("const ok = x === 0;")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -158,11 +167,13 @@ describe("detectConditionChanges", () => {
 
 describe("detectErrorHandlingChanges", () => {
   it("flags a removed catch block", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  } catch (e) {"),
-      removed("    return null;"),
-      removed("  }"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  } catch (e) {"),
+        removed("    return null;"),
+        removed("  }"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -173,14 +184,16 @@ describe("detectErrorHandlingChanges", () => {
   });
 
   it("does not flag a catch block that was rewritten (still present in added lines)", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  } catch (e) {"),
-      removed("    return null;"),
-      removed("  }"),
-      added("  } catch (err) {"),
-      added("    logger.error(err);"),
-      added("  }"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  } catch (e) {"),
+        removed("    return null;"),
+        removed("  }"),
+        added("  } catch (err) {"),
+        added("    logger.error(err);"),
+        added("  }"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -189,12 +202,14 @@ describe("detectErrorHandlingChanges", () => {
   });
 
   it("flags return null → throw in catch context", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      context("  } catch (e) {"),
-      removed("    return null;"),
-      added("    throw e;"),
-      context("  }"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        context("  } catch (e) {"),
+        removed("    return null;"),
+        added("    throw e;"),
+        context("  }"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -205,10 +220,9 @@ describe("detectErrorHandlingChanges", () => {
   });
 
   it("does not flag throw outside catch context", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  return null;"),
-      added("  throw new Error('oops');"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed("  return null;"), added("  throw new Error('oops');")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -223,10 +237,9 @@ describe("detectErrorHandlingChanges", () => {
 
 describe("detectNumericChanges", () => {
   it("flags a timeout value change", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  timeout: 3000,"),
-      added("  timeout: 10000,"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed("  timeout: 3000,"), added("  timeout: 10000,")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -238,10 +251,9 @@ describe("detectNumericChanges", () => {
   });
 
   it("flags a retry count change", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  maxRetries: 3,"),
-      added("  maxRetries: 10,"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed("  maxRetries: 3,"), added("  maxRetries: 10,")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -250,22 +262,25 @@ describe("detectNumericChanges", () => {
   });
 
   it("does not flag numeric changes without sensitivity keyword", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  const VERSION = 1;"),
-      added("  const VERSION = 2;"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed("  const VERSION = 1;"), added("  const VERSION = 2;")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.filter((f) => f.pass === "regression" && f.title.includes("→"))).toHaveLength(0);
+      expect(
+        result.value.filter((f) => f.pass === "regression" && f.title.includes("→")),
+      ).toHaveLength(0);
     }
   });
 
   it("does not flag when the number is unchanged", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  timeout: 3000, // old comment"),
-      added("  timeout: 3000, // new comment"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  timeout: 3000, // old comment"),
+        added("  timeout: 3000, // new comment"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -280,11 +295,13 @@ describe("detectNumericChanges", () => {
 
 describe("detectAsyncPatternChanges", () => {
   it("flags sequential awaits replaced by Promise.all", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  const a = await fetchA();"),
-      removed("  const b = await fetchB();"),
-      added("  const [a, b] = await Promise.all([fetchA(), fetchB()]);"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  const a = await fetchA();"),
+        removed("  const b = await fetchB();"),
+        added("  const [a, b] = await Promise.all([fetchA(), fetchB()]);"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -295,11 +312,13 @@ describe("detectAsyncPatternChanges", () => {
   });
 
   it("flags Promise.allSettled with its specific semantics", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  await doA();"),
-      removed("  await doB();"),
-      added("  await Promise.allSettled([doA(), doB()]);"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  await doA();"),
+        removed("  await doB();"),
+        added("  await Promise.allSettled([doA(), doB()]);"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -308,10 +327,12 @@ describe("detectAsyncPatternChanges", () => {
   });
 
   it("does not flag when only one await was removed", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed("  const a = await fetchA();"),
-      added("  const a = await Promise.all([fetchA()]);"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  const a = await fetchA();"),
+        added("  const a = await Promise.all([fetchA()]);"),
+      ]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -326,9 +347,9 @@ describe("detectAsyncPatternChanges", () => {
 
 describe("detectSideEffectIntroductions", () => {
   it("flags a new localStorage access", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      added('  localStorage.setItem("key", value);', 10),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [added('  localStorage.setItem("key", value);', 10)]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -340,9 +361,9 @@ describe("detectSideEffectIntroductions", () => {
   });
 
   it("flags a new fs.writeFile call", async () => {
-    const ctx = makeContext([makeFile("src/main/foo.ts", [
-      added("  await fs.writeFile(path, data);"),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/main/foo.ts", [added("  await fs.writeFile(path, data);")]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -351,9 +372,9 @@ describe("detectSideEffectIntroductions", () => {
   });
 
   it("flags a new document.cookie access", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      added('  document.cookie = "session=abc";'),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [added('  document.cookie = "session=abc";')]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -362,9 +383,9 @@ describe("detectSideEffectIntroductions", () => {
   });
 
   it("does not flag side effects in removed lines", async () => {
-    const ctx = makeContext([makeFile("src/foo.ts", [
-      removed('  localStorage.setItem("key", value);'),
-    ])]);
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [removed('  localStorage.setItem("key", value);')]),
+    ]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {

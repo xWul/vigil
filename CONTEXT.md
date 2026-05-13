@@ -306,6 +306,7 @@ channel is a named key mapping argument types to a return type wrapped in
 `Result<T, E>`.
 
 Two categories:
+
 - **Invoke channels** (`IpcContract`) — renderer calls main and awaits a
   `Result`. Implemented with `ipcMain.handle` / `ipcRenderer.invoke`.
 - **Push events** (`IpcEvents`) — main sends to renderer with no reply.
