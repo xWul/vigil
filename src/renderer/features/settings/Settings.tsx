@@ -30,22 +30,6 @@ function AzureIcon({ color }: { color: string }) {
   );
 }
 
-function TrafficLights() {
-  const t = TOKENS.dark;
-  const dot = (c: string) => (
-    <span
-      style={{ width: 12, height: 12, borderRadius: "50%", background: c, display: "inline-block" }}
-    />
-  );
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      {dot(t.trafficR)}
-      {dot(t.trafficY)}
-      {dot(t.trafficG)}
-    </div>
-  );
-}
-
 // ── Section ───────────────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -313,9 +297,7 @@ function ApiKeyField({
         <span style={{ fontFamily: SANS, fontSize: 12, color: t.green }}>Saved</span>
       )}
       {state === "error" && (
-        <span style={{ fontFamily: SANS, fontSize: 12, color: t.red }}>
-          Failed — try again
-        </span>
+        <span style={{ fontFamily: SANS, fontSize: 12, color: t.red }}>Failed — try again</span>
       )}
     </div>
   );
@@ -405,19 +387,13 @@ export function Settings({
             flexShrink: 0,
           } as React.CSSProperties
         }
-      >
-        <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          <TrafficLights />
-        </div>
-      </div>
+      ></div>
 
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: "auto", padding: "0 0 48px" }}>
         <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 32px" }}>
           {/* Back + title */}
-          <div
-            style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 36 }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 36 }}>
             <button
               onClick={() => onClose(accounts)}
               style={{

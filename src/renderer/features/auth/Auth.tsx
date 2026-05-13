@@ -35,30 +35,6 @@ function AzureIcon({ color }: { color: string }) {
   );
 }
 
-// ── TrafficLights ─────────────────────────────────────────────────────────────
-
-function TrafficLights() {
-  const t = TOKENS.dark;
-  const dot = (c: string) => (
-    <span
-      style={{
-        width: 12,
-        height: 12,
-        borderRadius: "50%",
-        background: c,
-        display: "inline-block",
-      }}
-    />
-  );
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      {dot(t.trafficR)}
-      {dot(t.trafficY)}
-      {dot(t.trafficG)}
-    </div>
-  );
-}
-
 // ── Platform button ───────────────────────────────────────────────────────────
 
 function PlatformButton({
@@ -369,9 +345,6 @@ export function Auth({
       }
     >
       {/* Titlebar */}
-      <div style={{ padding: "12px 16px", height: 36, flexShrink: 0 }}>
-        <TrafficLights />
-      </div>
 
       {/* Centered card */}
       <div
