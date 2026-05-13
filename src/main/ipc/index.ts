@@ -224,8 +224,6 @@ export function registerHandlers(
       mainWindow.webContents.send(channel, payload);
     };
 
-    emit("review:pass", { reviewId, pass: "complexity", status: "start", count: 0 });
-
     let aiProvider = null;
     if (settings.aiProvider === "anthropic") {
       const key = await settingsStore.getApiKey("anthropic");
@@ -249,7 +247,12 @@ export function registerHandlers(
       new SilentRegressionAnalyzer(),
     ];
 
-    const result = await runReview(context, analyzers, aiProvider, { model }, logger);
+    const result = await runReview(context, analyzers, aiProvider, {
+      model,
+      onPass: (pass, status, count) => {
+        emit("review:pass", { reviewId, pass, status: status === "start" ? "start" : "complete", count });
+      },
+    }, logger);
     if (!result.ok) return result;
 
     reviewCache.set(reviewId, result.value);
