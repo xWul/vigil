@@ -18,8 +18,12 @@ import { FileTokenStore } from "../src/main/auth/FileTokenStore.js";
 import { AnthropicProvider } from "../src/main/ai/AnthropicProvider.js";
 import { OpenAIProvider } from "../src/main/ai/OpenAIProvider.js";
 import { ComplexityAnalyzer } from "../src/main/ai/analyzers/ComplexityAnalyzer.js";
+import { DebugArtifactsAnalyzer } from "../src/main/ai/analyzers/DebugArtifactsAnalyzer.js";
 import { DuplicationAnalyzer } from "../src/main/ai/analyzers/DuplicationAnalyzer.js";
 import { SmellsAnalyzer } from "../src/main/ai/analyzers/SmellsAnalyzer.js";
+import { TypeSafetyAnalyzer } from "../src/main/ai/analyzers/TypeSafetyAnalyzer.js";
+import { ChangeClassifierAnalyzer } from "../src/main/ai/analyzers/ChangeClassifierAnalyzer.js";
+import { SilentRegressionAnalyzer } from "../src/main/ai/analyzers/SilentRegressionAnalyzer.js";
 import { buildReviewContext } from "../src/main/ai/buildReviewContext.js";
 import { runReview } from "../src/main/ai/runReview.js";
 import { AzureDevOpsProvider } from "../src/main/platforms/AzureDevOpsProvider.js";
@@ -89,7 +93,15 @@ if (!aiProvider) {
   console.error("No AI provider configured. Running static analysis only.");
 }
 
-const analyzers = [new ComplexityAnalyzer(), new DuplicationAnalyzer(), new SmellsAnalyzer()];
+const analyzers = [
+  new ComplexityAnalyzer(),
+  new DuplicationAnalyzer(),
+  new SmellsAnalyzer(),
+  new DebugArtifactsAnalyzer(),
+  new TypeSafetyAnalyzer(),
+  new ChangeClassifierAnalyzer(),
+  new SilentRegressionAnalyzer(),
+];
 
 const reviewResult = await runReview(context, analyzers, aiProvider, { model }, logger);
 if (!reviewResult.ok) {

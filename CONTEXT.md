@@ -156,7 +156,10 @@ The atomic unit of review output. Produced by either a `CodeAnalyzer`
 - `evidence` — the exact code snippet or diff lines that triggered this finding
 - `file` — file path where the finding applies
 - `lines` — `{ start, end }` line range, or `null` for PR-level findings
-- `pass` — which pass produced it: `"correctness" | "security" | "consistency"` (AI passes) or `"complexity" | "duplication" | "smells"` (static analysis)
+- `pass` — which pass produced it:
+  - AI passes: `"correctness" | "security" | "consistency"`
+  - Full-file static passes: `"complexity" | "duplication" | "smells"`
+  - Diff-aware static passes: `"debug-artifacts" | "type-safety" | "change-classification" | "regression"`
 - `source` — `"static"` or `"ai"`, distinguishing the analysis lane
 
 A `Finding` is always scoped to a single file (or the PR as a whole). It never spans multiple files.
@@ -190,13 +193,39 @@ The `AuthSession` is not included — the context builder fetches file contents 
 
 ## CodeAnalyzer
 
-A local analysis pass that produces `Finding[]` from code structure alone — no LLM involved. Each `CodeAnalyzer` has an `id` and receives a `ReviewContext`. Implementations in Phase 3:
+A local analysis pass that produces `Finding[]` from code structure alone — no LLM involved. Each `CodeAnalyzer` has an `id` and receives a `ReviewContext`. Implementations:
+
+Full-file analyzers (examine file content at HEAD):
 
 - `ComplexityAnalyzer` — cyclomatic complexity per function; flags functions above threshold
 - `DuplicationAnalyzer` — detects copy-pasted blocks across changed files using line hashing
 - `SmellsAnalyzer` — structural smells: long functions, long parameter lists, deep nesting
 
-All analyzers only examine files that appear in the diff. Non-TypeScript/JavaScript files produce no findings. `CodeAnalyzer` failures are silent — a failed analyzer logs a warning and returns empty findings; it never blocks the review.
+Diff-aware analyzers (examine the diff itself, not file content):
+
+- `DebugArtifactsAnalyzer` — flags newly added `console.*` calls, `debugger` statements, and `TODO`/`FIXME`/`HACK` markers in added lines only
+- `TypeSafetyAnalyzer` — flags newly added `as any`, `@ts-ignore`, non-null assertions, and double-cast patterns in added lines only
+- `ChangeClassifierAnalyzer` — classifies each changed file as behavior/refactor/test/config using control-flow keyword heuristics; emits a PR-level summary and (conditionally) an intent-mismatch finding
+- `SilentRegressionAnalyzer` — detects high-risk behavioral change patterns using paired hunk analysis: condition operator changes, error handling removal/change, numeric constant changes in sensitive contexts, async execution pattern changes, and side effect introductions
+
+All analyzers only examine files that appear in the diff. `CodeAnalyzer` failures are silent — a failed analyzer logs a warning and returns empty findings; it never blocks the review.
+
+---
+
+## SilentRegression
+
+A behavioral change in a PR that matches a known high-risk pattern and
+is non-obvious from a quick visual scan of the diff. Detected by
+`SilentRegressionAnalyzer` without AI. The risk is intrinsic to the
+change pattern — not dependent on whether tests cover the changed code.
+
+Distinct from a code smell (structural issue with no immediate behavioral
+risk) and from a security finding (a separate category tracked by the AI
+security pass).
+
+Known patterns: condition operator changes, error handling removal or
+change, numeric constant changes in sensitive contexts, async execution
+pattern changes, and side effect introductions.
 
 ---
 
