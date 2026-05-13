@@ -474,13 +474,14 @@ function FindingList({
           flexShrink: 0,
         }}
       >
-        {findings.length} finding{findings.length !== 1 ? "s" : ""} · j/k to navigate · Enter to open
+        {findings.length} finding{findings.length !== 1 ? "s" : ""} · j/k to navigate · Enter to
+        open
       </div>
       <div style={{ overflowY: "auto", flex: 1 }}>
         {findings.map((f, i) => {
           const isSelected = i === selectedIdx;
           const color = severityColor(f.severity);
-          const file = f.file ? f.file.split("/").pop() ?? f.file : "";
+          const file = f.file ? (f.file.split("/").pop() ?? f.file) : "";
           const loc = f.lines ? `:${f.lines.start}` : "";
           return (
             <div
@@ -515,8 +516,16 @@ function FindingList({
                   {passLabel(f.pass)}
                 </span>
                 {file && (
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint, marginLeft: "auto" }}>
-                    {file}{loc}
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: t.textFaint,
+                      marginLeft: "auto",
+                    }}
+                  >
+                    {file}
+                    {loc}
                   </span>
                 )}
               </div>
@@ -861,7 +870,6 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         }),
     [findings],
   );
-
 
   const focusedFinding = selectedIdx !== null ? (sortedFindings[selectedIdx] ?? null) : null;
 

@@ -247,12 +247,23 @@ export function registerHandlers(
       new SilentRegressionAnalyzer(),
     ];
 
-    const result = await runReview(context, analyzers, aiProvider, {
-      model,
-      onPass: (pass, status, count) => {
-        emit("review:pass", { reviewId, pass, status: status === "start" ? "start" : "complete", count });
+    const result = await runReview(
+      context,
+      analyzers,
+      aiProvider,
+      {
+        model,
+        onPass: (pass, status, count) => {
+          emit("review:pass", {
+            reviewId,
+            pass,
+            status: status === "start" ? "start" : "complete",
+            count,
+          });
+        },
       },
-    }, logger);
+      logger,
+    );
     if (!result.ok) return result;
 
     reviewCache.set(reviewId, result.value);
@@ -264,9 +275,7 @@ export function registerHandlers(
     return result;
   });
 
-  handle("review:getCached", (_ref, headSha) =>
-    Promise.resolve(ok(reviewCache.get(headSha))),
-  );
+  handle("review:getCached", (_ref, headSha) => Promise.resolve(ok(reviewCache.get(headSha))));
 
   handle("review:challenge", async (_ref, finding, hunkContext, messages) => {
     const settings = await settingsStore.get();

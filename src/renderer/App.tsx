@@ -81,12 +81,8 @@ export function App() {
       {route.screen === "queue" && (
         <ReviewQueue
           theme="dark"
-          onOpenSettings={() =>
-            setRoute({ screen: "settings", accounts: route.accounts })
-          }
-          onOpenPR={(pr) =>
-            setRoute({ screen: "workspace", pr, from: route.accounts })
-          }
+          onOpenSettings={() => setRoute({ screen: "settings", accounts: route.accounts })}
+          onOpenPR={(pr) => setRoute({ screen: "workspace", pr, from: route.accounts })}
         />
       )}
       {route.screen === "settings" && (

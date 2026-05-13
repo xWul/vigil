@@ -870,7 +870,10 @@ export function ReviewQueue({
                 row={row}
                 selected={i === clampedSelected}
                 onClick={() => setSelected(i)}
-                onDoubleClick={() => { setSelected(i); onOpenPR?.(row.pr); }}
+                onDoubleClick={() => {
+                  setSelected(i);
+                  onOpenPR?.(row.pr);
+                }}
                 t={t}
               />
             ))

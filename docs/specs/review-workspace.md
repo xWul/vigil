@@ -19,7 +19,11 @@ Pressing `Enter` on a selected row in the Review Queue opens the workspace.
 The app route becomes:
 
 ```typescript
-{ screen: "workspace"; pr: PullRequest; ref: PRRef }
+{
+  screen: "workspace";
+  pr: PullRequest;
+  ref: PRRef;
+}
 ```
 
 On open, the workspace immediately:
@@ -93,11 +97,11 @@ A small severity-colored dot rendered in the diff gutter on each line
 that falls within a finding's `lines` range. Severity colors match the
 existing risk palette:
 
-| Severity | Color token |
-|---|---|
-| critical / high | `--v-red` |
-| medium | `--v-amber` |
-| low / info | `--v-green` |
+| Severity        | Color token |
+| --------------- | ----------- |
+| critical / high | `--v-red`   |
+| medium          | `--v-amber` |
+| low / info      | `--v-green` |
 
 When multiple findings overlap on the same lines, a single dot with a
 count badge (`2`, `3+`) is shown — clicking or navigating to it cycles
@@ -132,6 +136,7 @@ A per-finding AI conversation scoped to the focused finding. Lives below
 FindingDetail in the right panel.
 
 The AI receives:
+
 - The finding (severity, title, description, evidence)
 - The user's message
 - The relevant diff hunk (for context)
@@ -177,7 +182,7 @@ workspace component state. Contains:
 ```typescript
 interface QueuedComment {
   readonly finding: Finding;
-  readonly body: string;   // pre-formatted from finding; editable
+  readonly body: string; // pre-formatted from finding; editable
 }
 ```
 
@@ -204,13 +209,13 @@ PR-level findings (no `lines`) are submitted as `{ kind: "pr_comment" }`.
 When no AI is configured, `ReviewResult.riskScore` is `null`. The
 workspace derives a display score mechanically:
 
-| Condition | Fallback score |
-|---|---|
-| Any `critical` finding | 5 |
-| Any `high` finding | 4 |
-| Any `medium` finding | 3 |
-| `low` / `info` only | 2 |
-| Zero findings | 1 |
+| Condition              | Fallback score |
+| ---------------------- | -------------- |
+| Any `critical` finding | 5              |
+| Any `high` finding     | 4              |
+| Any `medium` finding   | 3              |
+| `low` / `info` only    | 2              |
+| Zero findings          | 1              |
 
 This score is display-only — it is never written back to `ReviewResult`.
 
@@ -218,15 +223,15 @@ This score is display-only — it is never written back to `ReviewResult`.
 
 ## Keyboard bindings
 
-| Key | Action |
-|---|---|
+| Key     | Action                                                  |
+| ------- | ------------------------------------------------------- |
 | `j / k` | Next / previous finding (scrolls diff to relevant hunk) |
-| `] / [` | Next / previous hunk (raw diff navigation) |
-| `a` | Add focused finding to ReviewDraft |
-| `c` | Open / focus ChallengeThread for focused finding |
-| `Esc` | Back to Review Queue |
-| `?` | Toggle help overlay |
-| `⌘↵` | Submit ReviewDraft |
+| `] / [` | Next / previous hunk (raw diff navigation)              |
+| `a`     | Add focused finding to ReviewDraft                      |
+| `c`     | Open / focus ChallengeThread for focused finding        |
+| `Esc`   | Back to Review Queue                                    |
+| `?`     | Toggle help overlay                                     |
+| `⌘↵`    | Submit ReviewDraft                                      |
 
 `j/k` are active from the moment the workspace opens — no mode switch needed.
 
