@@ -9,7 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **File logging transport** (`src/main/logger.ts`): `FileLogger` writes structured
+- **Review Workspace** (`src/renderer/features/workspace/WorkspaceScreen.tsx`): full PR review
+  screen with a unified diff view (syntax-highlighted, hunk headers, old/new line numbers),
+  inline `FindingDot` markers in the gutter, a scrollable findings list panel on the right sorted
+  by severity, and a `FindingDetail` view (title, description, evidence, "Add to review" button).
+  Auto-runs analysis on first open and serves cached results on return visits. Two-column layout
+  (65% diff / 35% panel). Keyboard navigation: `j`/`k` to move through findings, `Enter` to open
+  detail, `Escape` to return to list or queue, `a` to add focused finding to review draft.
+
+- **ReviewDraft panel**: verdict buttons (Approve / Request Changes / Comment), freeform body
+  textarea, queued inline comments with removal, and submit via `platform:submitReview`. Docked
+  at the bottom of the right panel.
+
+- **Review result cache** (`src/main/ai/ReviewCache.ts`): stores `ReviewResult` keyed by
+  `headSha` as JSON in `userData/reviews/` with a 7-day TTL. Written after a successful
+  `review:run`; read on workspace open before running analysis. Revisiting a PR is now instant.
+
+- **Auto-refresh and manual refresh for Review Queue**: PRs refresh silently every 60 seconds
+  (existing rows stay visible during background refresh). A refresh button with a spin animation
+  appears in the titlebar; `r` keyboard shortcut also triggers a refresh.
+
+- **Double-click to open PR**: clicking a row in the Review Queue selects it (single click);
+  double-clicking opens the Review Workspace.
+
+- **File logging transport** (`src/main/logger.ts`): `FileLogger` writes structured (`src/main/logger.ts`): `FileLogger` writes structured
   log lines to `app.getPath('logs')/vigil.log`, rotates at 5 MB (keeping one `.old`
   archive), defaults to `error` level overridable via `VIGIL_LOG_LEVEL`, and redacts
   fields whose names match `token|secret|key|password|pat` before writing. Replaces
@@ -231,6 +254,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Static analyzers skip test files**: `*.test.*` and `*.spec.*` files are now filtered
+  from the diff before running both static analyzers and AI passes. Test files generate
+  noise (acceptable `console.log`, intentional `any` types, complex setup patterns).
+- **Pass progress events**: `review:run` now emits a `review:pass` start event before each
+  analyzer/AI pass and a `complete` event (with finding count) after. The workspace PassStrip
+  transitions from ⟳ to ✓ N as each pass finishes rather than staying stuck.
+- **GitHub PR query broadened**: changed from `review-requested:@me` to `involves:@me` so
+  the Review Queue shows PRs you authored, are assigned to, are mentioned in, or are
+  requested to review — not just the last category.
+
+### Fixed
+
+- **Review cache not hitting**: the PR list (GitHub search API) returns `headSha: ""`; the
+  cache was written with the real headSha from `getPullRequest` but looked up with `""`.
+  Fixed by using `diffResult.value.pr.headSha` from `platform:getPRWithDiff` as the cache key.
+- **Findings not browsable**: the workspace right panel only showed a `FindingDetail` when a
+  finding was already focused. Added a `FindingList` that shows all findings sorted by severity
+  as the default panel state. Clicking any row opens its detail; Escape returns to the list.
 - ADR criteria tightened to a strict three-rule test
   (hard-to-reverse + surprising-without-context + real-trade-off),
   matching the discipline enforced by the `grill-with-docs` skill.
