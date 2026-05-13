@@ -2,11 +2,25 @@ import { app, BrowserWindow, shell } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ConsoleLogger } from "../shared/logger.js";
+import { KeychainTokenStore } from "./auth/KeychainTokenStore.js";
+import { KeychainSecretStore } from "./settings/SecretStore.js";
+import { SettingsStore } from "./settings/SettingsStore.js";
+import { registerHandlers } from "./ipc/index.js";
+
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const isDev = !app.isPackaged;
+const logger = ConsoleLogger.fromEnv();
 
-function createWindow(): void {
+const tokenStore = new KeychainTokenStore();
+const secretStore = new KeychainSecretStore();
+const settingsStore = new SettingsStore(
+  join(app.getPath("userData"), "settings.json"),
+  secretStore,
+);
+
+function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -27,7 +41,6 @@ function createWindow(): void {
     window.show();
   });
 
-  // Open external links in the user's default browser, not in Vigil.
   window.webContents.setWindowOpenHandler((details) => {
     void shell.openExternal(details.url);
     return { action: "deny" };
@@ -38,14 +51,18 @@ function createWindow(): void {
   } else {
     void window.loadFile(join(__dirname, "../renderer/index.html"));
   }
+
+  return window;
 }
 
 void app.whenReady().then(() => {
-  createWindow();
+  const mainWindow = createWindow();
+  registerHandlers(mainWindow, tokenStore, settingsStore, logger);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      const win = createWindow();
+      registerHandlers(win, tokenStore, settingsStore, logger);
     }
   });
 });
