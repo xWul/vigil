@@ -1,17 +1,20 @@
 import { useState, useEffect } from "react";
 
 import type { ConnectedAccount } from "../shared/auth.js";
+import type { PullRequest } from "../shared/model/index.js";
 import { api } from "./api.js";
 import { TOKENS, SANS } from "./shared/theme.js";
 import { Auth } from "./features/auth/Auth.js";
 import { ReviewQueue } from "./features/review-queue/ReviewQueue.js";
 import { Settings } from "./features/settings/Settings.js";
+import { WorkspaceScreen } from "./features/workspace/WorkspaceScreen.js";
 
 type Route =
   | { screen: "checking" }
   | { screen: "auth" }
   | { screen: "queue"; accounts: readonly ConnectedAccount[] }
-  | { screen: "settings"; accounts: readonly ConnectedAccount[] };
+  | { screen: "settings"; accounts: readonly ConnectedAccount[] }
+  | { screen: "workspace"; pr: PullRequest; from: readonly ConnectedAccount[] };
 
 function CheckingScreen() {
   const t = TOKENS.dark;
@@ -81,10 +84,19 @@ export function App() {
           onOpenSettings={() =>
             setRoute({ screen: "settings", accounts: route.accounts })
           }
+          onOpenPR={(pr) =>
+            setRoute({ screen: "workspace", pr, from: route.accounts })
+          }
         />
       )}
       {route.screen === "settings" && (
         <Settings accounts={route.accounts} onClose={handleSettingsClose} />
+      )}
+      {route.screen === "workspace" && (
+        <WorkspaceScreen
+          pr={route.pr}
+          onBack={() => setRoute({ screen: "queue", accounts: route.from })}
+        />
       )}
     </div>
   );

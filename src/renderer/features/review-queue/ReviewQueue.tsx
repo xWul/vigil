@@ -591,9 +591,11 @@ function LoadingState({ t }: { t: Tokens }) {
 export function ReviewQueue({
   theme = "dark",
   onOpenSettings,
+  onOpenPR,
 }: {
   theme?: Theme;
   onOpenSettings?: () => void;
+  onOpenPR?: (pr: PullRequest) => void;
 }) {
   const t = TOKENS[theme];
 
@@ -715,6 +717,11 @@ export function ReviewQueue({
     if (e.key === "ArrowUp" || e.key === "k") {
       e.preventDefault();
       setSelected((s) => Math.max(0, s - 1));
+    }
+    if (e.key === "Enter" && onOpenPR) {
+      const idx = Math.max(0, Math.min(selected, visibleRows.length - 1));
+      const row = visibleRows[idx];
+      if (row) onOpenPR(row.pr);
     }
   }
 

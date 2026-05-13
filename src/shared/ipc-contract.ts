@@ -33,6 +33,12 @@ export interface IpcContract {
   // Review
   "review:run": (ref: PRRef) => Result<ReviewResult, ReviewError>;
   "review:getCached": (ref: PRRef, headSha: string) => Result<ReviewResult | null, never>;
+  "review:challenge": (
+    ref: PRRef,
+    finding: Finding,
+    hunkContext: string,
+    messages: readonly { role: "user" | "assistant"; content: string }[],
+  ) => Result<void, ReviewError>;
 
   // Settings
   "settings:get": () => Result<Settings, never>;
@@ -54,4 +60,5 @@ export interface IpcEvents {
     readonly status: "start" | "complete";
     readonly count: number;
   };
+  "review:challengeChunk": { readonly token: string; readonly done: boolean };
 }
