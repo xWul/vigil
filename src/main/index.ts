@@ -30,7 +30,7 @@ function createWindow(): BrowserWindow {
     title: "Vigil",
     backgroundColor: "#0e0e10",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: join(__dirname, "../preload/index.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

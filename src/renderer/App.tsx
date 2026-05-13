@@ -43,10 +43,14 @@ export function App() {
 
   useEffect(() => {
     async function checkAccounts() {
-      const result = await api.invoke("auth:getAccounts");
-      if (result.ok && result.value.length > 0) {
-        setRoute({ screen: "queue", accounts: result.value });
-      } else {
+      try {
+        const result = await api.invoke("auth:getAccounts");
+        if (result.ok && result.value.length > 0) {
+          setRoute({ screen: "queue", accounts: result.value });
+        } else {
+          setRoute({ screen: "auth" });
+        }
+      } catch {
         setRoute({ screen: "auth" });
       }
     }
