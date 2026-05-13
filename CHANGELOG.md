@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Extended static analyzers** (`DebugArtifactsAnalyzer`, `TypeSafetyAnalyzer`, `ChangeClassifierAnalyzer`):
   three new diff-aware `CodeAnalyzer` implementations. Unlike the existing full-file analyzers, these
-  operate on the diff itself — flagging only what the PR *introduced*, not pre-existing debt.
+  operate on the diff itself — flagging only what the PR _introduced_, not pre-existing debt.
   `DebugArtifactsAnalyzer` flags newly added `console.*` calls (low), `debugger` statements (medium),
   and `TODO`/`FIXME`/`HACK`/`XXX` markers (info). `TypeSafetyAnalyzer` flags `as any` and double-cast
   patterns (medium), `@ts-ignore` (medium), `@ts-expect-error` (info), and non-null assertions (low)

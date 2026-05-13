@@ -46,6 +46,13 @@ export type ReviewError =
   | { readonly code: "network"; readonly cause: string };
 
 export interface CodeAnalyzer {
-  readonly id: "complexity" | "duplication" | "smells" | "debug-artifacts" | "type-safety" | "change-classification" | "regression";
+  readonly id:
+    | "complexity"
+    | "duplication"
+    | "smells"
+    | "debug-artifacts"
+    | "type-safety"
+    | "change-classification"
+    | "regression";
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>>;
 }

@@ -64,20 +64,92 @@ const CONDITIONAL_MARKER = /\bif\s*\(|}\s*else\s+if\s*\(|\bwhile\s*\(|\bfor\s*\(
 const OPERATORS_RE = /[><!]=?=?|&&|\|\|/g;
 
 const RISKY_PAIRS: ReadonlyMap<string, { to: string; description: string }[]> = new Map([
-  [">=", [
-    { to: "===", description: "Values above the limit no longer trigger — potential infinite loop or missed boundary." },
-    { to: ">",   description: "The boundary value is now excluded where it was previously included." },
-  ]],
-  ["<=", [
-    { to: "===", description: "Values below the limit no longer trigger — potential infinite loop or missed boundary." },
-    { to: "<",   description: "The boundary value is now excluded where it was previously included." },
-  ]],
-  [">",  [{ to: ">=", description: "The boundary value is now included where it was previously excluded." }]],
-  ["<",  [{ to: "<=", description: "The boundary value is now included where it was previously excluded." }]],
-  ["!==", [{ to: "===", description: "The condition is now the logical opposite of the original — equality where inequality was intended." }]],
-  ["!=",  [{ to: "==",  description: "The condition is now the logical opposite of the original — equality where inequality was intended." }]],
-  ["&&", [{ to: "||", description: "Logic changed from AND to OR — the condition now passes when either operand is truthy instead of both." }]],
-  ["||", [{ to: "&&", description: "Logic changed from OR to AND — the condition now requires both operands to be truthy instead of either." }]],
+  [
+    ">=",
+    [
+      {
+        to: "===",
+        description:
+          "Values above the limit no longer trigger — potential infinite loop or missed boundary.",
+      },
+      {
+        to: ">",
+        description: "The boundary value is now excluded where it was previously included.",
+      },
+    ],
+  ],
+  [
+    "<=",
+    [
+      {
+        to: "===",
+        description:
+          "Values below the limit no longer trigger — potential infinite loop or missed boundary.",
+      },
+      {
+        to: "<",
+        description: "The boundary value is now excluded where it was previously included.",
+      },
+    ],
+  ],
+  [
+    ">",
+    [
+      {
+        to: ">=",
+        description: "The boundary value is now included where it was previously excluded.",
+      },
+    ],
+  ],
+  [
+    "<",
+    [
+      {
+        to: "<=",
+        description: "The boundary value is now included where it was previously excluded.",
+      },
+    ],
+  ],
+  [
+    "!==",
+    [
+      {
+        to: "===",
+        description:
+          "The condition is now the logical opposite of the original — equality where inequality was intended.",
+      },
+    ],
+  ],
+  [
+    "!=",
+    [
+      {
+        to: "==",
+        description:
+          "The condition is now the logical opposite of the original — equality where inequality was intended.",
+      },
+    ],
+  ],
+  [
+    "&&",
+    [
+      {
+        to: "||",
+        description:
+          "Logic changed from AND to OR — the condition now passes when either operand is truthy instead of both.",
+      },
+    ],
+  ],
+  [
+    "||",
+    [
+      {
+        to: "&&",
+        description:
+          "Logic changed from OR to AND — the condition now requires both operands to be truthy instead of either.",
+      },
+    ],
+  ],
 ]);
 
 function tokenSimilarity(a: string, b: string): number {
@@ -184,11 +256,9 @@ function detectErrorHandlingChanges(file: FileDiff): Finding[] {
 
     const windowLines = hunk.lines.slice(catchIdx, catchIdx + 8);
     const fallbackLine = windowLines.find(
-      (l) => (l.kind === "removed") && FALLBACK_RETURN_RE.test(l.content),
+      (l) => l.kind === "removed" && FALLBACK_RETURN_RE.test(l.content),
     );
-    const throwLine = windowLines.find(
-      (l) => (l.kind === "added") && THROW_RE.test(l.content),
-    );
+    const throwLine = windowLines.find((l) => l.kind === "added" && THROW_RE.test(l.content));
 
     if (fallbackLine && throwLine) {
       findings.push({
@@ -254,9 +324,7 @@ function detectNumericChanges(file: FileDiff): Finding[] {
 
       const ratio = newVal / oldVal;
       const direction =
-        newVal > oldVal
-          ? `increased ${ratio > 1 ? `${ratio.toFixed(1)}×` : ""}`
-          : "decreased";
+        newVal > oldVal ? `increased ${ratio > 1 ? `${ratio.toFixed(1)}×` : ""}` : "decreased";
 
       findings.push({
         severity: "medium",
@@ -302,7 +370,8 @@ function detectAsyncPatternChanges(file: FileDiff): Finding[] {
 
     const semanticsNote: Record<string, string> = {
       all: "Rejects immediately if any promise rejects.",
-      allSettled: "Never rejects — all results (fulfilled or rejected) are available. Check for rejected entries explicitly.",
+      allSettled:
+        "Never rejects — all results (fulfilled or rejected) are available. Check for rejected entries explicitly.",
       race: "Resolves or rejects with the first settled promise. Later results are ignored.",
       any: "Rejects only if all promises reject. First fulfillment wins.",
     };
@@ -312,7 +381,8 @@ function detectAsyncPatternChanges(file: FileDiff): Finding[] {
     findings.push({
       severity: "medium",
       title: `Sequential await replaced by ${combinator}`,
-      description: `Execution order changed from sequential to parallel. Verify there are no ordering dependencies between the operations and that error handling covers partial failures. ${note}`.trim(),
+      description:
+        `Execution order changed from sequential to parallel. Verify there are no ordering dependencies between the operations and that error handling covers partial failures. ${note}`.trim(),
       evidence: diffEvidence(awaitLines, [combinatorLine]),
       file: file.newPath,
       lines: (() => {
@@ -341,32 +411,38 @@ const SIDE_EFFECT_PATTERNS: SideEffectPattern[] = [
   {
     regex: /localStorage[.[]/,
     label: "localStorage write",
-    description: "A new localStorage access was introduced. This persists data to the browser's local storage — verify the key, value shape, and any privacy implications.",
+    description:
+      "A new localStorage access was introduced. This persists data to the browser's local storage — verify the key, value shape, and any privacy implications.",
   },
   {
     regex: /sessionStorage[.[]/,
     label: "sessionStorage write",
-    description: "A new sessionStorage access was introduced. This persists data for the current browser session — verify the key and value shape.",
+    description:
+      "A new sessionStorage access was introduced. This persists data for the current browser session — verify the key and value shape.",
   },
   {
     regex: /document\.cookie/,
     label: "cookie access",
-    description: "A new document.cookie access was introduced. Cookies are sent with every request to the domain — verify the name, value, expiry, and security flags.",
+    description:
+      "A new document.cookie access was introduced. Cookies are sent with every request to the domain — verify the name, value, expiry, and security flags.",
   },
   {
     regex: /indexedDB\./,
     label: "IndexedDB access",
-    description: "A new IndexedDB access was introduced. This writes to persistent browser storage — verify the database name, object store, and transaction type.",
+    description:
+      "A new IndexedDB access was introduced. This writes to persistent browser storage — verify the database name, object store, and transaction type.",
   },
   {
     regex: /\bfs\.(writeFile|appendFile|writeFileSync)\s*\(/,
     label: "file write",
-    description: "A new file write operation was introduced. Verify the target path, content, and error handling.",
+    description:
+      "A new file write operation was introduced. Verify the target path, content, and error handling.",
   },
   {
     regex: /\bfs\.(rmSync|unlinkSync)\s*\(/,
     label: "file deletion",
-    description: "A new file deletion operation was introduced. Verify the target path and that deletion is safe under concurrent access.",
+    description:
+      "A new file deletion operation was introduced. Verify the target path and that deletion is safe under concurrent access.",
   },
 ];
 

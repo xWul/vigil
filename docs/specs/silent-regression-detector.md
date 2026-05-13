@@ -45,8 +45,8 @@ groups them into:
 
 ```ts
 interface ChangePair {
-  removed: readonly DiffLine[];  // consecutive removed lines
-  added: readonly DiffLine[];    // consecutive added lines that follow
+  removed: readonly DiffLine[]; // consecutive removed lines
+  added: readonly DiffLine[]; // consecutive added lines that follow
 }
 ```
 
@@ -58,6 +58,7 @@ included. Context lines reset the current group.
 ## Finding shape
 
 All findings use:
+
 - `pass: "regression"`
 - `source: "static"`
 - `evidence`: a diff-style string showing the relevant removed and added
@@ -75,7 +76,7 @@ All findings use:
 
 **Signal A — conditional context:** The changed line (removed or added)
 contains at least one of: `if (`, `} else if (`, `while (`, `for (`,
-or a ternary pattern (` ? ` and ` : `).
+or a ternary pattern (`?` and `:`).
 
 **Signal B — structural similarity:** With all comparison and logical
 operators removed, the removed and added lines are at least 70% similar
@@ -84,18 +85,18 @@ rewrite.
 
 ### Risky operator pairs
 
-| Old operator | New operator | Risk |
-|---|---|---|
-| `>=` | `===` | Off-by-one: values above the limit no longer trigger |
-| `>=` | `>` | Boundary: limit value now excluded |
-| `<=` | `===` | Off-by-one: values below the limit no longer trigger |
-| `<=` | `<` | Boundary: limit value now excluded |
-| `>` | `>=` | Boundary: limit value now included |
-| `<` | `<=` | Boundary: limit value now included |
-| `!==` | `===` | Negation flipped: condition inverted |
-| `!=` | `==` | Negation flipped: condition inverted |
-| `&&` | `\|\|` | Logic inverted: AND → OR |
-| `\|\|` | `&&` | Logic inverted: OR → AND |
+| Old operator | New operator | Risk                                                 |
+| ------------ | ------------ | ---------------------------------------------------- |
+| `>=`         | `===`        | Off-by-one: values above the limit no longer trigger |
+| `>=`         | `>`          | Boundary: limit value now excluded                   |
+| `<=`         | `===`        | Off-by-one: values below the limit no longer trigger |
+| `<=`         | `<`          | Boundary: limit value now excluded                   |
+| `>`          | `>=`         | Boundary: limit value now included                   |
+| `<`          | `<=`         | Boundary: limit value now included                   |
+| `!==`        | `===`        | Negation flipped: condition inverted                 |
+| `!=`         | `==`         | Negation flipped: condition inverted                 |
+| `&&`         | `\|\|`       | Logic inverted: AND → OR                             |
+| `\|\|`       | `&&`         | Logic inverted: OR → AND                             |
 
 Only 1→1 change pairs (one removed line, one added line).
 
@@ -115,10 +116,12 @@ Only 1→1 change pairs (one removed line, one added line).
 ### Pattern A — catch block removed
 
 **Signals:**
+
 1. A removed line in the hunk contains `catch (` or `catch(`.
 2. No added line in the **same hunk** contains `catch (` or `catch(`.
 
 **Output:**
+
 - **Severity:** `high`
 - **Title:** `"Catch block removed"`
 - **Description:** "A catch block was removed. Errors that were previously
@@ -128,12 +131,14 @@ Only 1→1 change pairs (one removed line, one added line).
 ### Pattern B — error now thrown instead of returning fallback
 
 **Signals:**
+
 1. A removed line in a catch context (within 5 lines of a removed or
    existing `catch (` in the same hunk) matches:
    `return\s+(null|undefined|false|\[\]|\{\})`.
 2. An added line in the same hunk contains `throw `.
 
 **Output:**
+
 - **Severity:** `high`
 - **Title:** `"Error handling changed: now throws instead of returning fallback"`
 - **Description:** "A catch block that previously returned a safe fallback
@@ -204,12 +209,14 @@ One signal is sufficient — these patterns are specific enough that a
 second signal would only add noise.
 
 **Browser storage patterns (added lines):**
+
 - `localStorage\.` or `localStorage\[`
 - `sessionStorage\.` or `sessionStorage\[`
 - `document\.cookie`
 - `indexedDB\.`
 
 **Node.js file system write patterns (added lines):**
+
 - `fs\.writeFile`, `fs\.appendFile`, `fs\.writeFileSync`
 - `fs\.rmSync`, `fs\.unlinkSync`
 

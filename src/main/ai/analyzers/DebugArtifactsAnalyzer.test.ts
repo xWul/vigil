@@ -5,10 +5,19 @@ import type { ReviewContext } from "../CodeAnalyzer.js";
 import { DebugArtifactsAnalyzer } from "./DebugArtifactsAnalyzer.js";
 
 function makeLine(content: string, kind: DiffLine["kind"] = "added", newLine = 1): DiffLine {
-  return { kind, content, oldLine: kind === "added" ? null : 1, newLine: kind === "removed" ? null : newLine };
+  return {
+    kind,
+    content,
+    oldLine: kind === "added" ? null : 1,
+    newLine: kind === "removed" ? null : newLine,
+  };
 }
 
-function makeFile(path: string, lines: DiffLine[], status: FileDiff["status"] = "modified"): FileDiff {
+function makeFile(
+  path: string,
+  lines: DiffLine[],
+  status: FileDiff["status"] = "modified",
+): FileDiff {
   return {
     status,
     oldPath: null,
@@ -49,7 +58,9 @@ describe("DebugArtifactsAnalyzer", () => {
   });
 
   it("flags console.log in an added line", async () => {
-    const context = makeContext([makeFile("src/foo.ts", [makeLine("  console.log(x);", "added", 5)])]);
+    const context = makeContext([
+      makeFile("src/foo.ts", [makeLine("  console.log(x);", "added", 5)]),
+    ]);
     const result = await analyzer.analyze(context);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -80,7 +91,12 @@ describe("DebugArtifactsAnalyzer", () => {
   });
 
   it("flags TODO and FIXME at info severity", async () => {
-    for (const marker of ["// TODO: fix this", "// FIXME handle edge case", "// HACK workaround", "// XXX"]) {
+    for (const marker of [
+      "// TODO: fix this",
+      "// FIXME handle edge case",
+      "// HACK workaround",
+      "// XXX",
+    ]) {
       const context = makeContext([makeFile("src/foo.ts", [makeLine(marker)])]);
       const result = await analyzer.analyze(context);
       expect(result.ok).toBe(true);
