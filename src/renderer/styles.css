@@ -25,6 +25,11 @@
   --color-risk-low: var(--v-green);
 }
 
+@keyframes vigil-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 @layer base {
   html,
   body,
