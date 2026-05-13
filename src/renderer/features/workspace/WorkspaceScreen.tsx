@@ -905,6 +905,8 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         return;
       }
       setDiff(diffResult.value.diff);
+      // Use the headSha from the full PR response — the list API (search) returns "" for headSha
+      const headSha = diffResult.value.pr.headSha;
 
       if (settingsResult.ok) {
         setHasAI(
@@ -915,7 +917,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       }
 
       // Cache-first
-      const cached = await api.invoke("review:getCached", pr.ref, pr.headSha);
+      const cached = await api.invoke("review:getCached", pr.ref, headSha);
       if (!mounted) return;
 
       if (cached.ok && cached.value) {
