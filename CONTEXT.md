@@ -298,6 +298,55 @@ Two implementations: `KeychainSecretStore` (production, OS keychain via
 
 ---
 
+## ReviewWorkspace
+
+The screen a reviewer sees after selecting a PR from the Review Queue.
+Contains the diff view, inline FindingMarkers, the right panel
+(FindingDetail + ChallengeThread), the pass progress strip, and the
+ReviewDraft composer.
+
+The workspace is fully functional without AI — static findings, diff
+view, and review actions all work with no API key configured.
+
+---
+
+## FindingMarker
+
+A severity-colored dot rendered in the diff gutter on each line that
+falls within a Finding's `lines` range. Indicates that one or more
+findings apply to that line. Multiple overlapping findings show a count
+badge. Removed lines never carry markers — findings always attach to
+new-file line numbers. PR-level findings (`lines: null`) have no gutter
+marker; they appear as pinned cards in the right panel.
+
+---
+
+## ReviewDraft
+
+The in-progress review being composed in the workspace before
+submission. Contains a verdict (`approved | changes_requested |
+commented`), an optional overall body, and a list of QueuedComments
+(findings the reviewer has chosen to post as inline comments).
+
+Submitted as a single `platform:submitReview` call. Distinct from
+`NewReview` (the final submitted form) — the draft is mutable workspace
+state; `NewReview` is the immutable value sent to the platform.
+
+---
+
+## ChallengeThread
+
+A per-finding AI conversation scoped to a specific Finding in the
+workspace. The AI receives the finding, the user's message, and the
+relevant diff hunk — not the full diff. Responses stream token by token.
+Available only when an AI provider is configured. Not persisted across
+sessions.
+
+Distinct from a PR-level conversation (not in scope for Phase 5) —
+each ChallengeThread is anchored to one Finding.
+
+---
+
 ## IpcContract
 
 The typed boundary between the Electron main process and the renderer.
