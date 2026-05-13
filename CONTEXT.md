@@ -238,3 +238,86 @@ Model selection is the caller's responsibility — the model name is passed in `
 Implementations: `AnthropicProvider` (`@anthropic-ai/sdk`) and `OpenAIProvider` (`openai` package).
 
 ---
+
+## ConnectedAccount
+
+The renderer-safe projection of an authenticated user. Contains only what
+the UI needs to display: platform, display name, and login/UPN. Contains
+no tokens, no expiry timestamps, and no refresh credentials.
+
+The main process maps `AuthSession → ConnectedAccount` before sending
+across IPC. `AuthSession` never crosses the IPC boundary.
+
+```typescript
+interface ConnectedAccount {
+  readonly platform: "github" | "azure-devops";
+  readonly displayName: string;
+  readonly login: string; // GitHub username or Azure DevOps UPN
+}
+```
+
+---
+
+## Settings
+
+The non-sensitive configuration the renderer reads and writes. API keys
+are never included — `hasAnthropicKey` and `hasOpenAIKey` are booleans
+that tell the renderer whether a key is configured, without revealing it.
+
+```typescript
+interface Settings {
+  readonly aiProvider: "anthropic" | "openai" | null;
+  readonly model: string | null;
+  readonly logLevel: "debug" | "info" | "warn" | "error";
+  readonly hasAnthropicKey: boolean;
+  readonly hasOpenAIKey: boolean;
+}
+```
+
+Non-sensitive fields are persisted as JSON in `app.getPath('userData')`.
+API keys are stored in the OS keychain via `SecretStore`.
+
+---
+
+## SecretStore
+
+Interface for storing arbitrary string secrets in the OS keychain.
+Complements `TokenStore` (which stores `AuthSession` values) for
+secrets that are plain strings — specifically AI API keys.
+
+```typescript
+interface SecretStore {
+  set(key: string, value: string): Promise<void>;
+  get(key: string): Promise<string | null>;
+  delete(key: string): Promise<void>;
+}
+```
+
+Two implementations: `KeychainSecretStore` (production, OS keychain via
+`@napi-rs/keyring`) and `FileSecretStore` (dev/CI, plain JSON file).
+
+---
+
+## IpcContract
+
+The typed boundary between the Electron main process and the renderer.
+Defined as a TypeScript interface in `src/shared/ipc-contract.ts`. Every
+channel is a named key mapping argument types to a return type wrapped in
+`Result<T, E>`.
+
+Two categories:
+- **Invoke channels** (`IpcContract`) — renderer calls main and awaits a
+  `Result`. Implemented with `ipcMain.handle` / `ipcRenderer.invoke`.
+- **Push events** (`IpcEvents`) — main sends to renderer with no reply.
+  Implemented with `webContents.send` / `ipcRenderer.on`. Used for
+  streaming review findings as they are produced.
+
+The renderer never calls `ipcRenderer.invoke` with a raw string — it uses
+a typed API client in `src/renderer/api.ts` generated from `IpcContract`.
+The main process never calls `ipcMain.handle` with a raw string — it uses
+a typed handler registration helper.
+
+Channel naming: `namespace:action` (e.g. `auth:signIn`, `review:run`).
+Namespaces: `auth`, `platform`, `review`, `settings`.
+
+---

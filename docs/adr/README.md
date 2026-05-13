@@ -76,5 +76,6 @@ draft it. It applies the three-rule criteria above strictly.
 | [0006](./0006-local-structured-logging.md)        | Local Structured Logging with electron-log          | Accepted |
 | [0007](./0007-hybrid-review-pipeline.md)          | Hybrid Review Pipeline — Static Analysis + AI       | Accepted |
 | [0008](./0008-ai-provider-streaming-interface.md) | AIProvider Streaming via AsyncIterable              | Accepted |
+| [0009](./0009-typed-ipc-contract.md)              | Typed IPC Contract for Main/Renderer Boundary       | Accepted |
 
 <!-- Append new ADRs to this table as they are written. -->
