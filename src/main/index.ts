@@ -2,8 +2,8 @@ import { app, BrowserWindow, nativeImage, shell } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ConsoleLogger } from "../shared/logger.js";
 import { KeychainTokenStore } from "./auth/KeychainTokenStore.js";
+import { FileLogger } from "./logger.js";
 import { KeychainSecretStore } from "./settings/SecretStore.js";
 import { SettingsStore } from "./settings/SettingsStore.js";
 import { registerHandlers } from "./ipc/index.js";
@@ -11,7 +11,7 @@ import { registerHandlers } from "./ipc/index.js";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const isDev = !app.isPackaged;
-const logger = ConsoleLogger.fromEnv();
+const logger = FileLogger.fromEnv(join(app.getPath("logs"), "vigil.log"));
 
 const tokenStore = new KeychainTokenStore();
 const secretStore = new KeychainSecretStore();

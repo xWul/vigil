@@ -196,13 +196,11 @@ better than noise, iterate on prompts before moving on. This is the wedge.
 - [x] Settings screen: AI provider, API key entry, sign-out per account
 - [x] Navigation (lightweight route state in App — checking → auth → queue ↔ settings)
 - [ ] Smoke test: end-to-end Playwright test
-- [ ] Logging transport (`src/main/logger.ts`) backed by `electron-log`:
-  - [ ] File transport to `app.getPath('logs')/vigil.log`
-  - [ ] Rotating at 5 MB (keeps one archive)
-  - [ ] Default level: `error`; overridable via `VIGIL_LOG_LEVEL`
-  - [ ] Redaction: fields matching `token|secret|key|password|pat`
-        replaced with `[redacted]` before any transport sees the message
-  - [ ] Inject into all providers at app startup (replaces `ConsoleLogger`)
+- [x] Logging transport (`src/main/logger.ts`): `FileLogger` writes to
+      `app.getPath('logs')/vigil.log`, rotates at 5 MB (keeps one archive),
+      defaults to `error` level (overridable via `VIGIL_LOG_LEVEL`), redacts
+      fields matching `token|secret|key|password|pat`. Replaces `ConsoleLogger`
+      in the main process.
 
 **Exit criteria:** A real desktop app launches. Users can sign in.
 Settings persist. No business logic in the renderer.

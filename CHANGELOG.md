@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **File logging transport** (`src/main/logger.ts`): `FileLogger` writes structured
+  log lines to `app.getPath('logs')/vigil.log`, rotates at 5 MB (keeping one `.old`
+  archive), defaults to `error` level overridable via `VIGIL_LOG_LEVEL`, and redacts
+  fields whose names match `token|secret|key|password|pat` before writing. Replaces
+  `ConsoleLogger` in the main process.
+
 - **Settings screen** (`src/renderer/features/settings/`): AI provider selection (Anthropic / OpenAI),
   API key entry and removal per provider (stored in OS keychain), and per-account sign-out. Accessible
   via the gear icon in the Review Queue titlebar. Signing out the last connected account redirects to
