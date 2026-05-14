@@ -9,6 +9,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **PR Analysis tabs**: 6-lens tab bar above the workspace — Overview (pulse metrics, top
+  findings, activity timeline), Diff (3-panel inline review), Silent risks (4-col regression
+  table with evidence cells and detector legend), Semantic (numbered change cards with
+  BEHAVIOR/SECURITY/REFACTOR badges, before/after code blocks, plain-English explanations,
+  and risk notes), and Architecture (metrics strip, layer map with violation highlights,
+  violations table). Tab key cycles lenses; `reviewed X ago` timestamp appears when
+  analysis completes.
+
+- **Developer preview mode** (`pnpm dev:mock`): launches Vigil with a fully mocked API —
+  no GitHub connection required. Covers the complete flow: auth screen → sign-in → Review
+  Queue (4 mock PRs across GitHub and Azure DevOps) → Review Workspace (payments-service
+  #2847 with 8 findings). All 6 workspace tabs are populated with realistic content.
+
+- **Review Workspace redesign**: 3-panel layout matching the Claude Design handoff — 240px file
+  rail with risk dots and active teal accent rule, flex diff center with inline `vigil` findings
+  expanded on click, and a 320px conversation panel (AI summary + per-finding challenge thread).
+  Bottom strip with keyboard hints (`j`/`k` files, `n`/`p` findings, `m` approve) and
+  Comment / Request changes / Approve verdict buttons that open a compact compose overlay.
+  Diff backgrounds use the refined oklch palette from the design (`addBg`/`delBg`).
+
+- **Review Workspace** (`src/renderer/features/workspace/WorkspaceScreen.tsx`): full PR review
+  screen with a unified diff view (syntax-highlighted, hunk headers, old/new line numbers),
+  inline `FindingDot` markers in the gutter, a scrollable findings list panel on the right sorted
+  by severity, and a `FindingDetail` view (title, description, evidence, "Add to review" button).
+  Auto-runs analysis on first open and serves cached results on return visits. Two-column layout
+  (65% diff / 35% panel). Keyboard navigation: `j`/`k` to move through findings, `Enter` to open
+  detail, `Escape` to return to list or queue, `a` to add focused finding to review draft.
+
+- **ReviewDraft panel**: verdict buttons (Approve / Request Changes / Comment), freeform body
+  textarea, queued inline comments with removal, and submit via `platform:submitReview`. Docked
+  at the bottom of the right panel.
+
+- **Review result cache** (`src/main/ai/ReviewCache.ts`): stores `ReviewResult` keyed by
+  `headSha` as JSON in `userData/reviews/` with a 7-day TTL. Written after a successful
+  `review:run`; read on workspace open before running analysis. Revisiting a PR is now instant.
+
+- **Auto-refresh and manual refresh for Review Queue**: PRs refresh silently every 60 seconds
+  (existing rows stay visible during background refresh). A refresh button with a spin animation
+  appears in the titlebar; `r` keyboard shortcut also triggers a refresh.
+
+- **Double-click to open PR**: clicking a row in the Review Queue selects it (single click);
+  double-clicking opens the Review Workspace.
+
+- **File logging transport** (`src/main/logger.ts`): `FileLogger` writes structured (`src/main/logger.ts`): `FileLogger` writes structured
+  log lines to `app.getPath('logs')/vigil.log`, rotates at 5 MB (keeping one `.old`
+  archive), defaults to `error` level overridable via `VIGIL_LOG_LEVEL`, and redacts
+  fields whose names match `token|secret|key|password|pat` before writing. Replaces
+  `ConsoleLogger` in the main process.
+
+- **Settings screen** (`src/renderer/features/settings/`): AI provider selection (Anthropic / OpenAI),
+  API key entry and removal per provider (stored in OS keychain), and per-account sign-out. Accessible
+  via the gear icon in the Review Queue titlebar. Signing out the last connected account redirects to
+  the Auth screen.
+- **App-level navigation**: lightweight route state machine in `App.tsx` — `checking → auth → queue ↔ settings`.
+  No router dependency.
+- **Dock icon**: Vigil icon now appears in the macOS dock during development using `app.dock.setIcon()`
+  with `assets/icons/1024x1024.png` on launch.
+
 - **Silent Regression Detector** (`SilentRegressionAnalyzer`): a new diff-aware `CodeAnalyzer` that
   flags behavioral changes matching known high-risk patterns using "paired hunk analysis" — comparing
   adjacent removed→added blocks within hunks rather than scanning lines in isolation. Five detectors:
@@ -216,6 +274,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Static analyzers skip test files**: `*.test.*` and `*.spec.*` files are now filtered
+  from the diff before running both static analyzers and AI passes. Test files generate
+  noise (acceptable `console.log`, intentional `any` types, complex setup patterns).
+- **Pass progress events**: `review:run` now emits a `review:pass` start event before each
+  analyzer/AI pass and a `complete` event (with finding count) after. The workspace PassStrip
+  transitions from ⟳ to ✓ N as each pass finishes rather than staying stuck.
+- **GitHub PR query broadened**: changed from `review-requested:@me` to `involves:@me` so
+  the Review Queue shows PRs you authored, are assigned to, are mentioned in, or are
+  requested to review — not just the last category.
+
+### Fixed
+
+- **Review cache not hitting**: the PR list (GitHub search API) returns `headSha: ""`; the
+  cache was written with the real headSha from `getPullRequest` but looked up with `""`.
+  Fixed by using `diffResult.value.pr.headSha` from `platform:getPRWithDiff` as the cache key.
+- **Findings not browsable**: the workspace right panel only showed a `FindingDetail` when a
+  finding was already focused. Added a `FindingList` that shows all findings sorted by severity
+  as the default panel state. Clicking any row opens its detail; Escape returns to the list.
 - ADR criteria tightened to a strict three-rule test
   (hard-to-reverse + surprising-without-context + real-trade-off),
   matching the discipline enforced by the `grill-with-docs` skill.

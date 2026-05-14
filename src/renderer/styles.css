@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* ── Vigil design tokens → Tailwind utilities ──────────────────────────────
+ *
+ * These use @theme inline so utilities emit var(--v-*) directly.
+ * The --v-* custom properties are set on .vigil-root at runtime by the
+ * ReviewQueue component, so theme-aware colors work inside that element.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+@theme inline {
+  --font-family-sans: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-family-mono: "Geist Mono", "SF Mono", ui-monospace, Menlo, monospace;
+
+  --color-bg: var(--v-bg);
+  --color-surface: var(--v-surface);
+  --color-selected: var(--v-selected);
+  --color-border: var(--v-border);
+  --color-text: var(--v-text);
+  --color-text-dim: var(--v-text-dim);
+  --color-text-faint: var(--v-text-faint);
+  --color-accent: var(--v-accent);
+  --color-accent-dim: var(--v-accent-dim);
+  --color-risk-high: var(--v-red);
+  --color-risk-med: var(--v-amber);
+  --color-risk-low: var(--v-green);
+}
+
+@keyframes vigil-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overscroll-behavior: none;
+  }
+}

@@ -1,4 +1,7 @@
 import type { Result } from "../../shared/result.js";
+import type { AuthError } from "../../shared/auth.js";
+
+export type { AuthError };
 
 // ---------------------------------------------------------------------------
 // AuthSession
@@ -28,19 +31,6 @@ export interface PATSession {
 
 /** Discriminated union of all provider session shapes. */
 export type AuthSession = AzureDevOpsSession | GitHubSession | PATSession;
-
-// ---------------------------------------------------------------------------
-// AuthError
-// ---------------------------------------------------------------------------
-
-/** Typed failure modes returned by AuthProvider operations. See CONTEXT.md. */
-export type AuthError =
-  | { readonly code: "cancelled" }
-  | { readonly code: "timeout" }
-  | { readonly code: "network"; readonly cause?: string }
-  | { readonly code: "consent_denied" }
-  | { readonly code: "refresh_expired" }
-  | { readonly code: "auth_failed"; readonly message: string };
 
 // ---------------------------------------------------------------------------
 // AuthProvider

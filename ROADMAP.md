@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-11. Phase 1 in progress.
+> **Status:** Living document. Last updated 2026-05-14. Phase 4 complete. Phase 5 in progress.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -175,31 +175,41 @@ better than noise, iterate on prompts before moving on. This is the wedge.
 
 **Goal:** Wrap everything built so far in a desktop app with a real UI.
 
-- [ ] ADR: IPC contract pattern
-- [ ] Spec: `docs/specs/ipc-contract.md`
-- [ ] Electron main + renderer scaffolded with electron-vite
-- [ ] Typed IPC contract (`src/shared/ipc-contract.ts`)
-- [ ] Main process exposes auth, platform, and AI capabilities via IPC
-- [ ] Renderer API client (`src/renderer/api.ts`) mirroring the contract
-- [ ] React Router or similar for navigation
-- [ ] State management (Zustand recommended for simplicity)
-- [ ] Auth screen: pick provider, run sign-in flow
-- [ ] Settings screen: AI provider, API key entry, default org
-- [ ] Smoke test: end-to-end Playwright test that builds the app and
-      runs a fake auth flow
-- [ ] Logging transport (`src/main/logger.ts`) backed by `electron-log`:
-  - [ ] File transport to `app.getPath('logs')/vigil.log`
-  - [ ] Rotating at 5 MB (keeps one archive)
-  - [ ] Default level: `error`; overridable via `VIGIL_LOG_LEVEL`
-  - [ ] Redaction: fields matching `token|secret|key|password|pat`
-        replaced with `[redacted]` before any transport sees the message
-  - [ ] Inject into all providers at app startup (replaces `ConsoleLogger`)
-- [ ] Logging: IPC handler calls logged at `debug`; IPC errors logged
-      at `error`; Settings screen exposes the log level toggle and
-      an "Open log file" button
+- [x] ADR-0009: IPC contract pattern (`docs/adr/0009-typed-ipc-contract.md`)
+- [x] Spec: `docs/specs/ipc-contract.md`
+- [x] Electron main + renderer scaffolded with electron-vite
+- [x] Typed IPC contract (`src/shared/ipc-contract.ts`) with all 14 channels
+- [x] Main process exposes auth, platform, review, and settings via IPC
+      (`src/main/ipc/handlers.ts` + `src/main/ipc/index.ts`)
+- [x] Preload bridge (`src/preload/index.ts`) — typed `invoke` + `on`
+      via `contextBridge`
+- [x] Renderer API client (`src/renderer/api.ts`) mirroring the contract
+- [x] `SecretStore` interface + `KeychainSecretStore` + `FileSecretStore`
+- [x] `SettingsStore` (reads settings.json + checks SecretStore for key presence)
+- [x] Tailwind v4 (`@tailwindcss/vite`) with `@theme inline` bridging `--v-*`
+      design tokens to Tailwind utilities; Geist fonts
+- [x] Feature-slice renderer layout (`features/`, `shared/`)
+- [x] Review Queue screen: search, sort, keyboard nav (j/k/? /), risk dots,
+      PR list with cached review summaries, help overlay, footer
+      (`src/renderer/features/review-queue/`)
+- [x] Auth screen: pick provider, run sign-in flow
+- [x] Settings screen: AI provider, API key entry, sign-out per account
+- [x] Navigation (lightweight route state in App — checking → auth → queue ↔ settings)
+- [ ] Smoke test: end-to-end Playwright test
+- [x] Logging transport (`src/main/logger.ts`): `FileLogger` writes to
+      `app.getPath('logs')/vigil.log`, rotates at 5 MB (keeps one archive),
+      defaults to `error` level (overridable via `VIGIL_LOG_LEVEL`), redacts
+      fields matching `token|secret|key|password|pat`. Replaces `ConsoleLogger`
+      in the main process.
+- [x] Extended static analyzers: `DebugArtifactsAnalyzer`, `TypeSafetyAnalyzer`,
+      `ChangeClassifierAnalyzer`, `SilentRegressionAnalyzer` — all diff-aware,
+      no AI key required. Spec: `docs/specs/static-analyzers-extended.md` and
+      `docs/specs/silent-regression-detector.md`.
 
 **Exit criteria:** A real desktop app launches. Users can sign in.
 Settings persist. No business logic in the renderer.
+
+_Phase 4 complete 2026-05-13._
 
 ---
 
@@ -208,21 +218,48 @@ Settings persist. No business logic in the renderer.
 **Goal:** The two screens that define the product.
 
 - [ ] Spec: `docs/specs/review-queue.md`
-- [ ] Spec: `docs/specs/review-workspace.md`
-- [ ] Review Queue:
-  - [ ] List of pending PRs across connected platforms
-  - [ ] Per-PR metadata: title, author, age, risk indicator, summary
-  - [ ] Sort/filter (by risk, age, platform)
-  - [ ] Keyboard navigation
-- [ ] Review Workspace:
-  - [ ] Diff view (syntax-highlighted, hunk-collapsible)
-  - [ ] Inline AI findings attached to relevant lines
-  - [ ] Finding detail panel: severity, evidence, "challenge this"
-  - [ ] AI conversation thread for the PR (streaming responses)
-  - [ ] Review actions (approve, request changes, comment)
-  - [ ] Keyboard-first navigation between hunks and findings
-- [ ] Streaming UI: review runs incrementally; findings appear as
-      passes complete
+- [x] Spec: `docs/specs/review-workspace.md`
+- [x] Review Queue (shipped in Phase 4, extended here):
+  - [x] List of pending PRs across connected platforms
+  - [x] Per-PR metadata: title, author, age, risk dot from cached review, summary
+  - [x] Sort by risk / age / blocking
+  - [x] Search across title, repo, author, review summary
+  - [x] Keyboard navigation (j/k/↑↓, /, ?, Esc, r)
+  - [x] Loading / error / empty states
+  - [x] Dark + light theme via design token system
+  - [x] Auto-refresh every 60 s (silent — rows stay visible); manual refresh button + `r` shortcut
+  - [x] Double-click row to open Review Workspace
+  - [x] GitHub query broadened to `involves:@me` (authored + assigned + review-requested + mentioned)
+- [x] Review Workspace (`src/renderer/features/workspace/WorkspaceScreen.tsx`):
+  - [x] Unified diff view (hunk headers, old/new line numbers, +/- highlighting)
+  - [x] `FindingDot` gutter markers on lines with findings (click to select)
+  - [x] Scrollable findings list panel sorted by severity (right column default view)
+  - [x] Finding detail panel: severity badge, pass label, title, description, evidence, "Add to review"
+  - [x] Review actions: verdict buttons (Approve / Request Changes / Comment), body textarea,
+        queued inline comments, submit via `platform:submitReview`
+  - [x] Keyboard navigation: j/k through findings, Enter to open detail, Escape to return/back, a to add
+  - [x] Pass progress strip: ⟳ per pass while running, ✓ N when complete
+  - [x] Auto-run on first open; cache-first on return visits
+  - [x] ChallengeThread: per-finding AI conversation — streaming IPC wired, inline "Ask Vigil"
+        button per finding, dedicated Conversation tab, streaming cursor animation
+  - [x] 6-lens tab bar (Tab key cycles): Overview, Diff, Semantic, Silent risks, Architecture,
+        Conversation — with finding counts and `reviewed X ago` timestamp
+  - [x] Overview tab: pulse metrics strip, top-findings list, analysis passes badge list,
+        activity timeline rail
+  - [x] Silent risks tab: regression findings table with evidence cells, severity counts,
+        detector legend rail
+  - [x] Semantic tab: numbered change cards (BEHAVIOR/SECURITY/REFACTOR badges), before/after
+        code blocks, plain-English explanation, risk notes
+  - [x] Architecture tab: metrics strip, layer map diagram with violation highlights,
+        violations table with layer badges and file:line pointers
+  - [ ] Hunk-level collapse / expand
+- [x] Review result cache (`ReviewCache`): JSON in `userData/reviews/` keyed by `headSha`,
+      7-day TTL. Revisiting a PR loads instantly.
+- [x] Test files excluded from analysis (`*.test.*`, `*.spec.*` filtered before all passes)
+- [x] Streaming UI: `review:pass` start/complete events emitted per pass;
+      PassStrip transitions in real time
+- [x] Developer preview mode (`pnpm dev:mock`): full mock API covering auth → queue → workspace;
+      all 6 workspace tabs populated with realistic content; no GitHub connection required
 
 **Exit criteria:** The app feels like a review tool, not a generic
 IDE with diffs bolted on. A reviewer can complete a real review

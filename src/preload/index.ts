@@ -1,11 +1,22 @@
-// Preload scripts run in a privileged context with access to Node.js APIs
-// and a limited subset of Electron APIs. They run before the renderer's
-// web content loads.
-//
-// In Vigil, this file will expose a typed IPC bridge to the renderer
-// (see ARCHITECTURE.md § 4 and the future ADR on IPC contract).
-//
-// For now it is intentionally empty — the smoke window renders without
-// needing any preload-exposed APIs.
+import { contextBridge, ipcRenderer } from "electron";
+import type { IpcRendererEvent } from "electron";
 
-export {};
+import type { IpcContract, IpcEvents } from "../shared/ipc-contract.js";
+
+const api = {
+  invoke<K extends keyof IpcContract>(
+    channel: K,
+    ...args: Parameters<IpcContract[K]>
+  ): Promise<ReturnType<IpcContract[K]>> {
+    return ipcRenderer.invoke(channel, ...args) as Promise<ReturnType<IpcContract[K]>>;
+  },
+
+  on<K extends keyof IpcEvents>(channel: K, handler: (payload: IpcEvents[K]) => void): () => void {
+    const listener = (_event: IpcRendererEvent, payload: IpcEvents[K]) => handler(payload);
+    ipcRenderer.on(channel, listener as Parameters<typeof ipcRenderer.on>[1]);
+    return () =>
+      ipcRenderer.removeListener(channel, listener as Parameters<typeof ipcRenderer.on>[1]);
+  },
+};
+
+contextBridge.exposeInMainWorld("api", api);

@@ -24,6 +24,12 @@ function loadPrompt(name: string): string {
   return readFileSync(join(PROMPTS_DIR, `${name}.md`), "utf-8");
 }
 
+const TEST_FILE_RE = /\.(test|spec)\.[jt]sx?$/;
+
+function filterTestFiles(diff: Diff): Diff {
+  return { files: diff.files.filter((f) => !TEST_FILE_RE.test(f.newPath)) };
+}
+
 function renderDiff(diff: Diff): string {
   return diff.files
     .map((file: FileDiff) => {
@@ -245,6 +251,7 @@ async function runAIPass(
 export interface RunReviewOptions {
   model: string;
   maxTokensPerPass?: number;
+  onPass?: (pass: FindingPass, status: "start" | "complete", count: number) => void;
 }
 
 export async function runReview(
@@ -255,35 +262,45 @@ export async function runReview(
   logger: Logger = new NoopLogger(),
 ): Promise<Result<ReviewResult, ReviewError>> {
   const maxTokensPerPass = options.maxTokensPerPass ?? 4096;
+  const onPass = options.onPass ?? (() => undefined);
   const allFindings: Finding[] = [];
   const start = Date.now();
 
+  const filteredContext = { ...context, diff: filterTestFiles(context.diff) };
+  const skippedCount = context.diff.files.length - filteredContext.diff.files.length;
+
   logger.info("review.start", {
     pr: context.pr.title,
-    fileCount: context.diff.files.length,
+    fileCount: filteredContext.diff.files.length,
+    skippedTestFiles: skippedCount,
     hasAI: aiProvider !== null,
   });
 
   const analyzerResults = await Promise.all(
     analyzers.map(async (analyzer) => {
+      const pass = analyzer.id as FindingPass;
       const analyzerStart = Date.now();
+      onPass(pass, "start", 0);
       try {
-        const result = await analyzer.analyze(context);
+        const result = await analyzer.analyze(filteredContext);
         if (result.ok) {
           logger.info("analyzer.complete", {
             id: analyzer.id,
             findingCount: result.value.length,
             latencyMs: Date.now() - analyzerStart,
           });
+          onPass(pass, "complete", result.value.length);
           return result.value;
         }
         logger.warn("analyzer.failed", { id: analyzer.id, code: result.error.code });
+        onPass(pass, "complete", 0);
         return [];
       } catch (e) {
         logger.warn("analyzer.threw", {
           id: analyzer.id,
           message: e instanceof Error ? e.message : String(e),
         });
+        onPass(pass, "complete", 0);
         return [];
       }
     }),
@@ -301,9 +318,10 @@ export async function runReview(
   }
 
   for (const pass of ["correctness", "security", "consistency"] as const) {
+    onPass(pass, "start", 0);
     const passResult = await runAIPass(
       aiProvider,
-      context,
+      filteredContext,
       pass,
       options.model,
       maxTokensPerPass,
@@ -312,10 +330,12 @@ export async function runReview(
     if (!passResult.ok) {
       if (passResult.error.code === "model_error") {
         logger.warn("ai.pass.skipped", { pass, reason: passResult.error.message });
+        onPass(pass, "complete", 0);
         continue;
       }
       return passResult;
     }
+    onPass(pass, "complete", passResult.value.length);
     allFindings.push(...passResult.value);
   }
 
