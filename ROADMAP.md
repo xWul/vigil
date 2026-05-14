@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-14. Phase 5 complete. Phase 6 in progress.
+> **Status:** Living document. Last updated 2026-05-14. Phase 6 complete. Phase 7 up next.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -278,7 +278,7 @@ _Phase 5 complete 2026-05-14._
 **Goal:** Use full repo context to make findings smarter.
 
 - [x] ADR-0010: local repo cache strategy (simple-git, blobless clones)
-- [ ] Spec: `docs/specs/repo-cache.md`
+- [x] Spec: `docs/specs/repo-cache.md`
 - [x] Repo clone-on-demand into a managed cache directory
       (`userData/repos/{platform}/{owner}/{repo}/`)
 - [x] `git fetch` on PR open if the cache is stale (15-min threshold)
@@ -287,17 +287,18 @@ _Phase 5 complete 2026-05-14._
 - [x] Consistency pass enriched with cross-file imports: relative imports
       from changed files are fetched from the cache and added to context
       so the AI can compare against established patterns in un-changed files
-- [ ] Optional: tree-sitter integration for symbol-aware context
-- [ ] Evaluate TanstackQuery for IPC-backed data fetching: replace
-      `useEffect`-based data loading with cache-aware query hooks
-      (`useQuery` wrapping `api.invoke`). Enables background refetch,
-      stale-while-revalidate for the queue, and eliminates the main
-      data-fetching `useEffect` in `WorkspaceScreen`. Requires a custom
-      query client adapter for Electron IPC. ADR if adopted.
+- [x] ADR-0011: TanStack Query for IPC-backed data fetching
+- [x] TanStack Query adopted: `ReviewQueue` and `WorkspaceScreen` data
+      loading replaced with `useQuery` hooks; stale-while-revalidate and
+      60 s background refetch built in; `useEffect`/`loadKey`/`mounted`
+      boilerplate eliminated
+- [ ] Optional: tree-sitter integration for symbol-aware context (deferred)
 
 **Exit criteria:** Reviewing a 500-line PR in a 50k-line codebase
 surfaces at least one finding that requires cross-file context — and
 the AI's evidence references the relevant file by name.
+
+_Phase 6 complete 2026-05-14._
 
 ---
 

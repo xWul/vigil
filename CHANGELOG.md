@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Re-run review**: a "Re-run review" button appears in the workspace bottom strip once analysis
+  completes. Clicking it invalidates the cached result for the current head SHA, resets all findings
+  and pass state, and re-runs the full pipeline in the background. The "Analyzing" strip appears
+  immediately — no gap between clicking and the first pass event.
+
+- **Diff skeleton loader**: the workspace now shows a pulsing animated skeleton while the diff is
+  loading, replacing the plain "Loading diff…" text.
+
+- **TanStack Query for IPC data fetching** (ADR-0011): `@tanstack/react-query` adopted for all
+  request/response IPC calls in the renderer. `ReviewQueue` drops the `loadKey` counter, `mounted`
+  flags, and manual `refreshing` state — replaced by `usePRList` with built-in stale-while-revalidate
+  and 60 s background refetch. `WorkspaceScreen` drops the parallel `useEffect` init; diff, settings,
+  and cached review are now `useQuery` hooks. Query key factories live in
+  `src/renderer/lib/queries.ts`. The streaming `review:run` pipeline stays manual.
+
 - **Cross-file import context for consistency pass**: when the local repo cache is
   available, relative imports from changed files are resolved and fetched from the cache
   (capped at 20 % of the token budget). The consistency pass AI can now compare new code

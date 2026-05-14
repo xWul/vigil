@@ -347,6 +347,30 @@ each ChallengeThread is anchored to one Finding.
 
 ---
 
+## RepoCache
+
+The local clone manager for reviewed repositories. Maintains one blobless
+partial git clone per repo under `{userData}/repos/{platform}/{owner}/{repo}/`.
+Clones on first review, fetches when the local copy is stale (> 15 minutes).
+
+`RepoCache` is injected into the IPC handler layer at startup. It is not
+visible to the renderer — the renderer only receives `git:cacheStatus` push
+events as progress updates.
+
+Key operations:
+
+- `ensureCloned(session, ref)` — fire-and-forget background clone or fetch
+- `readFile(ref, sha, path)` — returns file content at a given commit SHA;
+  returns `err({ code: "not_ready" })` if the clone is not yet available
+
+Callers fall back to `PlatformProvider.getFileContent` on any `not_ready`
+or `not_found` result — `RepoCache` is always additive, never blocking.
+
+Eviction runs at startup: repos older than 30 days are removed; if the
+total exceeds 2 GB, the least-recently-fetched repos are removed first.
+
+---
+
 ## IpcContract
 
 The typed boundary between the Electron main process and the renderer.
