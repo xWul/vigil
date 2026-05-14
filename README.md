@@ -45,6 +45,12 @@ This project is built with Claude Code as a pair-programming partner.
 All architectural decisions, abstractions, and design choices are
 documented in [`docs/adr/`](./docs/adr/) and reviewed before commit.
 
+## Prerequisites
+
+- **Node.js 24 LTS** — `node --version` should show `v24.x`
+- **pnpm** — `npm install -g pnpm`
+- **git ≥ 2.22** — required for blobless partial clones used by the local repo cache (see [ADR-0010](./docs/adr/0010-local-repo-cache-with-simple-git.md))
+
 ## Tech stack
 
 - Electron + Node.js 24 LTS (main process)
