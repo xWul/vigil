@@ -6,7 +6,7 @@ import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TabId = "overview" | "diff" | "semantic" | "risks" | "arch" | "convo";
+export type TabId = "overview" | "diff" | "semantic" | "risks" | "convo";
 
 type PassPhase = { phase: "running" } | { phase: "done"; count: number };
 export type PassMap = Partial<Record<FindingPass, PassPhase>>;
@@ -104,7 +104,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "diff", label: "Diff" },
   { id: "semantic", label: "Semantic" },
   { id: "risks", label: "Silent risks" },
-  { id: "arch", label: "Architecture" },
   { id: "convo", label: "Conversation" },
 ];
 
@@ -1005,59 +1004,47 @@ function TypeBadge({ type }: { type: SemanticChangeType }) {
   );
 }
 
-const SEMANTIC_CHANGES: readonly SemanticChange[] = [
-  {
-    n: 1,
+function findingToSemanticChange(f: Finding, n: number): SemanticChange {
+  const { removed, added } = parseEvidence(f.evidence);
+  const riskText =
+    f.severity === "critical" || f.severity === "high"
+      ? "High severity. Review carefully — this pattern is associated with silent regressions in production."
+      : "Medium severity. Verify the change is intentional.";
+  return {
+    n,
     type: "BEHAVIOR",
-    file: "src/api/payment.ts",
-    line: 13,
-    removed: ["if (attempt >= retries) {"],
-    added: ["if (attempt === retries) {"],
-    explanation:
-      "Boundary condition narrowed from ≥ to ===. The old condition fired on every attempt at or beyond the retry limit. The new condition fires only when attempt exactly equals retries — attempts beyond the limit silently bypass the block.",
-    risk: "Silent behavioral change. Inputs above the threshold no longer trigger. Off-by-one risk when retries is 0 or negative.",
-  },
-  {
-    n: 2,
-    type: "BEHAVIOR",
-    file: "src/api/payment.ts",
-    line: 18,
-    removed: ["return null;"],
-    added: ["throw new PaymentError('Retry limit exceeded', 'RETRY_EXHAUSTED');"],
-    explanation:
-      "Error handling contract changed from returning a null fallback to throwing an exception. Callers that null-check the return value will not see the error. Callers without a surrounding try/catch will crash.",
-    risk: "High. All call sites need auditing. The previous contract guaranteed a safe return value.",
-  },
-  {
-    n: 3,
-    type: "BEHAVIOR",
-    file: "src/utils/retry.ts",
-    line: 21,
-    removed: [
-      "await fn();",
-      "await verify(transactionId, amount);",
-      "await cleanup(transactionId);",
-    ],
-    added: ["await Promise.all([fn(), verify(transactionId, amount), cleanup(transactionId)]);"],
-    explanation:
-      "Execution order changed from sequential to parallel. If fn() must complete before verify() can check its result, or if cleanup() depends on verify() succeeding, this will produce incorrect outcomes under certain inputs.",
-    risk: "Medium. Ordering dependencies not covered by existing tests may surface only under load.",
-  },
-  {
-    n: 4,
-    type: "SECURITY",
-    file: "src/middleware/auth.ts",
-    line: 46,
-    removed: ["const decoded = jwt.decode(token);"],
-    added: ["const decoded = jwt.decode(token, { algorithms: ['HS256'] });"],
-    explanation:
-      "Algorithm constraint added to jwt.decode() call. However, jwt.decode() never verifies the signature — it only parses the payload. This change narrows the accepted algorithm but does not validate that the token was issued by a trusted party.",
-    risk: "High. A crafted token with a valid HS256 header will still pass. Use jwt.verify() with a secret to authenticate the token.",
-  },
-];
+    file: f.file,
+    line: f.lines?.start ?? 0,
+    removed,
+    added,
+    explanation: f.description,
+    risk: riskText,
+  };
+}
 
-export function SemanticTab() {
+export function SemanticTab({ findings }: { findings: readonly Finding[] }) {
   const t = TOKENS.dark;
+  const changes = findings.map((f, i) => findingToSemanticChange(f, i + 1));
+
+  if (changes.length === 0) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{ fontFamily: SANS, fontSize: 13, color: t.textFaint, textAlign: "center" as const }}
+        >
+          No behavioral regressions detected in this PR.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
@@ -1071,27 +1058,13 @@ export function SemanticTab() {
         }}
       >
         <div style={{ fontFamily: SANS, fontSize: 13, color: t.textDim, lineHeight: 1.55 }}>
-          {SEMANTIC_CHANGES.length} semantic changes — behavioral shifts, security issues, and
-          refactors grouped by intent.
+          {changes.length} behavioral {changes.length === 1 ? "change" : "changes"} detected —
+          high-risk patterns found by static analysis.
         </div>
-        <div style={{ flex: 1 }} />
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 10.5,
-            color: t.textFaint,
-            background: `${t.accent}14`,
-            border: `0.5px solid ${t.accent}33`,
-            borderRadius: 4,
-            padding: "2px 8px",
-          }}
-        >
-          AI · Claude 3.7
-        </span>
       </div>
 
       <div style={{ padding: "0 32px 32px" }}>
-        {SEMANTIC_CHANGES.map((change) => (
+        {changes.map((change) => (
           <div
             key={change.n}
             style={{
@@ -1233,318 +1206,12 @@ export function SemanticTab() {
   );
 }
 
-// ── ArchTab ───────────────────────────────────────────────────────────────────
-
-interface ArchViolation {
-  file: string;
-  line: number;
-  layer: string;
-  violation: string;
-  severity: "high" | "medium" | "low";
-}
-
-const ARCH_VIOLATIONS: readonly ArchViolation[] = [
-  {
-    file: "src/api/payment.ts",
-    line: 28,
-    layer: "API",
-    violation:
-      "New localStorage access in an API-layer file. Browser storage is a cross-cutting concern — access should be encapsulated in a dedicated utility, not scattered across request handlers.",
-    severity: "medium",
-  },
-  {
-    file: "src/utils/retry.ts",
-    line: 34,
-    layer: "Service",
-    violation:
-      "RetryManager directly imports PaymentError from the domain layer. Utilities should not depend on domain types — invert the dependency so the caller passes an error factory.",
-    severity: "medium",
-  },
-  {
-    file: "src/middleware/auth.ts",
-    line: 52,
-    layer: "Utility",
-    violation:
-      "Auth middleware throws PaymentError (a domain-specific type). Utility-layer code should throw generic errors or accept error constructors as parameters.",
-    severity: "low",
-  },
-];
-
-const ARCH_LAYERS = [
-  { name: "API", files: ["payment.ts"], violation: true },
-  { name: "Service", files: ["retry.ts"], violation: true },
-  { name: "Utility", files: ["auth.ts"], violation: true },
-];
-
-export function ArchTab() {
-  const t = TOKENS.dark;
-
-  return (
-    <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
-      {/* Metrics strip */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          borderBottom: `0.5px solid ${t.border}`,
-        }}
-      >
-        {[
-          {
-            label: "Layer violations",
-            value: ARCH_VIOLATIONS.length,
-            note: "new in this PR",
-            noteColor: t.amber,
-          },
-          { label: "Coupling changes", value: 2, note: "dependency edges", noteColor: t.textFaint },
-          { label: "Files affected", value: 3, note: "across 3 layers", noteColor: t.textFaint },
-          {
-            label: "Risk level",
-            value: "MED",
-            note: "no critical violations",
-            noteColor: t.textFaint,
-          },
-        ].map((m, i) => (
-          <div
-            key={i}
-            style={{
-              padding: "20px 28px",
-              borderRight: i < 3 ? `0.5px solid ${t.border}` : "none",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                color: t.textFaint,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase" as const,
-                fontFamily: SANS,
-              }}
-            >
-              {m.label}
-            </div>
-            <span
-              style={{
-                fontFamily: MONO,
-                fontSize: 28,
-                color: t.text,
-                letterSpacing: "-0.02em",
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {m.value}
-            </span>
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 11,
-                color: m.noteColor,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {m.note}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 280px",
-          minHeight: "calc(100% - 100px)",
-        }}
-      >
-        {/* Main content */}
-        <div
-          style={{
-            padding: "28px 32px",
-            borderRight: `0.5px solid ${t.border}`,
-            overflowY: "auto",
-          }}
-        >
-          <UpperLabel>Layer map</UpperLabel>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: 32,
-              fontFamily: MONO,
-              fontSize: 12,
-            }}
-          >
-            {ARCH_LAYERS.map((layer, i) => (
-              <div key={layer.name} style={{ display: "flex", alignItems: "center" }}>
-                <div
-                  style={{
-                    padding: "14px 20px",
-                    border: `0.5px solid ${layer.violation ? t.amber : t.border}`,
-                    borderRadius: 6,
-                    background: layer.violation ? `${t.amber}0a` : t.surface,
-                    minWidth: 120,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase" as const,
-                      color: layer.violation ? t.amber : t.textFaint,
-                      marginBottom: 6,
-                    }}
-                  >
-                    {layer.name}
-                  </div>
-                  {layer.files.map((f) => (
-                    <div key={f} style={{ fontSize: 11, color: t.textDim }}>
-                      {f}
-                    </div>
-                  ))}
-                </div>
-                {i < ARCH_LAYERS.length - 1 && (
-                  <div style={{ fontSize: 16, color: t.textFaint, padding: "0 10px" }}>→</div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <UpperLabel>Violations</UpperLabel>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {ARCH_VIOLATIONS.map((v, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "18px 0",
-                  borderBottom: i < ARCH_VIOLATIONS.length - 1 ? `0.5px solid ${t.border}` : "none",
-                  display: "grid",
-                  gridTemplateColumns: "24px 160px 1fr",
-                  gap: 16,
-                  alignItems: "flex-start",
-                }}
-              >
-                <div style={{ paddingTop: 3 }}>
-                  <RiskDot sev={v.severity} size={6} />
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      color: t.textFaint,
-                      marginBottom: 6,
-                    }}
-                  >
-                    {shortPath(v.file)}:{v.line}
-                  </div>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase" as const,
-                      color: t.textFaint,
-                      border: `0.5px solid ${t.border}`,
-                      borderRadius: 3,
-                      padding: "1px 5px",
-                    }}
-                  >
-                    {v.layer}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontFamily: SANS,
-                    fontSize: 12.5,
-                    color: t.textDim,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {v.violation}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right rail */}
-        <div style={{ padding: "28px 24px", overflowY: "auto" }}>
-          <div
-            style={{
-              fontFamily: SANS,
-              fontSize: 11,
-              color: t.textFaint,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase" as const,
-              marginBottom: 14,
-            }}
-          >
-            How Vigil reads architecture
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {[
-              {
-                t: "API layer",
-                d: "Files in src/api/ and src/routes/. Handles HTTP boundaries, request validation, and response formatting. Should not contain business logic.",
-              },
-              {
-                t: "Service layer",
-                d: "Files in src/services/, src/utils/, and retry infrastructure. Contains business rules, orchestration, and retry policies.",
-              },
-              {
-                t: "Utility layer",
-                d: "Shared helpers in src/middleware/ and src/helpers/. Should have no domain dependencies — only primitives and platform APIs.",
-              },
-              {
-                t: "Violation heuristic",
-                d: "A violation is flagged when an import, throw, or write operation crosses an expected layer boundary in the wrong direction.",
-              },
-            ].map((x, i) => (
-              <div key={i}>
-                <div
-                  style={{
-                    fontFamily: SANS,
-                    fontSize: 12.5,
-                    color: t.text,
-                    letterSpacing: "-0.003em",
-                  }}
-                >
-                  {x.t}
-                </div>
-                <div
-                  style={{
-                    marginTop: 3,
-                    fontFamily: SANS,
-                    fontSize: 12,
-                    color: t.textDim,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  {x.d}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── PlaceholderTab ────────────────────────────────────────────────────────────
 
 const PLACEHOLDER_COPY: Partial<Record<TabId, { heading: string; body: string }>> = {
   semantic: {
     heading: "Semantic analysis",
     body: "Groups the diff into numbered semantic changes — behavior changes, refactors, and tests — with before/after code blocks and a plain-English explanation of each change's intent and risk. Requires an AI provider.",
-  },
-  arch: {
-    heading: "Architecture drift",
-    body: "Shows how this PR moves components between architectural layers, highlights cross-layer coupling violations, and recommends how to restore intended boundaries. Requires an AI provider.",
   },
 };
 

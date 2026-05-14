@@ -14,7 +14,7 @@ import { api } from "../../api.js";
 import { useDiff, useSettings, useCachedReview, useInvalidateReview } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 import type { TabId } from "./AnalysisTabs.js";
-import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
+import { TabBar, OverviewTab, RisksTab, SemanticTab } from "./AnalysisTabs.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1621,7 +1621,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
 
       if (e.key === "Tab") {
         e.preventDefault();
-        const tabOrder: TabId[] = ["overview", "diff", "semantic", "risks", "arch", "convo"];
+        const tabOrder: TabId[] = ["overview", "diff", "semantic", "risks", "convo"];
         const curr = tabOrder.indexOf(activeTab);
         setActiveTab(
           e.shiftKey
@@ -1807,11 +1807,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         </div>
       ) : activeTab === "semantic" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <SemanticTab />
-        </div>
-      ) : activeTab === "arch" ? (
-        <div style={{ flex: 1, overflow: "hidden" }}>
-          <ArchTab />
+          <SemanticTab findings={regressionFindings} />
         </div>
       ) : null}
 
