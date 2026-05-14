@@ -1041,7 +1041,12 @@ export function SemanticTab({ findings }: { findings: readonly Finding[] }) {
         }}
       >
         <div
-          style={{ fontFamily: SANS, fontSize: 13, color: t.textFaint, textAlign: "center" as const }}
+          style={{
+            fontFamily: SANS,
+            fontSize: 13,
+            color: t.textFaint,
+            textAlign: "center" as const,
+          }}
         >
           No behavioral regressions detected in this PR.
         </div>
@@ -1291,7 +1296,13 @@ export function ArchTab({ findings }: { findings: readonly Finding[] }) {
               >
                 {chain.map((node, j) => (
                   <div key={j} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 11.5, color: j === chain.length - 1 ? t.amber : t.textDim }}>
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11.5,
+                        color: j === chain.length - 1 ? t.amber : t.textDim,
+                      }}
+                    >
                       {shortPath(node)}
                     </span>
                     {j < chain.length - 1 && (

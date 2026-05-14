@@ -150,9 +150,7 @@ export class ArchitectureAnalyzer implements CodeAnalyzer {
     const cycles = detectCycles(graph);
 
     // Keep only cycles that touch at least one changed file
-    const relevantCycles = cycles.filter((cycle) =>
-      cycle.some((file) => changedPaths.has(file)),
-    );
+    const relevantCycles = cycles.filter((cycle) => cycle.some((file) => changedPaths.has(file)));
 
     const findings: Finding[] = [];
 

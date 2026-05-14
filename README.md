@@ -111,17 +111,17 @@ docs/specs/             per-feature specifications
 
 ## Tech stack
 
-| Layer | Technology |
-|---|---|
-| Desktop shell | Electron |
-| Main process | Node.js 24 LTS, TypeScript 5.7+ |
-| Renderer | React 19, TypeScript 5.7+ |
-| Build | Vite 6, electron-vite |
-| Tests | Vitest 3 |
-| Package manager | pnpm |
-| AI SDKs | `@anthropic-ai/sdk`, `openai` |
-| Git | `simple-git` |
-| Data fetching | TanStack Query v5 |
+| Layer           | Technology                      |
+| --------------- | ------------------------------- |
+| Desktop shell   | Electron                        |
+| Main process    | Node.js 24 LTS, TypeScript 5.7+ |
+| Renderer        | React 19, TypeScript 5.7+       |
+| Build           | Vite 6, electron-vite           |
+| Tests           | Vitest 3                        |
+| Package manager | pnpm                            |
+| AI SDKs         | `@anthropic-ai/sdk`, `openai`   |
+| Git             | `simple-git`                    |
+| Data fetching   | TanStack Query v5               |
 
 ## Documentation
 

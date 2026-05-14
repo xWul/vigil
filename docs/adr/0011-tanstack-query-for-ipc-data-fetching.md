@@ -37,12 +37,12 @@ invalidations.
 
 ### What moves to TanStack Query
 
-| Channel | Query key |
-|---|---|
-| `platform:listPRs` | `["prs"]` |
-| `review:getCached` | `["review", ref, headSha]` |
-| `platform:getPRWithDiff` | `["diff", ref]` |
-| `settings:get` | `["settings"]` |
+| Channel                  | Query key                  |
+| ------------------------ | -------------------------- |
+| `platform:listPRs`       | `["prs"]`                  |
+| `review:getCached`       | `["review", ref, headSha]` |
+| `platform:getPRWithDiff` | `["diff", ref]`            |
+| `settings:get`           | `["settings"]`             |
 
 ### What stays manual
 
@@ -63,6 +63,7 @@ instead of resetting state manually. The diff query is not invalidated
 ## Consequences
 
 **Good:**
+
 - `ReviewQueue` drops ~40 lines: no `loadKey`, no `mounted`, no manual
   `refreshing` state. Stale-while-revalidate is free via
   `placeholderData: keepPreviousData`.
@@ -75,11 +76,13 @@ instead of resetting state manually. The diff query is not invalidated
   additional code.
 
 **Neutral:**
+
 - New dependency (~13 kB gzipped). Justified: the functionality it
   replaces is ~80 lines of hand-rolled boilerplate today and would grow
   as more screens are added.
 
 **Watch out for:**
+
 - The `QueryClient` must be created outside `App` to survive re-renders.
 - `staleTime` should be set to at least `30_000` on the PR list to
   avoid redundant fetches when the user tabs back to the queue.

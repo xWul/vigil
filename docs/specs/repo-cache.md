@@ -29,6 +29,7 @@ utilities that were not changed but are required context for AI passes.
 - Cross-file import enrichment for the consistency AI pass
 
 **Out of scope (deferred):**
+
 - Full checkouts or working-tree operations
 - Watching for remote changes between reviews
 - Tree-sitter symbol extraction
@@ -56,11 +57,11 @@ startup; the renderer never interacts with it directly.
 
 **Key constants:**
 
-| Constant | Value | Meaning |
-|---|---|---|
-| `STALE_MS` | 15 min | Minimum interval between fetches |
-| `EVICT_AGE_MS` | 30 days | Remove repos not fetched in this window |
-| `MAX_BYTES` | 2 GB | LRU eviction threshold across all cached repos |
+| Constant       | Value   | Meaning                                        |
+| -------------- | ------- | ---------------------------------------------- |
+| `STALE_MS`     | 15 min  | Minimum interval between fetches               |
+| `EVICT_AGE_MS` | 30 days | Remove repos not fetched in this window        |
+| `MAX_BYTES`    | 2 GB    | LRU eviction threshold across all cached repos |
 
 ### Clone strategy
 
@@ -117,7 +118,7 @@ The listener in `src/main/ipc/index.ts` forwards them to the renderer as
 
 ```typescript
 interface GitCacheStatusEvent {
-  readonly repoKey: string;  // "github/owner/repo"
+  readonly repoKey: string; // "github/owner/repo"
   readonly status: "cloning" | "fetching" | "ready" | "error";
   readonly error?: string;
 }
@@ -174,6 +175,7 @@ Size is measured by walking the full directory tree recursively.
 ## Error handling
 
 All git operations are wrapped in try/catch. Failures are:
+
 - Logged at `warn` level with `{ key, message }`
 - Emitted as `{ status: "error" }` events to the renderer
 - Non-fatal — the review pipeline falls back to platform API calls

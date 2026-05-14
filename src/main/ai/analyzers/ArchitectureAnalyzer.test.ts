@@ -8,10 +8,7 @@ import type { Diff, PullRequest } from "../../../shared/model/index.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeContext(
-  changedPaths: string[],
-  fileContents: Record<string, string>,
-): ReviewContext {
+function makeContext(changedPaths: string[], fileContents: Record<string, string>): ReviewContext {
   const pr: PullRequest = {
     ref: { platform: "github", owner: "test", repo: "repo", number: 1 },
     title: "Test PR",
@@ -145,26 +142,20 @@ describe("ArchitectureAnalyzer", () => {
   });
 
   it("returns empty findings when there are no cycles", async () => {
-    const ctx = makeContext(
-      ["src/a.ts"],
-      {
-        "src/a.ts": 'import { foo } from "./b.js";\n',
-        "src/b.ts": "export const foo = 1;",
-      },
-    );
+    const ctx = makeContext(["src/a.ts"], {
+      "src/a.ts": 'import { foo } from "./b.js";\n',
+      "src/b.ts": "export const foo = 1;",
+    });
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     expect(result.ok && result.value).toHaveLength(0);
   });
 
   it("detects a direct cycle between two changed files", async () => {
-    const ctx = makeContext(
-      ["src/a.ts", "src/b.ts"],
-      {
-        "src/a.ts": 'import { b } from "./b.js";\nexport const a = 1;\n',
-        "src/b.ts": 'import { a } from "./a.js";\nexport const b = 2;\n',
-      },
-    );
+    const ctx = makeContext(["src/a.ts", "src/b.ts"], {
+      "src/a.ts": 'import { b } from "./b.js";\nexport const a = 1;\n',
+      "src/b.ts": 'import { a } from "./a.js";\nexport const b = 2;\n',
+    });
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -176,27 +167,21 @@ describe("ArchitectureAnalyzer", () => {
 
   it("does not report cycles involving only unchanged files", async () => {
     // Only src/c.ts is changed; the cycle is between a.ts and b.ts (unchanged)
-    const ctx = makeContext(
-      ["src/c.ts"],
-      {
-        "src/a.ts": 'import { b } from "./b.js";\n',
-        "src/b.ts": 'import { a } from "./a.js";\n',
-        "src/c.ts": 'import { a } from "./a.js";\nexport const c = 3;\n',
-      },
-    );
+    const ctx = makeContext(["src/c.ts"], {
+      "src/a.ts": 'import { b } from "./b.js";\n',
+      "src/b.ts": 'import { a } from "./a.js";\n',
+      "src/c.ts": 'import { a } from "./a.js";\nexport const c = 3;\n',
+    });
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     expect(result.ok && result.value).toHaveLength(0);
   });
 
   it("anchors the finding to the changed file's import line", async () => {
-    const ctx = makeContext(
-      ["src/a.ts"],
-      {
-        "src/a.ts": 'const x = 1;\nimport { b } from "./b.js";\nexport const a = 1;\n',
-        "src/b.ts": 'import { a } from "./a.js";\nexport const b = 2;\n',
-      },
-    );
+    const ctx = makeContext(["src/a.ts"], {
+      "src/a.ts": 'const x = 1;\nimport { b } from "./b.js";\nexport const a = 1;\n',
+      "src/b.ts": 'import { a } from "./a.js";\nexport const b = 2;\n',
+    });
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -205,13 +190,10 @@ describe("ArchitectureAnalyzer", () => {
   });
 
   it("encodes the full cycle chain in evidence", async () => {
-    const ctx = makeContext(
-      ["src/a.ts", "src/b.ts"],
-      {
-        "src/a.ts": 'import { b } from "./b.js";\n',
-        "src/b.ts": 'import { a } from "./a.js";\n',
-      },
-    );
+    const ctx = makeContext(["src/a.ts", "src/b.ts"], {
+      "src/a.ts": 'import { b } from "./b.js";\n',
+      "src/b.ts": 'import { a } from "./a.js";\n',
+    });
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
