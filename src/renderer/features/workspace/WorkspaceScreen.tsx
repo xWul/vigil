@@ -920,7 +920,7 @@ function DiffCenter({
         <div style={{ height: 24 }} />
       </div>
 
-      {!reviewDone && runningPasses.length > 0 && (
+      {!reviewDone && (
         <div
           style={{
             display: "flex",
