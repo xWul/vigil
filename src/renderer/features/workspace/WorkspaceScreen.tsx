@@ -819,6 +819,27 @@ function FileSection({
   );
 }
 
+function DiffSkeleton() {
+  const t = TOKENS.dark;
+  const widths = [60, 80, 45, 70, 55, 85, 40, 65, 75, 50];
+  return (
+    <div style={{ padding: "24px 32px", display: "flex", flexDirection: "column", gap: 6 }}>
+      {widths.map((w, i) => (
+        <div
+          key={i}
+          style={{
+            height: 14,
+            width: `${w}%`,
+            borderRadius: 3,
+            background: t.textFaint,
+            animation: `vigil-pulse 1.6s ease-in-out ${(i * 80) % 400}ms infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function DiffCenter({
   diff,
   loadError,
@@ -876,9 +897,7 @@ function DiffCenter({
             Failed to load diff: {loadError}
           </div>
         ) : !diff ? (
-          <div style={{ padding: 32, fontFamily: SANS, fontSize: 13, color: t.textFaint }}>
-            Loading diff…
-          </div>
+          <DiffSkeleton />
         ) : diff.files.length === 0 ? (
           <div style={{ padding: 32, fontFamily: SANS, fontSize: 13, color: t.textFaint }}>
             No changes in this PR.
@@ -1245,15 +1264,19 @@ function BottomStrip({
   onComment,
   onRequestChanges,
   onApprove,
+  onRerun,
   submitting,
   submitted,
+  reviewDone,
   prUrl,
 }: {
   onComment: () => void;
   onRequestChanges: () => void;
   onApprove: () => void;
+  onRerun: () => void;
   submitting: boolean;
   submitted: boolean;
+  reviewDone: boolean;
   prUrl: string;
 }) {
   const t = TOKENS.dark;
@@ -1321,6 +1344,22 @@ function BottomStrip({
         <KbdHint>?</KbdHint>
       </div>
       <div style={{ flex: 1 }} />
+      {reviewDone && !submitted && (
+        <button
+          onClick={onRerun}
+          style={{
+            background: "transparent",
+            border: 0,
+            padding: "8px 12px",
+            fontFamily: SANS,
+            fontSize: 13,
+            color: t.textFaint,
+            cursor: "pointer",
+          }}
+        >
+          Re-run review
+        </button>
+      )}
       <button
         onClick={onComment}
         disabled={submitting}
@@ -1386,6 +1425,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const [passes, setPasses] = useState<PassMap>({});
   const [reviewDone, setReviewDone] = useState(false);
   const [hasAI, setHasAI] = useState(false);
+  const [headSha, setHeadSha] = useState("");
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [reviewCompletedAt, setReviewCompletedAt] = useState<Date | null>(null);
@@ -1427,10 +1467,16 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     let mounted = true;
 
     async function init() {
-      const [diffResult, settingsResult] = await Promise.all([
-        api.invoke("platform:getPRWithDiff", pr.ref),
-        api.invoke("settings:get"),
-      ]);
+      // Settings and diff are independent — start both immediately.
+      void api.invoke("settings:get").then((r) => {
+        if (!mounted || !r.ok) return;
+        setHasAI(
+          (r.value.aiProvider === "anthropic" && r.value.hasAnthropicKey) ||
+            (r.value.aiProvider === "openai" && r.value.hasOpenAIKey),
+        );
+      });
+
+      const diffResult = await api.invoke("platform:getPRWithDiff", pr.ref);
       if (!mounted) return;
 
       if (!diffResult.ok) {
@@ -1438,17 +1484,10 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         return;
       }
       setDiff(diffResult.value.diff);
-      const headSha = diffResult.value.pr.headSha;
+      const sha = diffResult.value.pr.headSha;
+      setHeadSha(sha);
 
-      if (settingsResult.ok) {
-        setHasAI(
-          (settingsResult.value.aiProvider === "anthropic" &&
-            settingsResult.value.hasAnthropicKey) ||
-            (settingsResult.value.aiProvider === "openai" && settingsResult.value.hasOpenAIKey),
-        );
-      }
-
-      const cached = await api.invoke("review:getCached", pr.ref, headSha);
+      const cached = await api.invoke("review:getCached", pr.ref, sha);
       if (!mounted) return;
 
       if (cached.ok && cached.value) {
@@ -1458,11 +1497,13 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         return;
       }
 
-      const result = await api.invoke("review:run", pr.ref);
-      if (!mounted) return;
-      if (result.ok) setFindings([...result.value.findings]);
-      setReviewDone(true);
-      setReviewCompletedAt(new Date());
+      // Fire review in the background — findings stream via review:finding events.
+      void api.invoke("review:run", pr.ref).then((result) => {
+        if (!mounted) return;
+        if (result.ok) setFindings([...result.value.findings]);
+        setReviewDone(true);
+        setReviewCompletedAt(new Date());
+      });
     }
 
     void init();
@@ -1470,6 +1511,20 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       mounted = false;
     };
   }, [pr]);
+
+  async function handleRerunReview() {
+    if (!headSha) return;
+    await api.invoke("review:invalidate", pr.ref, headSha);
+    setFindings([]);
+    setPasses({});
+    setReviewDone(false);
+    setReviewCompletedAt(null);
+    void api.invoke("review:run", pr.ref).then((result) => {
+      if (result.ok) setFindings([...result.value.findings]);
+      setReviewDone(true);
+      setReviewCompletedAt(new Date());
+    });
+  }
 
   // Stream review events + challenge chunks
   useEffect(() => {
@@ -1785,8 +1840,10 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         onComment={() => setVerdictState({ verdict: "commented", body: "" })}
         onRequestChanges={() => setVerdictState({ verdict: "changes_requested", body: "" })}
         onApprove={() => setVerdictState({ verdict: "approved", body: "" })}
+        onRerun={() => void handleRerunReview()}
         submitting={submitting}
         submitted={submitted}
+        reviewDone={reviewDone}
         prUrl={pr.url}
       />
     </div>

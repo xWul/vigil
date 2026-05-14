@@ -282,6 +282,11 @@ export function registerHandlers(
 
   handle("review:getCached", (_ref, headSha) => Promise.resolve(ok(reviewCache.get(headSha))));
 
+  handle("review:invalidate", (_ref, headSha) => {
+    reviewCache.delete(headSha);
+    return Promise.resolve(ok(undefined));
+  });
+
   handle("review:challenge", async (_ref, finding, hunkContext, messages) => {
     const settings = await settingsStore.get();
     if (!settings.aiProvider) {
