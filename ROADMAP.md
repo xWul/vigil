@@ -253,7 +253,7 @@ _Phase 4 complete 2026-05-13._
   - [x] Architecture tab: metrics strip, layer map diagram with violation highlights,
         violations table with layer badges and file:line pointers
   - [ ] Hunk-level collapse / expand
-  - [ ] Filter non-reviewable files from analysis: binary files (images,
+  - [x] Filter non-reviewable files from analysis: binary files (images,
         fonts, icons), generated lockfiles (`package-lock.json`,
         `pnpm-lock.yaml`, `yarn.lock`), docs (`.md`, `.mdx`), and
         minified/compiled output. Extends the existing `*.test.*` filter.

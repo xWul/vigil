@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **File filter for analysis pipeline**: binary and media assets (images, fonts, SVG, audio,
+  video), auto-generated lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, etc.),
+  documentation (`.md`, `.mdx`, `.txt`), and minified/map output (`.min.js`, `.js.map`) are
+  now excluded before any analysis pass runs. Reduces token usage and eliminates noise findings
+  on non-reviewable files. Extends the existing test file exclusion.
+
 - **PR Analysis tabs**: 6-lens tab bar above the workspace — Overview (pulse metrics, top
   findings, activity timeline), Diff (3-panel inline review), Silent risks (4-col regression
   table with evidence cells and detector legend), Semantic (numbered change cards with
