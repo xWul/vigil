@@ -101,9 +101,7 @@ export function App() {
           onBack={() => setRoute({ screen: "queue", accounts: route.from })}
         />
       )}
-      {route.screen === "preview" && (
-        <WorkspacePreview onBack={() => setRoute(route.from)} />
-      )}
+      {route.screen === "preview" && <WorkspacePreview onBack={() => setRoute(route.from)} />}
     </div>
   );
 }

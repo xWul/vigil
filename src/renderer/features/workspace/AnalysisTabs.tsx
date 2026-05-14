@@ -58,12 +58,7 @@ function impactLabel(f: Finding): string {
   if (t.includes("await") || t.includes("promise")) return "Execution order";
   if (t.includes("side effect") || t.includes("localstorage") || t.includes("cookie"))
     return "State";
-  if (
-    t.includes("timeout") ||
-    t.includes("retry") ||
-    t.includes("limit") ||
-    t.includes("delay")
-  )
+  if (t.includes("timeout") || t.includes("retry") || t.includes("limit") || t.includes("delay"))
     return "Configuration";
   return "Behavior";
 }
@@ -279,9 +274,7 @@ function PulseMetric({
         >
           {value}
         </span>
-        {unit && (
-          <span style={{ fontFamily: MONO, fontSize: 12, color: t.textFaint }}>{unit}</span>
-        )}
+        {unit && <span style={{ fontFamily: MONO, fontSize: 12, color: t.textFaint }}>{unit}</span>}
       </div>
       {note && (
         <div
@@ -322,14 +315,18 @@ export function OverviewTab({
   const medCount = findings.filter((f) => f.severity === "medium").length;
   const regressionCount = findings.filter((f) => f.pass === "regression").length;
   const filesChanged = diff?.files.length ?? 0;
-  const linesAdded = diff?.files.reduce(
-    (s, f) => s + f.hunks.reduce((hs, h) => hs + h.lines.filter((l) => l.kind === "added").length, 0),
-    0,
-  ) ?? 0;
-  const linesDeleted = diff?.files.reduce(
-    (s, f) => s + f.hunks.reduce((hs, h) => hs + h.lines.filter((l) => l.kind === "removed").length, 0),
-    0,
-  ) ?? 0;
+  const linesAdded =
+    diff?.files.reduce(
+      (s, f) =>
+        s + f.hunks.reduce((hs, h) => hs + h.lines.filter((l) => l.kind === "added").length, 0),
+      0,
+    ) ?? 0;
+  const linesDeleted =
+    diff?.files.reduce(
+      (s, f) =>
+        s + f.hunks.reduce((hs, h) => hs + h.lines.filter((l) => l.kind === "removed").length, 0),
+      0,
+    ) ?? 0;
 
   const topFindings = useMemo(
     () =>
@@ -392,11 +389,7 @@ export function OverviewTab({
           note={regressionCount > 0 ? "behavioral" : "none detected"}
           noteColor={regressionCount > 0 ? t.amber : t.textFaint}
         />
-        <PulseMetric
-          label="Files"
-          value={filesChanged}
-          note={`+${linesAdded} −${linesDeleted}`}
-        />
+        <PulseMetric label="Files" value={filesChanged} note={`+${linesAdded} −${linesDeleted}`} />
         <PulseMetric
           label="Passes"
           value={passEntries.filter(([, v]) => v.phase === "done").length}
@@ -673,7 +666,15 @@ function EvidenceCell({ evidence }: { evidence: string }) {
         </div>
       ))}
       {added.map((line, i) => (
-        <div key={`a${i}`} style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: removed.length > 0 ? 4 : 0 }}>
+        <div
+          key={`a${i}`}
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 6,
+            marginTop: removed.length > 0 ? 4 : 0,
+          }}
+        >
           <span style={{ color: TOKENS.dark.green }}>+</span>
           <span
             style={{
@@ -693,7 +694,9 @@ function EvidenceCell({ evidence }: { evidence: string }) {
 export function RisksTab({ findings }: { findings: readonly Finding[] }) {
   const t = TOKENS.dark;
 
-  const highCount = findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
+  const highCount = findings.filter(
+    (f) => f.severity === "critical" || f.severity === "high",
+  ).length;
   const medCount = findings.filter((f) => f.severity === "medium").length;
   const lowCount = findings.filter((f) => f.severity === "low").length;
 
@@ -731,9 +734,7 @@ export function RisksTab({ findings }: { findings: readonly Finding[] }) {
             borderBottom: `0.5px solid ${t.border}`,
           }}
         >
-          <div
-            style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}
-          >
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
             <div
               style={{
                 fontFamily: SANS,
@@ -784,9 +785,7 @@ export function RisksTab({ findings }: { findings: readonly Finding[] }) {
 
         {/* Table rows */}
         {sorted.map((f, i) => {
-          const path = f.file
-            ? `${shortPath(f.file)}${f.lines ? `:${f.lines.start}` : ""}`
-            : "";
+          const path = f.file ? `${shortPath(f.file)}${f.lines ? `:${f.lines.start}` : ""}` : "";
           return (
             <div
               key={i}
@@ -1142,7 +1141,13 @@ export function SemanticTab() {
                   }}
                 >
                   <span
-                    style={{ fontFamily: MONO, fontSize: 11, color: t.red, flexShrink: 0, minWidth: 10 }}
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 11,
+                      color: t.red,
+                      flexShrink: 0,
+                      minWidth: 10,
+                    }}
                   >
                     −
                   </span>
@@ -1285,10 +1290,20 @@ export function ArchTab() {
         }}
       >
         {[
-          { label: "Layer violations", value: ARCH_VIOLATIONS.length, note: "new in this PR", noteColor: t.amber },
+          {
+            label: "Layer violations",
+            value: ARCH_VIOLATIONS.length,
+            note: "new in this PR",
+            noteColor: t.amber,
+          },
           { label: "Coupling changes", value: 2, note: "dependency edges", noteColor: t.textFaint },
           { label: "Files affected", value: 3, note: "across 3 layers", noteColor: t.textFaint },
-          { label: "Risk level", value: "MED", note: "no critical violations", noteColor: t.textFaint },
+          {
+            label: "Risk level",
+            value: "MED",
+            note: "no critical violations",
+            noteColor: t.textFaint,
+          },
         ].map((m, i) => (
           <div
             key={i}
@@ -1404,8 +1419,7 @@ export function ArchTab() {
                 key={i}
                 style={{
                   padding: "18px 0",
-                  borderBottom:
-                    i < ARCH_VIOLATIONS.length - 1 ? `0.5px solid ${t.border}` : "none",
+                  borderBottom: i < ARCH_VIOLATIONS.length - 1 ? `0.5px solid ${t.border}` : "none",
                   display: "grid",
                   gridTemplateColumns: "24px 160px 1fr",
                   gap: 16,

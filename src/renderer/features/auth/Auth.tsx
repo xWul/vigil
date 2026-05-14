@@ -173,13 +173,7 @@ function PlatformButton({
 }) {
   const isGitHub = platform === "github";
 
-  const bg = isGitHub
-    ? busy
-      ? "#151311"
-      : "#1a1816"
-    : busy
-      ? "#005fa8"
-      : "#0078d4";
+  const bg = isGitHub ? (busy ? "#151311" : "#1a1816") : busy ? "#005fa8" : "#0078d4";
 
   const borderColor = isGitHub ? "#272320" : "#0078d4";
   const textColor = isGitHub
@@ -213,11 +207,7 @@ function PlatformButton({
         transition: "background .12s, border-color .12s",
       }}
     >
-      {isGitHub ? (
-        <GitHubGlyph size={17} color={textColor} />
-      ) : (
-        <AzureDevOpsGlyph size={17} />
-      )}
+      {isGitHub ? <GitHubGlyph size={17} color={textColor} /> : <AzureDevOpsGlyph size={17} />}
       {isGitHub ? "Continue with GitHub" : "Continue with Azure DevOps"}
     </button>
   );
@@ -249,12 +239,7 @@ function AuthRow({
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <PlatformButton platform={platform} busy={busy} onClick={onOAuth} />
       {patOpen ? (
-        <PATField
-          platform={platform}
-          onSubmit={onPATSubmit}
-          onCancel={onPATCancel}
-          busy={busy}
-        />
+        <PATField platform={platform} onSubmit={onPATSubmit} onCancel={onPATCancel} busy={busy} />
       ) : (
         <button
           onClick={onPATOpen}

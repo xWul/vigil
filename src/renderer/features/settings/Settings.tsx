@@ -156,11 +156,7 @@ function AccountRow({
           height: 28,
         }}
       >
-        {isGitHub ? (
-          <GitHubMark size={18} color={t.text} />
-        ) : (
-          <AzureDevOpsMark size={18} />
-        )}
+        {isGitHub ? <GitHubMark size={18} color={t.text} /> : <AzureDevOpsMark size={18} />}
       </div>
       <div style={{ minWidth: 0 }}>
         <div
@@ -181,8 +177,7 @@ function AccountRow({
             fontFamily: SANS,
           }}
         >
-          Signed in as{" "}
-          <span style={{ fontFamily: MONO, color: t.text }}>{account.login}</span>
+          Signed in as <span style={{ fontFamily: MONO, color: t.text }}>{account.login}</span>
         </div>
       </div>
       <button
@@ -533,7 +528,7 @@ function ModelDropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const options = PROVIDER_INFO[provider].models;
-  const current = value && options.includes(value) ? value : options[0] ?? "";
+  const current = value && options.includes(value) ? value : (options[0] ?? "");
   const label = MODEL_LABELS[current] ?? current;
 
   useEffect(() => {
@@ -921,18 +916,11 @@ export function Settings({
           <SectionDivider />
 
           {/* ── 3. Appearance ── */}
-          <SectionHeading
-            title="Appearance"
-            subtitle="How Vigil looks on your machine."
-          />
+          <SectionHeading title="Appearance" subtitle="How Vigil looks on your machine." />
 
           <div>
             <FieldLabel>Theme</FieldLabel>
-            <Segmented
-              options={["System", "Light", "Dark"]}
-              value={theme}
-              onChange={setTheme}
-            />
+            <Segmented options={["System", "Light", "Dark"]} value={theme} onChange={setTheme} />
           </div>
         </div>
       </div>
