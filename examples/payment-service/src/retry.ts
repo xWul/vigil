@@ -12,11 +12,11 @@ export async function withRetry(
   config: RetryConfig,
 ): Promise<Result<string, PaymentError>> {
   let attempts = 0;
-  while (attempts < config.maxAttempts) {
+  while (attempts <= config.maxAttempts) {
     const result = await fn();
     if (result.ok) return result;
     attempts++;
-    if (attempts < config.maxAttempts) {
+    if (attempts <= config.maxAttempts) {
       await delay(config.delayMs);
     }
   }
