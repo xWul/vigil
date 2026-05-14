@@ -33,6 +33,7 @@ export interface IpcContract {
   // Review
   "review:run": (ref: PRRef) => Result<ReviewResult, ReviewError>;
   "review:getCached": (ref: PRRef, headSha: string) => Result<ReviewResult | null, never>;
+  "review:invalidate": (ref: PRRef, headSha: string) => Result<void, never>;
   "review:challenge": (
     ref: PRRef,
     finding: Finding,

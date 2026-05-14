@@ -529,7 +529,9 @@ function createMockApi(): MockRendererApi {
 // Only active when this module is imported, which only happens when the app is
 // started with VITE_MOCK=1 (pnpm dev:mock).
 
-_overrideApi(createMockApi() as Parameters<typeof _overrideApi>[0]);
+if (import.meta.env.VITE_MOCK === "1") {
+  _overrideApi(createMockApi() as Parameters<typeof _overrideApi>[0]);
+}
 
 // ── WorkspacePreview ──────────────────────────────────────────────────────────
 

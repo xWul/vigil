@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ReviewResult } from "./CodeAnalyzer";
@@ -36,6 +36,14 @@ export class ReviewCache {
       writeFileSync(this.entryPath(headSha), JSON.stringify(entry), "utf-8");
     } catch {
       // Cache write failures are non-fatal
+    }
+  }
+
+  delete(headSha: string): void {
+    try {
+      rmSync(this.entryPath(headSha), { force: true });
+    } catch {
+      // Non-fatal
     }
   }
 
