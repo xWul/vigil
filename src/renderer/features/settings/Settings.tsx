@@ -963,8 +963,8 @@ export function Settings({
                 lineHeight: 1.5,
               }}
             >
-              Copies the application log to your clipboard. Tokens and secrets
-              are redacted automatically.
+              Copies the application log to your clipboard. Tokens and secrets are redacted
+              automatically.
             </span>
           </div>
         </div>
