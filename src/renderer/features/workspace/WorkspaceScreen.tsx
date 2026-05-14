@@ -136,6 +136,85 @@ function KbdHint({ children, dark }: { children: React.ReactNode; dark?: boolean
   );
 }
 
+// ── HelpOverlay ───────────────────────────────────────────────────────────────
+
+const WORKSPACE_SHORTCUTS = [
+  { keys: ["Tab"], label: "Next tab" },
+  { keys: ["⇧", "Tab"], label: "Previous tab" },
+  { keys: ["j", "k"], label: "Next / previous file" },
+  { keys: ["n", "p"], label: "Next / previous finding" },
+  { keys: ["↵"], label: "Expand finding detail" },
+  { keys: ["a"], label: "Add finding to review" },
+  { keys: ["m"], label: "Approve PR" },
+  { keys: ["r"], label: "Re-run review" },
+  { keys: ["Esc"], label: "Dismiss / go back" },
+  { keys: ["?"], label: "Show this overlay" },
+];
+
+function HelpOverlay({ onClose }: { onClose: () => void }) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 20,
+        background: "rgba(10,9,8,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 460,
+          background: t.bg,
+          border: `0.5px solid ${t.border}`,
+          borderRadius: 12,
+          padding: "28px 32px",
+          fontFamily: SANS,
+          color: t.text,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 22,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 500 }}>Keyboard shortcuts</span>
+          <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>
+            press ? to toggle
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            rowGap: 12,
+            columnGap: 24,
+          }}
+        >
+          {WORKSPACE_SHORTCUTS.map((s, i) => (
+            <div key={i} style={{ display: "contents" }}>
+              <span style={{ fontSize: 13, color: t.textDim }}>{s.label}</span>
+              <span style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                {s.keys.map((k, j) => (
+                  <KbdHint key={j}>{k}</KbdHint>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── TopStrip ──────────────────────────────────────────────────────────────────
 
 function TopStrip({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
@@ -1266,6 +1345,7 @@ function BottomStrip({
   onRequestChanges,
   onApprove,
   onRerun,
+  onHelp,
   submitting,
   submitted,
   reviewDone,
@@ -1275,6 +1355,7 @@ function BottomStrip({
   onRequestChanges: () => void;
   onApprove: () => void;
   onRerun: () => void;
+  onHelp: () => void;
   submitting: boolean;
   submitted: boolean;
   reviewDone: boolean;
@@ -1342,7 +1423,24 @@ function BottomStrip({
           <KbdHint>n</KbdHint> <KbdHint>p</KbdHint>
           <span style={{ marginLeft: 8 }}>findings</span>
         </span>
-        <KbdHint>?</KbdHint>
+        <button
+          onClick={onHelp}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "transparent",
+            border: 0,
+            padding: 0,
+            cursor: "pointer",
+            color: TOKENS.dark.textFaint,
+            fontFamily: MONO,
+            fontSize: 11,
+          }}
+        >
+          <KbdHint>?</KbdHint>
+          <span>shortcuts</span>
+        </button>
       </div>
       <div style={{ flex: 1 }} />
       {reviewDone && !submitted && (
@@ -1457,6 +1555,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const regressionFindings = useMemo(
     () => findings.filter((f) => f.pass === "regression"),
@@ -1506,7 +1605,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headSha, cachedReviewQuery.isLoading]);
 
-  async function handleRerunReview() {
+  const handleRerunReview = useCallback(async () => {
     if (!headSha) return;
     await api.invoke("review:invalidate", pr.ref, headSha);
     setFindings([]);
@@ -1519,7 +1618,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       setReviewDone(true);
       setReviewCompletedAt(new Date());
     });
-  }
+  }, [headSha, pr.ref, invalidateReview]);
 
   // Stream review events + challenge chunks
   useEffect(() => {
@@ -1635,6 +1734,11 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         );
         return;
       }
+      if (e.key === "?") {
+        setHelpOpen((v) => !v);
+        return;
+      }
+      if (helpOpen) return;
       if (e.key === "Escape") {
         if (verdictState) {
           setVerdictState(null);
@@ -1669,6 +1773,9 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       if (e.key === "m") {
         setVerdictState({ verdict: "approved", body: "" });
       }
+      if (e.key === "r" && reviewDone) {
+        void handleRerunReview();
+      }
     },
     [
       diff,
@@ -1678,6 +1785,9 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       challengeState,
       onBack,
       activeTab,
+      helpOpen,
+      reviewDone,
+      handleRerunReview,
     ],
   );
 
@@ -1836,11 +1946,14 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         onRequestChanges={() => setVerdictState({ verdict: "changes_requested", body: "" })}
         onApprove={() => setVerdictState({ verdict: "approved", body: "" })}
         onRerun={() => void handleRerunReview()}
+        onHelp={() => setHelpOpen(true)}
         submitting={submitting}
         submitted={submitted}
         reviewDone={reviewDone}
         prUrl={pr.url}
       />
+
+      {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }
