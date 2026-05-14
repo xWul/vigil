@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **First-run onboarding nudge**: the Review Queue now shows a persistent amber banner below
+  the header when no AI provider is configured (`aiProvider` is null or the selected
+  provider has no key). The banner links directly to Settings. Disappears automatically once
+  a key is saved.
+
 - **Copy diagnostics**: Settings → Diagnostics section → "Copy diagnostics" button reads the
   application log (`vigil.log` + `.old` archive), applies belt-and-suspenders redaction of
   inline sensitive values (tokens, secrets, keys, passwords), and writes the result to the
@@ -27,10 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when no regressions were detected. The "AI · Claude 3.7" badge removed — regression
   findings are from static analysis, not AI.
 
-- **Architecture tab removed**: the Architecture tab showed hardcoded demo data from a
-  fictional payment service unrelated to the PR being reviewed. Removed entirely — an honest
-  gap is better than misleading data. Real architecture analysis is planned for a future
-  release.
+- **Architecture tab — circular dependency detection**: the Architecture tab now shows real
+  findings produced by the new `ArchitectureAnalyzer`. It builds an import graph from all
+  files in the review context (relative `.js`/`.ts` imports only), runs DFS cycle detection,
+  and reports cycles that touch at least one changed file. Each finding displays the full
+  import chain as a breadcrumb, the participating file and line number, and a plain-English
+  description. Empty state shown when no cycles are detected. Path-alias imports (`@/`) are
+  not resolved (noted in the tab footer). Replaces the previous hardcoded demo data.
 
 - **Re-run review**: a "Re-run review" button appears in the workspace bottom strip once analysis
   completes. Clicking it invalidates the cached result for the current head SHA, resets all findings

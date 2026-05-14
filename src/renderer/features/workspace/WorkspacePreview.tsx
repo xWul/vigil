@@ -407,6 +407,30 @@ const MOCK_FINDINGS: readonly Finding[] = [
       "payment.ts now throws on charge failure while the rest of the service layer returns Result objects. This mixes two error-handling conventions in the same layer. Standardise on one pattern — callers of processPayment will need to wrap it in a try/catch where they currently expect a Result.",
     evidence: "",
   },
+  // Architecture — direct circular dependency
+  {
+    pass: "architecture",
+    source: "static",
+    severity: "medium",
+    file: "src/api/payment.ts",
+    lines: { start: 3, end: 3 },
+    title: "Circular import: api/payment.ts ↔ middleware/auth.ts",
+    description:
+      "api/payment.ts participates in a circular dependency. Circular imports can cause initialization-order bugs and make dependency relationships hard to reason about.",
+    evidence: "src/api/payment.ts\nsrc/middleware/auth.ts\nsrc/api/payment.ts",
+  },
+  // Architecture — three-hop cycle
+  {
+    pass: "architecture",
+    source: "static",
+    severity: "medium",
+    file: "src/utils/retry.ts",
+    lines: { start: 2, end: 2 },
+    title: "Circular import: utils/retry.ts → middleware/auth.ts → api/payment.ts → utils/retry.ts",
+    description:
+      "utils/retry.ts participates in a circular dependency. Circular imports can cause initialization-order bugs and make dependency relationships hard to reason about.",
+    evidence: "src/utils/retry.ts\nsrc/middleware/auth.ts\nsrc/api/payment.ts\nsrc/utils/retry.ts",
+  },
 ];
 
 const MOCK_REVIEW_RESULT: ReviewResult = {
