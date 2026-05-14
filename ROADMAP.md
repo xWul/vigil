@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-14. Phase 6 complete. Phase 7 in progress.
+> **Status:** Living document. Last updated 2026-05-14. Phase 7 complete (OAuth registration is a user action, not code). Phase 8 next.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -250,7 +250,8 @@ _Phase 4 complete 2026-05-13._
         detector legend rail
   - [x] Semantic tab: wired to live regression findings — numbered BEHAVIOR change cards with
         before/after code blocks parsed from finding evidence, explanation, and risk level;
-        empty state when no regressions detected; Architecture tab removed (was hardcoded demo)
+        empty state when no regressions detected; Architecture tab moved to real circular
+        dependency detection (see Phase 7)
   - [x] Hunk-level collapse / expand
   - [x] Filter non-reviewable files from analysis: binary files (images,
         fonts, icons), generated lockfiles (`package-lock.json`,
@@ -307,9 +308,12 @@ _Phase 6 complete 2026-05-14._
 
 - [x] **Semantic tab wired to real findings**: live regression findings replace
       hardcoded demo data
-- [x] **Architecture tab removed**: honest gap beats misleading placeholder data
-- [ ] **First-run onboarding**: when no accounts are connected, show a welcome
-      overlay or guided flow: connect GitHub → configure AI key → open first PR
+- [x] **Architecture tab — real circular dependency detection**: `ArchitectureAnalyzer`
+      builds an import graph, runs DFS cycle detection, and reports cycles touching changed
+      files. Replaces the previous hardcoded demo data.
+- [x] **First-run onboarding nudge**: Review Queue shows a persistent amber banner
+      when no AI provider/key is configured, with a direct link to Settings.
+      Disappears automatically once a key is saved.
 - [x] **"Copy diagnostics" button**: reads `app.getPath('logs')/vigil.log`,
       applies redaction (`token|secret|key|password|pat`), copies to clipboard.
       Entry point: Settings screen Diagnostics section.

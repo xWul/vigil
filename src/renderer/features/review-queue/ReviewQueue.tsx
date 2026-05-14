@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 
 import type { PullRequest } from "../../../shared/model/index.js";
-import { usePRList } from "../../lib/queries.js";
+import { usePRList, useSettings } from "../../lib/queries.js";
 import type { PRRow } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO, type Theme, type Tokens } from "../../shared/theme.js";
 import "./ReviewQueue.css";
@@ -88,6 +88,45 @@ function Kbd({ children }: { children: React.ReactNode }) {
 
 function Sep({ t }: { t: Tokens }) {
   return <span style={{ color: t.textFaint, padding: "0 8px" }}>·</span>;
+}
+
+// ── SetupAiNudge ──────────────────────────────────────────────────────────────
+
+function SetupAiNudge({ t, onOpenSettings }: { t: Tokens; onOpenSettings: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "8px 36px",
+        background: `oklch(0.55 0.12 85 / 0.08)`,
+        borderBottom: `0.5px solid oklch(0.55 0.12 85 / 0.22)`,
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 12.5, color: t.textDim }}>
+        AI reviews are disabled — no API key configured.
+      </span>
+      <button
+        onClick={onOpenSettings}
+        style={{
+          background: "transparent",
+          border: `0.5px solid oklch(0.55 0.12 85 / 0.45)`,
+          borderRadius: 5,
+          padding: "3px 10px",
+          color: t.amber,
+          fontFamily: SANS,
+          fontSize: 12,
+          cursor: "pointer",
+          flexShrink: 0,
+        }}
+      >
+        Set up in Settings →
+      </button>
+    </div>
+  );
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
@@ -580,10 +619,19 @@ export function ReviewQueue({
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: rows, isLoading, isError, error, isFetching, dataUpdatedAt, refetch } = usePRList();
+  const { data: settingsResult } = useSettings();
 
   const syncedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
   const refreshing = isFetching;
   const triggerRefresh = () => void refetch();
+
+  const needsAiSetup = useMemo(() => {
+    if (!settingsResult?.ok) return false;
+    const s = settingsResult.value;
+    if (s.aiProvider === "anthropic") return !s.hasAnthropicKey;
+    if (s.aiProvider === "openai") return !s.hasOpenAIKey;
+    return true;
+  }, [settingsResult]);
 
   const visibleRows = useMemo(() => {
     if (!rows) return [];
@@ -800,6 +848,8 @@ export function ReviewQueue({
         setSort={setSort}
         searchRef={searchRef}
       />
+
+      {needsAiSetup && onOpenSettings && <SetupAiNudge t={t} onOpenSettings={onOpenSettings} />}
 
       <div className="vigil-scroll" style={{ flex: 1, overflow: "auto", paddingBottom: 8 }}>
         {isLoading && <LoadingState t={t} />}
