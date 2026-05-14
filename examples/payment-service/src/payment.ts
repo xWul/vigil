@@ -28,9 +28,7 @@ async function callGateway(payment: Payment): Promise<Result<string, PaymentErro
   }
 }
 
-export async function processPayment(
-  payment: Payment,
-): Promise<Result<string, PaymentError>> {
+export async function processPayment(payment: Payment): Promise<Result<string, PaymentError>> {
   return withRetry(() => callGateway(payment), {
     maxAttempts: MAX_RETRIES,
     delayMs: RETRY_DELAY_MS,
