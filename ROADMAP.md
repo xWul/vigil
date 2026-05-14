@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-14. Phase 4 complete. Phase 5 in progress.
+> **Status:** Living document. Last updated 2026-05-14. Phase 5 complete. Phase 6 in progress.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -269,18 +269,24 @@ _Phase 4 complete 2026-05-13._
 IDE with diffs bolted on. A reviewer can complete a real review
 faster than in the GitHub web UI for a non-trivial PR.
 
+_Phase 5 complete 2026-05-14._
+
 ---
 
 ## Phase 6 — Local repo cache and deep context
 
 **Goal:** Use full repo context to make findings smarter.
 
-- [ ] ADR: local repo cache strategy
+- [x] ADR-0010: local repo cache strategy (simple-git, blobless clones)
 - [ ] Spec: `docs/specs/repo-cache.md`
-- [ ] Repo clone-on-demand into a managed cache directory
-- [ ] `git fetch` on PR open if the cache is stale
-- [ ] Eviction policy (LRU, size cap)
-- [ ] Consistency pass uses cache for "find similar code" prompts
+- [x] Repo clone-on-demand into a managed cache directory
+      (`userData/repos/{platform}/{owner}/{repo}/`)
+- [x] `git fetch` on PR open if the cache is stale (15-min threshold)
+- [x] Eviction policy (30-day age + 2 GB LRU size cap)
+- [x] `git:cacheStatus` IPC push event; renderer can show clone progress
+- [x] Consistency pass enriched with cross-file imports: relative imports
+      from changed files are fetched from the cache and added to context
+      so the AI can compare against established patterns in un-changed files
 - [ ] Optional: tree-sitter integration for symbol-aware context
 - [ ] Evaluate TanstackQuery for IPC-backed data fetching: replace
       `useEffect`-based data loading with cache-aware query hooks

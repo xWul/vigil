@@ -159,9 +159,10 @@ export class RepoCache {
       if (meta && Date.now() - meta.lastFetchAt < STALE_MS) return;
     }
 
-    const op = (isCloned
-      ? this._fetch(session, ref, repoDir, metaPath)
-      : this._clone(session, ref, repoDir, metaPath)
+    const op = (
+      isCloned
+        ? this._fetch(session, ref, repoDir, metaPath)
+        : this._clone(session, ref, repoDir, metaPath)
     )
       .catch((e) => {
         const message = e instanceof Error ? e.message : String(e);
@@ -233,7 +234,11 @@ export class RepoCache {
       return ok(content);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("does not exist") || msg.includes("not a tree") || msg.includes("bad object")) {
+      if (
+        msg.includes("does not exist") ||
+        msg.includes("not a tree") ||
+        msg.includes("bad object")
+      ) {
         return err({ code: "not_found", path: filePath });
       }
       return err({ code: "git_error", message: msg });

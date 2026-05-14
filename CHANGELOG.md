@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cross-file import context for consistency pass**: when the local repo cache is
+  available, relative imports from changed files are resolved and fetched from the cache
+  (capped at 20 % of the token budget). The consistency pass AI can now compare new code
+  against the patterns established in imported-but-unchanged files — the scenario most
+  likely to surface real consistency violations.
+
 - **Local repo cache (Phase 6)**: Vigil now clones each reviewed repository to disk using
   `simple-git` and blobless partial clones (`--filter=blob:none`). After the first review of
   a repo, file content is read locally via `git show {sha}:{path}` instead of making one API
