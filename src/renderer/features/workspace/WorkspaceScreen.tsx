@@ -11,6 +11,7 @@ import type {
 } from "../../../shared/model/index.js";
 import type { Finding, FindingPass } from "../../../shared/review.js";
 import { api } from "../../api.js";
+import { useDiff, useSettings, useCachedReview, useInvalidateReview } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 import type { TabId } from "./AnalysisTabs.js";
 import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
@@ -1419,13 +1420,28 @@ function BottomStrip({
 // ── WorkspaceScreen ───────────────────────────────────────────────────────────
 
 export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
-  const [diff, setDiff] = useState<Diff | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const diffQuery = useDiff(pr.ref);
+  const settingsQuery = useSettings();
+  const diff = diffQuery.data?.ok ? diffQuery.data.value.diff : null;
+  const loadError = diffQuery.isError
+    ? "platform_error"
+    : diffQuery.data && !diffQuery.data.ok
+      ? diffQuery.data.error.code
+      : null;
+  const headSha = diffQuery.data?.ok ? diffQuery.data.value.pr.headSha : "";
+  const hasAI = settingsQuery.data?.ok
+    ? (settingsQuery.data.value.aiProvider === "anthropic" &&
+        settingsQuery.data.value.hasAnthropicKey) ||
+      (settingsQuery.data.value.aiProvider === "openai" &&
+        settingsQuery.data.value.hasOpenAIKey)
+    : false;
+
+  const cachedReviewQuery = useCachedReview(pr.ref, headSha);
+  const invalidateReview = useInvalidateReview();
+
   const [findings, setFindings] = useState<Finding[]>([]);
   const [passes, setPasses] = useState<PassMap>({});
   const [reviewDone, setReviewDone] = useState(false);
-  const [hasAI, setHasAI] = useState(false);
-  const [headSha, setHeadSha] = useState("");
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [reviewCompletedAt, setReviewCompletedAt] = useState<Date | null>(null);
@@ -1462,55 +1478,28 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const focusedFinding =
     focusedFindingIdx !== null ? (sortedFindings[focusedFindingIdx] ?? null) : null;
 
-  // Load diff + settings + start review
+  // When cached review arrives (first load or after invalidation), populate findings.
   useEffect(() => {
-    let mounted = true;
+    if (!cachedReviewQuery.data?.ok || !cachedReviewQuery.data.value) return;
+    setFindings([...cachedReviewQuery.data.value.findings]);
+    setReviewDone(true);
+    setReviewCompletedAt(new Date());
+  }, [cachedReviewQuery.data]);
 
-    async function init() {
-      // Settings and diff are independent — start both immediately.
-      void api.invoke("settings:get").then((r) => {
-        if (!mounted || !r.ok) return;
-        setHasAI(
-          (r.value.aiProvider === "anthropic" && r.value.hasAnthropicKey) ||
-            (r.value.aiProvider === "openai" && r.value.hasOpenAIKey),
-        );
-      });
+  // When diff is ready and there's no cached review, start the review pipeline.
+  useEffect(() => {
+    if (!headSha) return;
+    if (cachedReviewQuery.isLoading) return;
+    if (cachedReviewQuery.data?.ok && cachedReviewQuery.data.value) return;
 
-      const diffResult = await api.invoke("platform:getPRWithDiff", pr.ref);
-      if (!mounted) return;
-
-      if (!diffResult.ok) {
-        setLoadError(diffResult.error.code);
-        return;
-      }
-      setDiff(diffResult.value.diff);
-      const sha = diffResult.value.pr.headSha;
-      setHeadSha(sha);
-
-      const cached = await api.invoke("review:getCached", pr.ref, sha);
-      if (!mounted) return;
-
-      if (cached.ok && cached.value) {
-        setFindings([...cached.value.findings]);
-        setReviewDone(true);
-        setReviewCompletedAt(new Date());
-        return;
-      }
-
-      // Fire review in the background — findings stream via review:finding events.
-      void api.invoke("review:run", pr.ref).then((result) => {
-        if (!mounted) return;
-        if (result.ok) setFindings([...result.value.findings]);
-        setReviewDone(true);
-        setReviewCompletedAt(new Date());
-      });
-    }
-
-    void init();
-    return () => {
-      mounted = false;
-    };
-  }, [pr]);
+    void api.invoke("review:run", pr.ref).then((result) => {
+      if (result.ok) setFindings([...result.value.findings]);
+      setReviewDone(true);
+      setReviewCompletedAt(new Date());
+    });
+  // Only re-run when headSha becomes available or cache miss is confirmed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headSha, cachedReviewQuery.isLoading]);
 
   async function handleRerunReview() {
     if (!headSha) return;
@@ -1519,6 +1508,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     setPasses({});
     setReviewDone(false);
     setReviewCompletedAt(null);
+    await invalidateReview(pr.ref, headSha);
     void api.invoke("review:run", pr.ref).then((result) => {
       if (result.ok) setFindings([...result.value.findings]);
       setReviewDone(true);
