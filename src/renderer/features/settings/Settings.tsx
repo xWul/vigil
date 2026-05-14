@@ -682,12 +682,19 @@ export function Settings({
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [signingOut, setSigningOut] = useState<Platform | null>(null);
   const [theme, setTheme] = useState("Dark");
+  const [diagCopied, setDiagCopied] = useState(false);
 
   useEffect(() => {
     void api.invoke("settings:get").then((r) => {
       if (r.ok) setSettings(r.value);
     });
   }, []);
+
+  async function handleCopyDiagnostics() {
+    await api.invoke("app:copyDiagnostics");
+    setDiagCopied(true);
+    setTimeout(() => setDiagCopied(false), 2000);
+  }
 
   async function handleSignOut(platform: Platform) {
     setSigningOut(platform);
@@ -921,6 +928,44 @@ export function Settings({
           <div>
             <FieldLabel>Theme</FieldLabel>
             <Segmented options={["System", "Light", "Dark"]} value={theme} onChange={setTheme} />
+          </div>
+
+          <SectionDivider />
+
+          {/* ── 4. Diagnostics ── */}
+          <SectionHeading
+            title="Diagnostics"
+            subtitle="Share a redacted log snapshot when reporting issues."
+          />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button
+              onClick={() => void handleCopyDiagnostics()}
+              style={{
+                padding: "8px 16px",
+                background: diagCopied ? `${t.accent}1a` : t.surface,
+                border: `0.5px solid ${diagCopied ? t.accent : t.border}`,
+                borderRadius: 7,
+                fontFamily: SANS,
+                fontSize: 13,
+                color: diagCopied ? t.accent : t.textDim,
+                cursor: "pointer",
+                transition: "color .15s, border-color .15s, background .15s",
+              }}
+            >
+              {diagCopied ? "Copied!" : "Copy diagnostics"}
+            </button>
+            <span
+              style={{
+                fontFamily: SANS,
+                fontSize: 12,
+                color: t.textFaint,
+                lineHeight: 1.5,
+              }}
+            >
+              Copies the application log to your clipboard. Tokens and secrets
+              are redacted automatically.
+            </span>
           </div>
         </div>
       </div>
