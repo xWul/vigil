@@ -208,6 +208,10 @@ Diff-aware analyzers (examine the diff itself, not file content):
 - `ChangeClassifierAnalyzer` — classifies each changed file as behavior/refactor/test/config using control-flow keyword heuristics; emits a PR-level summary and (conditionally) an intent-mismatch finding
 - `SilentRegressionAnalyzer` — detects high-risk behavioral change patterns using paired hunk analysis: condition operator changes, error handling removal/change, numeric constant changes in sensitive contexts, async execution pattern changes, and side effect introductions
 
+Context-aware analyzers (examine `context.files` — changed files plus their direct imports):
+
+- `ArchitectureAnalyzer` — detects circular import dependencies among files touched by the PR; relative imports only; only cycles involving at least one changed file are reported; severity always `"medium"`
+
 All analyzers only examine files that appear in the diff. `CodeAnalyzer` failures are silent — a failed analyzer logs a warning and returns empty findings; it never blocks the review.
 
 ---

@@ -6,7 +6,7 @@ import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TabId = "overview" | "diff" | "semantic" | "risks" | "convo";
+export type TabId = "overview" | "diff" | "semantic" | "risks" | "arch" | "convo";
 
 type PassPhase = { phase: "running" } | { phase: "done"; count: number };
 export type PassMap = Partial<Record<FindingPass, PassPhase>>;
@@ -104,6 +104,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "diff", label: "Diff" },
   { id: "semantic", label: "Semantic" },
   { id: "risks", label: "Silent risks" },
+  { id: "arch", label: "Architecture" },
   { id: "convo", label: "Conversation" },
 ];
 
@@ -125,10 +126,12 @@ export function TabBar({
   const riskHigh = findings.some(
     (f) => f.pass === "regression" && (f.severity === "high" || f.severity === "critical"),
   );
+  const archCount = findings.filter((f) => f.pass === "architecture").length;
 
   function tabCount(id: TabId): { n: number; sev: "high" | "med" | null } | null {
     if (id === "diff" && diffCount > 0) return { n: diffCount, sev: null };
     if (id === "risks" && riskCount > 0) return { n: riskCount, sev: riskHigh ? "high" : "med" };
+    if (id === "arch" && archCount > 0) return { n: archCount, sev: "med" };
     return null;
   }
 
@@ -1201,6 +1204,129 @@ export function SemanticTab({ findings }: { findings: readonly Finding[] }) {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── ArchTab ───────────────────────────────────────────────────────────────────
+
+function parseChain(evidence: string): string[] {
+  return evidence.split("\n").filter(Boolean);
+}
+
+export function ArchTab({ findings }: { findings: readonly Finding[] }) {
+  const t = TOKENS.dark;
+
+  if (findings.length === 0) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 12,
+        }}
+      >
+        <div style={{ fontFamily: SANS, fontSize: 13, color: t.textFaint }}>
+          No circular dependencies detected among changed files.
+        </div>
+      </div>
+    );
+  }
+
+  const label = findings.length === 1 ? "circular dependency" : "circular dependencies";
+
+  return (
+    <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
+      <div
+        style={{
+          padding: "20px 32px 16px",
+          borderBottom: `0.5px solid ${t.border}`,
+          display: "flex",
+          alignItems: "baseline",
+          gap: 20,
+        }}
+      >
+        <div style={{ fontFamily: SANS, fontSize: 13, color: t.textDim, lineHeight: 1.55 }}>
+          {findings.length} {label} detected — analysis covers changed files and their direct
+          imports.
+        </div>
+      </div>
+
+      <div style={{ padding: "0 32px 32px" }}>
+        {findings.map((finding, i) => {
+          const chain = parseChain(finding.evidence);
+          return (
+            <div
+              key={i}
+              style={{
+                paddingTop: 28,
+                paddingBottom: 28,
+                borderBottom: i < findings.length - 1 ? `0.5px solid ${t.border}` : "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <RiskDot sev="medium" size={6} />
+                <span style={{ fontFamily: SANS, fontSize: 13, color: t.text, fontWeight: 500 }}>
+                  {finding.title}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap" as const,
+                  gap: 6,
+                  background: t.surface,
+                  border: `0.5px solid ${t.border}`,
+                  borderRadius: 6,
+                  padding: "12px 16px",
+                  marginBottom: 14,
+                }}
+              >
+                {chain.map((node, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 11.5, color: j === chain.length - 1 ? t.amber : t.textDim }}>
+                      {shortPath(node)}
+                    </span>
+                    {j < chain.length - 1 && (
+                      <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>→</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  fontFamily: SANS,
+                  fontSize: 13,
+                  color: t.textDim,
+                  lineHeight: 1.65,
+                  maxWidth: 680,
+                }}
+              >
+                {finding.description}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div
+        style={{
+          padding: "12px 32px",
+          borderTop: `0.5px solid ${t.border}`,
+          fontFamily: MONO,
+          fontSize: 10.5,
+          color: t.textFaint,
+        }}
+      >
+        Only relative imports are analyzed. Path alias imports (e.g. @/) are not resolved.
       </div>
     </div>
   );

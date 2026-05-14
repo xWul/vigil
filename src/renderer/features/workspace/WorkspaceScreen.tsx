@@ -14,7 +14,7 @@ import { api } from "../../api.js";
 import { useDiff, useSettings, useCachedReview, useInvalidateReview } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 import type { TabId } from "./AnalysisTabs.js";
-import { TabBar, OverviewTab, RisksTab, SemanticTab } from "./AnalysisTabs.js";
+import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1463,6 +1463,11 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     [findings],
   );
 
+  const archFindings = useMemo(
+    () => findings.filter((f) => f.pass === "architecture"),
+    [findings],
+  );
+
   const sortedFindings = useMemo(
     () =>
       findings
@@ -1621,7 +1626,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
 
       if (e.key === "Tab") {
         e.preventDefault();
-        const tabOrder: TabId[] = ["overview", "diff", "semantic", "risks", "convo"];
+        const tabOrder: TabId[] = ["overview", "diff", "semantic", "risks", "arch", "convo"];
         const curr = tabOrder.indexOf(activeTab);
         setActiveTab(
           e.shiftKey
@@ -1808,6 +1813,10 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       ) : activeTab === "semantic" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
           <SemanticTab findings={regressionFindings} />
+        </div>
+      ) : activeTab === "arch" ? (
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <ArchTab findings={archFindings} />
         </div>
       ) : null}
 
