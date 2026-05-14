@@ -310,15 +310,15 @@ _Phase 6 complete 2026-05-14._
 - [x] **Architecture tab removed**: honest gap beats misleading placeholder data
 - [ ] **First-run onboarding**: when no accounts are connected, show a welcome
       overlay or guided flow: connect GitHub → configure AI key → open first PR
-- [ ] **"Copy diagnostics" button**: reads `app.getPath('logs')/vigil.log`,
+- [x] **"Copy diagnostics" button**: reads `app.getPath('logs')/vigil.log`,
       applies redaction (`token|secret|key|password|pat`), copies to clipboard.
-      Entry point: Settings screen footer.
+      Entry point: Settings screen Diagnostics section.
 - [ ] **OAuth app registration**: both `GitHubAuthProvider.ts` and
       `AzureDevOpsAuthProvider.ts` still have `// TODO: replace with real client ID`.
       Must be done before any public release. (User action, not code change.)
-- [ ] **Workspace help overlay**: `?` key is wired in Review Queue but not in
-      the Workspace. Add a help overlay listing workspace shortcuts
-      (Tab, j/k, n/p, m, Esc, r).
+- [x] **Workspace help overlay**: `?` key toggles a centered overlay listing
+      all workspace shortcuts (Tab, j/k, n/p, m, r, Esc, ?). Bottom strip
+      `?` hint is now a clickable button.
 
 **Exit criteria:** A first-time user can install, connect an account, configure
 an AI key, and complete a real review without needing to read the source code.

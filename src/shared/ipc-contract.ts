@@ -49,6 +49,9 @@ export interface IpcContract {
     key: string,
   ) => Result<void, SettingsError>;
   "settings:deleteApiKey": (provider: "anthropic" | "openai") => Result<void, SettingsError>;
+
+  // App
+  "app:copyDiagnostics": () => Result<void, never>;
 }
 
 // ── Push events (main → renderer, one-way) ───────────────────────────────────

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Copy diagnostics**: Settings → Diagnostics section → "Copy diagnostics" button reads the
+  application log (`vigil.log` + `.old` archive), applies belt-and-suspenders redaction of
+  inline sensitive values (tokens, secrets, keys, passwords), and writes the result to the
+  clipboard. Button shows "Copied!" feedback for 2 seconds. Adds `app:copyDiagnostics` IPC
+  channel.
+
+- **Workspace keyboard shortcuts overlay**: pressing `?` in the workspace shows a centered
+  overlay listing all keyboard shortcuts (Tab, j/k, n/p, m, r, Esc, ?). The `?` hint in the
+  bottom strip is now a clickable button labeled "shortcuts". `Esc` dismisses the overlay
+  before any other action. `r` is now wired as a shortcut for re-run review.
+
 - **Semantic tab wired to real findings**: the Semantic tab now shows live regression findings
   from the static analysis pipeline instead of hardcoded demo data. Each `Finding` with
   `pass === "regression"` is mapped to a `SemanticChange` card with before/after code
