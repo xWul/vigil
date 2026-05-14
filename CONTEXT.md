@@ -208,6 +208,10 @@ Diff-aware analyzers (examine the diff itself, not file content):
 - `ChangeClassifierAnalyzer` — classifies each changed file as behavior/refactor/test/config using control-flow keyword heuristics; emits a PR-level summary and (conditionally) an intent-mismatch finding
 - `SilentRegressionAnalyzer` — detects high-risk behavioral change patterns using paired hunk analysis: condition operator changes, error handling removal/change, numeric constant changes in sensitive contexts, async execution pattern changes, and side effect introductions
 
+Context-aware analyzers (examine `context.files` — changed files plus their direct imports):
+
+- `ArchitectureAnalyzer` — detects circular import dependencies among files touched by the PR; relative imports only; only cycles involving at least one changed file are reported; severity always `"medium"`
+
 All analyzers only examine files that appear in the diff. `CodeAnalyzer` failures are silent — a failed analyzer logs a warning and returns empty findings; it never blocks the review.
 
 ---
@@ -344,6 +348,30 @@ sessions.
 
 Distinct from a PR-level conversation (not in scope for Phase 5) —
 each ChallengeThread is anchored to one Finding.
+
+---
+
+## RepoCache
+
+The local clone manager for reviewed repositories. Maintains one blobless
+partial git clone per repo under `{userData}/repos/{platform}/{owner}/{repo}/`.
+Clones on first review, fetches when the local copy is stale (> 15 minutes).
+
+`RepoCache` is injected into the IPC handler layer at startup. It is not
+visible to the renderer — the renderer only receives `git:cacheStatus` push
+events as progress updates.
+
+Key operations:
+
+- `ensureCloned(session, ref)` — fire-and-forget background clone or fetch
+- `readFile(ref, sha, path)` — returns file content at a given commit SHA;
+  returns `err({ code: "not_ready" })` if the clone is not yet available
+
+Callers fall back to `PlatformProvider.getFileContent` on any `not_ready`
+or `not_found` result — `RepoCache` is always additive, never blocking.
+
+Eviction runs at startup: repos older than 30 days are removed; if the
+total exceeds 2 GB, the least-recently-fetched repos are removed first.
 
 ---
 

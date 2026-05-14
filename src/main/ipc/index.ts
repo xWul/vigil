@@ -19,6 +19,7 @@ import { SmellsAnalyzer } from "../ai/analyzers/SmellsAnalyzer.js";
 import { TypeSafetyAnalyzer } from "../ai/analyzers/TypeSafetyAnalyzer.js";
 import { ChangeClassifierAnalyzer } from "../ai/analyzers/ChangeClassifierAnalyzer.js";
 import { SilentRegressionAnalyzer } from "../ai/analyzers/SilentRegressionAnalyzer.js";
+import { ArchitectureAnalyzer } from "../ai/analyzers/ArchitectureAnalyzer.js";
 import { buildReviewContext } from "../ai/buildReviewContext.js";
 import { runReview } from "../ai/runReview.js";
 import type { ReviewCache } from "../ai/ReviewCache.js";
@@ -250,6 +251,7 @@ export function registerHandlers(
       new TypeSafetyAnalyzer(),
       new ChangeClassifierAnalyzer(),
       new SilentRegressionAnalyzer(),
+      new ArchitectureAnalyzer(),
     ];
 
     const result = await runReview(

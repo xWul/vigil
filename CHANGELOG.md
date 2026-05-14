@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Semantic tab wired to real findings**: the Semantic tab now shows live regression findings
+  from the static analysis pipeline instead of hardcoded demo data. Each `Finding` with
+  `pass === "regression"` is mapped to a `SemanticChange` card with before/after code
+  blocks parsed from the finding's evidence, explanation, and risk level. Empty state shown
+  when no regressions were detected. The "AI · Claude 3.7" badge removed — regression
+  findings are from static analysis, not AI.
+
+- **Architecture tab removed**: the Architecture tab showed hardcoded demo data from a
+  fictional payment service unrelated to the PR being reviewed. Removed entirely — an honest
+  gap is better than misleading data. Real architecture analysis is planned for a future
+  release.
+
+- **Re-run review**: a "Re-run review" button appears in the workspace bottom strip once analysis
+  completes. Clicking it invalidates the cached result for the current head SHA, resets all findings
+  and pass state, and re-runs the full pipeline in the background. The "Analyzing" strip appears
+  immediately — no gap between clicking and the first pass event.
+
+- **Diff skeleton loader**: the workspace now shows a pulsing animated skeleton while the diff is
+  loading, replacing the plain "Loading diff…" text.
+
+- **TanStack Query for IPC data fetching** (ADR-0011): `@tanstack/react-query` adopted for all
+  request/response IPC calls in the renderer. `ReviewQueue` drops the `loadKey` counter, `mounted`
+  flags, and manual `refreshing` state — replaced by `usePRList` with built-in stale-while-revalidate
+  and 60 s background refetch. `WorkspaceScreen` drops the parallel `useEffect` init; diff, settings,
+  and cached review are now `useQuery` hooks. Query key factories live in
+  `src/renderer/lib/queries.ts`. The streaming `review:run` pipeline stays manual.
+
 - **Cross-file import context for consistency pass**: when the local repo cache is
   available, relative imports from changed files are resolved and fetched from the cache
   (capped at 20 % of the token budget). The consistency pass AI can now compare new code

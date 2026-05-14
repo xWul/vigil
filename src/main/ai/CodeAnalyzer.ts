@@ -25,6 +25,7 @@ export interface CodeAnalyzer {
     | "debug-artifacts"
     | "type-safety"
     | "change-classification"
-    | "regression";
+    | "regression"
+    | "architecture";
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>>;
 }
