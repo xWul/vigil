@@ -26,6 +26,7 @@ project-specific configuration.
 - Only cycles that involve at least one changed file are reported
 
 **Out of scope (deferred):**
+
 - Path alias resolution (`@/`, `~/`, tsconfig `paths`)
 - Dynamic imports (`import('./foo')`)
 - Layer violation detection
@@ -35,11 +36,11 @@ project-specific configuration.
 
 ## Pass identity
 
-| Field | Value |
-|---|---|
+| Field             | Value            |
+| ----------------- | ---------------- |
 | `CodeAnalyzer.id` | `"architecture"` |
-| `FindingPass` | `"architecture"` |
-| `Finding.source` | `"static"` |
+| `FindingPass`     | `"architecture"` |
+| `Finding.source`  | `"static"`       |
 
 Named `"architecture"` rather than `"circular-deps"` to leave room for
 additional architecture checks (e.g. layer violations) under the same pass
@@ -113,14 +114,14 @@ whose resolved path matches the next file in the cycle. Returns
 
 ### Files to create / modify
 
-| File | Change |
-|---|---|
-| `src/shared/review.ts` | Add `"architecture"` to `FindingPass` union |
-| `src/main/ai/CodeAnalyzer.ts` | Add `"architecture"` to `CodeAnalyzer.id` union |
-| `src/main/ai/analyzers/ArchitectureAnalyzer.ts` | New — the analyzer |
-| `src/main/ai/analyzers/ArchitectureAnalyzer.test.ts` | New — unit tests |
-| `src/main/ai/runReview.ts` | Register the new analyzer |
-| `src/renderer/features/workspace/AnalysisTabs.tsx` | Wire `ArchTab` with real data |
+| File                                                  | Change                                            |
+| ----------------------------------------------------- | ------------------------------------------------- |
+| `src/shared/review.ts`                                | Add `"architecture"` to `FindingPass` union       |
+| `src/main/ai/CodeAnalyzer.ts`                         | Add `"architecture"` to `CodeAnalyzer.id` union   |
+| `src/main/ai/analyzers/ArchitectureAnalyzer.ts`       | New — the analyzer                                |
+| `src/main/ai/analyzers/ArchitectureAnalyzer.test.ts`  | New — unit tests                                  |
+| `src/main/ai/runReview.ts`                            | Register the new analyzer                         |
+| `src/renderer/features/workspace/AnalysisTabs.tsx`    | Wire `ArchTab` with real data                     |
 | `src/renderer/features/workspace/WorkspaceScreen.tsx` | Add `"architecture"` to `TabId`, render `ArchTab` |
 
 ### `runReview.ts` registration
@@ -200,6 +201,6 @@ Unit tests in `ArchitectureAnalyzer.test.ts`:
    `context.files` (due to token budget exhaustion), the cycle will not be
    detected.
 3. **No pre-PR baseline.** The analyzer flags all cycles involving changed
-   files, not just cycles *introduced* by the PR. A pre-existing cycle in a
+   files, not just cycles _introduced_ by the PR. A pre-existing cycle in a
    file the PR merely touches will appear as a finding. The description
    acknowledges this: "participates in a circular dependency."
