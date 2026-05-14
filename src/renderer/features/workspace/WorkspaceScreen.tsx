@@ -66,6 +66,10 @@ function fileId(path: string): string {
   return `fs-${path.replace(/[^a-zA-Z0-9]/g, "_")}`;
 }
 
+function hunkKey(filePath: string, hunkStart: number): string {
+  return `${filePath}:${hunkStart}`;
+}
+
 function findingKey(f: Finding): string {
   return `${f.file}:${f.lines?.start ?? 0}:${f.title}`;
 }
@@ -633,6 +637,8 @@ function HunkBlock({
   file,
   findingsByLine,
   expandedKeys,
+  collapsed,
+  onToggleCollapse,
   onToggleFinding,
   onAskVigil,
   hasAI,
@@ -641,6 +647,8 @@ function HunkBlock({
   file: FileDiff;
   findingsByLine: Map<string, Finding[]>;
   expandedKeys: Set<string>;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
   hasAI: boolean;
@@ -651,6 +659,7 @@ function HunkBlock({
   return (
     <div>
       <div
+        onClick={onToggleCollapse}
         style={{
           fontFamily: MONO,
           fontSize: 11,
@@ -660,35 +669,60 @@ function HunkBlock({
           borderTop: `0.5px solid ${t.border}`,
           borderBottom: `0.5px solid ${t.border}`,
           userSelect: "none" as const,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        {header}
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 8 8"
+          fill="none"
+          style={{
+            flexShrink: 0,
+            transition: "transform 0.1s",
+            transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+          }}
+        >
+          <path
+            d="M1 2.5L4 5.5L7 2.5"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span>{header}</span>
+        {collapsed && <span style={{ color: t.textFaint }}>· {hunk.lines.length} lines</span>}
       </div>
-      {hunk.lines.map((line, i) => {
-        const lineFindings =
-          line.newLine !== null
-            ? (findingsByLine.get(`${file.newPath}:${line.newLine}`) ?? [])
-            : [];
-        const domId = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
-        return (
-          <div key={i} id={domId}>
-            <DiffRow line={line} />
-            {lineFindings.map((f) => {
-              const key = findingKey(f);
-              return (
-                <InlineFindingRow
-                  key={key}
-                  finding={f}
-                  expanded={expandedKeys.has(key)}
-                  onToggle={() => onToggleFinding(key)}
-                  onAskVigil={() => onAskVigil(f)}
-                  hasAI={hasAI}
-                />
-              );
-            })}
-          </div>
-        );
-      })}
+      {!collapsed &&
+        hunk.lines.map((line, i) => {
+          const lineFindings =
+            line.newLine !== null
+              ? (findingsByLine.get(`${file.newPath}:${line.newLine}`) ?? [])
+              : [];
+          const domId = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
+          return (
+            <div key={i} id={domId}>
+              <DiffRow line={line} />
+              {lineFindings.map((f) => {
+                const key = findingKey(f);
+                return (
+                  <InlineFindingRow
+                    key={key}
+                    finding={f}
+                    expanded={expandedKeys.has(key)}
+                    onToggle={() => onToggleFinding(key)}
+                    onAskVigil={() => onAskVigil(f)}
+                    hasAI={hasAI}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
     </div>
   );
 }
@@ -697,6 +731,8 @@ function FileSection({
   file,
   findingsByLine,
   expandedKeys,
+  collapsedHunks,
+  onToggleHunk,
   onToggleFinding,
   onAskVigil,
   hasAI,
@@ -704,6 +740,8 @@ function FileSection({
   file: FileDiff;
   findingsByLine: Map<string, Finding[]>;
   expandedKeys: Set<string>;
+  collapsedHunks: Set<string>;
+  onToggleHunk: (key: string) => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
   hasAI: boolean;
@@ -759,18 +797,23 @@ function FileSection({
           +{adds} −{dels}
         </span>
       </div>
-      {file.hunks.map((hunk, i) => (
-        <HunkBlock
-          key={i}
-          hunk={hunk}
-          file={file}
-          findingsByLine={findingsByLine}
-          expandedKeys={expandedKeys}
-          onToggleFinding={onToggleFinding}
-          onAskVigil={onAskVigil}
-          hasAI={hasAI}
-        />
-      ))}
+      {file.hunks.map((hunk, i) => {
+        const key = hunkKey(file.newPath, hunk.newStart);
+        return (
+          <HunkBlock
+            key={i}
+            hunk={hunk}
+            file={file}
+            findingsByLine={findingsByLine}
+            expandedKeys={expandedKeys}
+            collapsed={collapsedHunks.has(key)}
+            onToggleCollapse={() => onToggleHunk(key)}
+            onToggleFinding={onToggleFinding}
+            onAskVigil={onAskVigil}
+            hasAI={hasAI}
+          />
+        );
+      })}
       <div style={{ height: 6 }} />
     </div>
   );
@@ -781,6 +824,8 @@ function DiffCenter({
   loadError,
   findings,
   expandedKeys,
+  collapsedHunks,
+  onToggleHunk,
   onToggleFinding,
   onAskVigil,
   hasAI,
@@ -791,6 +836,8 @@ function DiffCenter({
   loadError: string | null;
   findings: readonly Finding[];
   expandedKeys: Set<string>;
+  collapsedHunks: Set<string>;
+  onToggleHunk: (key: string) => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
   hasAI: boolean;
@@ -843,6 +890,8 @@ function DiffCenter({
               file={file}
               findingsByLine={findingsByLine}
               expandedKeys={expandedKeys}
+              collapsedHunks={collapsedHunks}
+              onToggleHunk={onToggleHunk}
               onToggleFinding={onToggleFinding}
               onAskVigil={onAskVigil}
               hasAI={hasAI}
@@ -1343,6 +1392,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
 
   const [activeFileIdx, setActiveFileIdx] = useState(0);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const [collapsedHunks, setCollapsedHunks] = useState<Set<string>>(new Set());
   const [focusedFindingIdx, setFocusedFindingIdx] = useState<number | null>(null);
   const [challengeState, setChallengeState] = useState<ChallengeState | null>(null);
   const [verdictState, setVerdictState] = useState<{
@@ -1459,9 +1509,29 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     };
   }, []);
 
-  // Scroll to focused finding + auto-expand it
+  // Scroll to focused finding, auto-expand it, and uncollapse its hunk
   useEffect(() => {
     if (!focusedFinding?.lines) return;
+
+    // Uncollapse the containing hunk so the finding is visible
+    if (diff) {
+      const file = diff.files.find((f) => f.newPath === focusedFinding.file);
+      const containingHunk = file?.hunks.find(
+        (h) =>
+          focusedFinding.lines!.start >= h.newStart &&
+          focusedFinding.lines!.start < h.newStart + h.newCount,
+      );
+      if (containingHunk) {
+        const key = hunkKey(focusedFinding.file, containingHunk.newStart);
+        setCollapsedHunks((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    }
+
     const el = document.getElementById(lineId(focusedFinding.file, focusedFinding.lines.start));
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
     const key = findingKey(focusedFinding);
@@ -1471,7 +1541,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       next.add(key);
       return next;
     });
-  }, [focusedFinding]);
+  }, [focusedFinding, diff]);
 
   // Scroll to active file
   useEffect(() => {
@@ -1570,6 +1640,15 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     });
   }
 
+  function handleToggleHunk(key: string) {
+    setCollapsedHunks((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   function handleAskVigil(finding: Finding) {
     setChallengeState({
       finding,
@@ -1634,6 +1713,8 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
             loadError={loadError}
             findings={findings}
             expandedKeys={expandedKeys}
+            collapsedHunks={collapsedHunks}
+            onToggleHunk={handleToggleHunk}
             onToggleFinding={handleToggleFinding}
             onAskVigil={handleAskVigil}
             hasAI={hasAI}

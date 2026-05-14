@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hunk collapse / expand**: clicking any `@@ ... @@` hunk header in the diff view
+  collapses that hunk, showing only the header with a `· N lines` count hint and a
+  rotating chevron. Click again to expand. Keyboard finding navigation (`n`/`p`)
+  automatically uncollapses the hunk containing the focused finding before scrolling to it.
+
 - **File filter for analysis pipeline**: binary and media assets (images, fonts, SVG, audio,
   video), auto-generated lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, etc.),
   documentation (`.md`, `.mdx`, `.txt`), and minified/map output (`.min.js`, `.js.map`) are

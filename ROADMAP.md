@@ -252,7 +252,7 @@ _Phase 4 complete 2026-05-13._
         code blocks, plain-English explanation, risk notes
   - [x] Architecture tab: metrics strip, layer map diagram with violation highlights,
         violations table with layer badges and file:line pointers
-  - [ ] Hunk-level collapse / expand
+  - [x] Hunk-level collapse / expand
   - [x] Filter non-reviewable files from analysis: binary files (images,
         fonts, icons), generated lockfiles (`package-lock.json`,
         `pnpm-lock.yaml`, `yarn.lock`), docs (`.md`, `.mdx`), and
