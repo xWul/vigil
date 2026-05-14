@@ -1530,8 +1530,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const hasAI = settingsQuery.data?.ok
     ? (settingsQuery.data.value.aiProvider === "anthropic" &&
         settingsQuery.data.value.hasAnthropicKey) ||
-      (settingsQuery.data.value.aiProvider === "openai" &&
-        settingsQuery.data.value.hasOpenAIKey)
+      (settingsQuery.data.value.aiProvider === "openai" && settingsQuery.data.value.hasOpenAIKey)
     : false;
 
   const cachedReviewQuery = useCachedReview(pr.ref, headSha);
@@ -1562,10 +1561,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     [findings],
   );
 
-  const archFindings = useMemo(
-    () => findings.filter((f) => f.pass === "architecture"),
-    [findings],
-  );
+  const archFindings = useMemo(() => findings.filter((f) => f.pass === "architecture"), [findings]);
 
   const sortedFindings = useMemo(
     () =>
@@ -1601,8 +1597,8 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       setReviewDone(true);
       setReviewCompletedAt(new Date());
     });
-  // Only re-run when headSha becomes available or cache miss is confirmed.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only re-run when headSha becomes available or cache miss is confirmed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headSha, cachedReviewQuery.isLoading]);
 
   const handleRerunReview = useCallback(async () => {

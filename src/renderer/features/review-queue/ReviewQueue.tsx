@@ -804,9 +804,13 @@ export function ReviewQueue({
       <div className="vigil-scroll" style={{ flex: 1, overflow: "auto", paddingBottom: 8 }}>
         {isLoading && <LoadingState t={t} />}
         {isError && (
-          <EmptyState t={t} message={`Failed to load PRs: ${error instanceof Error ? error.message : "unknown"}`} />
+          <EmptyState
+            t={t}
+            message={`Failed to load PRs: ${error instanceof Error ? error.message : "unknown"}`}
+          />
         )}
-        {!isLoading && !isError &&
+        {!isLoading &&
+          !isError &&
           (visibleRows.length === 0 ? (
             <EmptyState t={t} />
           ) : (
