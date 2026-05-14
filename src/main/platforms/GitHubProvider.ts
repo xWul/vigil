@@ -74,6 +74,13 @@ const REVIEW_EVENT: Record<ReviewVerdict, "APPROVE" | "REQUEST_CHANGES" | "COMME
   commented: "COMMENT",
 };
 
+function createOctokit(session: AuthSession): Octokit {
+  return new Octokit({
+    auth: session.accessToken,
+    headers: { "X-GitHub-Api-Version": "2022-11-28" },
+  });
+}
+
 export class GitHubProvider implements PlatformProvider {
   readonly id = "github" as const;
 
@@ -82,7 +89,7 @@ export class GitHubProvider implements PlatformProvider {
   async listOpenPullRequests(
     session: AuthSession,
   ): Promise<Result<readonly PullRequest[], PlatformError>> {
-    const octokit = new Octokit({ auth: session.accessToken });
+    const octokit = createOctokit(session);
     this.logger.info("github.listOpenPullRequests.start");
 
     try {
@@ -131,7 +138,7 @@ export class GitHubProvider implements PlatformProvider {
     if (ref.platform !== "github") {
       return err({ code: "platform_error", message: "ref platform mismatch" });
     }
-    const octokit = new Octokit({ auth: session.accessToken });
+    const octokit = createOctokit(session);
     this.logger.debug("github.getPullRequest.start", {
       owner: ref.owner,
       repo: ref.repo,
@@ -175,7 +182,7 @@ export class GitHubProvider implements PlatformProvider {
     if (ref.platform !== "github") {
       return err({ code: "platform_error", message: "ref platform mismatch" });
     }
-    const octokit = new Octokit({ auth: session.accessToken });
+    const octokit = createOctokit(session);
     this.logger.debug("github.getDiff.start", {
       owner: ref.owner,
       repo: ref.repo,
@@ -214,7 +221,7 @@ export class GitHubProvider implements PlatformProvider {
     if (ref.platform !== "github") {
       return err({ code: "platform_error", message: "ref platform mismatch" });
     }
-    const octokit = new Octokit({ auth: session.accessToken });
+    const octokit = createOctokit(session);
 
     try {
       if (comment.kind === "pr_comment") {
@@ -274,7 +281,7 @@ export class GitHubProvider implements PlatformProvider {
     if (ref.platform !== "github") {
       return err({ code: "platform_error", message: "ref platform mismatch" });
     }
-    const octokit = new Octokit({ auth: session.accessToken });
+    const octokit = createOctokit(session);
 
     try {
       await octokit.rest.pulls.createReview({
@@ -307,7 +314,7 @@ export class GitHubProvider implements PlatformProvider {
     if (ref.platform !== "github") {
       return err({ code: "platform_error", message: "ref platform mismatch" });
     }
-    const octokit = new Octokit({ auth: session.accessToken });
+    const octokit = createOctokit(session);
 
     try {
       const { data } = await octokit.rest.repos.getContent({
