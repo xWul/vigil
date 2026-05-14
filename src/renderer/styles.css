@@ -42,5 +42,24 @@
     margin: 0;
     padding: 0;
     overscroll-behavior: none;
+    color-scheme: dark;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #13110f;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #272320;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3d3a36;
   }
 }

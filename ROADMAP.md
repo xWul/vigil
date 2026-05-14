@@ -253,6 +253,10 @@ _Phase 4 complete 2026-05-13._
   - [x] Architecture tab: metrics strip, layer map diagram with violation highlights,
         violations table with layer badges and file:line pointers
   - [ ] Hunk-level collapse / expand
+  - [ ] Filter non-reviewable files from analysis: binary files (images,
+        fonts, icons), generated lockfiles (`package-lock.json`,
+        `pnpm-lock.yaml`, `yarn.lock`), docs (`.md`, `.mdx`), and
+        minified/compiled output. Extends the existing `*.test.*` filter.
 - [x] Review result cache (`ReviewCache`): JSON in `userData/reviews/` keyed by `headSha`,
       7-day TTL. Revisiting a PR loads instantly.
 - [x] Test files excluded from analysis (`*.test.*`, `*.spec.*` filtered before all passes)
@@ -278,6 +282,12 @@ faster than in the GitHub web UI for a non-trivial PR.
 - [ ] Eviction policy (LRU, size cap)
 - [ ] Consistency pass uses cache for "find similar code" prompts
 - [ ] Optional: tree-sitter integration for symbol-aware context
+- [ ] Evaluate TanstackQuery for IPC-backed data fetching: replace
+      `useEffect`-based data loading with cache-aware query hooks
+      (`useQuery` wrapping `api.invoke`). Enables background refetch,
+      stale-while-revalidate for the queue, and eliminates the main
+      data-fetching `useEffect` in `WorkspaceScreen`. Requires a custom
+      query client adapter for Electron IPC. ADR if adopted.
 
 **Exit criteria:** Reviewing a 500-line PR in a 50k-line codebase
 surfaces at least one finding that requires cross-file context — and

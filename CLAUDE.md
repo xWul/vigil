@@ -31,7 +31,9 @@ Before making non-trivial changes:
 - **Build:** Vite 6 + electron-vite.
 - **Tests:** Vitest 3, co-located with source (`Foo.ts` next to `Foo.test.ts`).
 - **Package manager:** pnpm. Do not use npm or yarn in this project.
-- **Lint/format:** ESLint + Prettier. Run before committing.
+- **Lint/format:** ESLint + Prettier. Run `pnpm lint:fix && pnpm format`
+  before committing. `pnpm check` runs all checks in one shot (typecheck +
+  lint + format + tests).
 
 ## Where things live
 
@@ -104,6 +106,25 @@ not a license to special-case.
   removed the global `JSX` namespace, so `JSX.Element` no longer
   works, and `React.JSX.Element` adds noise. Let TypeScript infer
   the return type. The JSX inside is still fully type-checked.
+
+### React effects
+
+Prefer event handlers and derived state (`useMemo`) over `useEffect`.
+Most `useEffect` calls can be replaced by one of these patterns:
+
+- **Synchronizing derived state** → `useMemo`, not `useEffect` + `setState`
+- **Reacting to a user action** → event handler, not `useEffect` on a state flag
+- **Data fetching** → triggered by the event that opens the screen, not
+  `useEffect` on mount
+
+`useEffect` is appropriate only for:
+
+- **Subscriptions** — `api.on(...)`, DOM `addEventListener`, timers
+- **DOM side effects** — scroll, focus, measuring layout
+
+Never use `useEffect` as a lifecycle hook to run code "on mount." If
+something must happen when a component appears, ask whether it belongs in
+the action that caused the component to render.
 
 ### Comments
 
