@@ -4,6 +4,7 @@ import type { AuthSession } from "../auth/AuthProvider.js";
 import type { FileDiff } from "../platforms/model/index.js";
 import type { PlatformProvider, PRRef } from "../platforms/PlatformProvider.js";
 import type { ReviewContext, ReviewError } from "./CodeAnalyzer.js";
+import type { RepoCache } from "../git/RepoCache.js";
 
 export const DEFAULT_TOKEN_BUDGET = 160_000;
 
@@ -20,6 +21,7 @@ export async function buildReviewContext(
   provider: PlatformProvider,
   ref: PRRef,
   tokenBudget: number = DEFAULT_TOKEN_BUDGET,
+  repoCache?: RepoCache,
 ): Promise<Result<ReviewContext, ReviewError>> {
   const prResult = await provider.getPullRequest(session, ref);
   if (!prResult.ok) {
@@ -48,6 +50,10 @@ export async function buildReviewContext(
     .slice()
     .sort((a, b) => countChangedLines(b) - countChangedLines(a));
 
+  if (repoCache) {
+    repoCache.ensureCloned(session, ref);
+  }
+
   const files = new Map<string, string>();
   let usedTokens = metaTokens + diffTokens;
 
@@ -55,12 +61,20 @@ export async function buildReviewContext(
     if (usedTokens >= tokenBudget) break;
     if (!pr.headSha) continue;
 
-    const contentResult = await provider.getFileContent(session, ref, file.newPath, pr.headSha);
-    if (!contentResult.ok) continue;
+    let content: string | undefined;
 
-    const content = contentResult.value;
+    if (repoCache) {
+      const cacheResult = await repoCache.readFile(ref, pr.headSha, file.newPath);
+      if (cacheResult.ok) content = cacheResult.value;
+    }
+
+    if (content === undefined) {
+      const apiResult = await provider.getFileContent(session, ref, file.newPath, pr.headSha);
+      if (!apiResult.ok) continue;
+      content = apiResult.value;
+    }
+
     const fileTokens = estimateTokens(content);
-
     if (usedTokens + fileTokens <= tokenBudget) {
       files.set(file.newPath, content);
       usedTokens += fileTokens;
