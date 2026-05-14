@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **PR Analysis tabs**: 6-lens tab bar above the workspace — Overview (pulse metrics, top
+  findings, activity timeline), Diff (3-panel inline review), Silent risks (4-col regression
+  table with evidence cells and detector legend), Semantic (numbered change cards with
+  BEHAVIOR/SECURITY/REFACTOR badges, before/after code blocks, plain-English explanations,
+  and risk notes), and Architecture (metrics strip, layer map with violation highlights,
+  violations table). Tab key cycles lenses; `reviewed X ago` timestamp appears when
+  analysis completes.
+
+- **Developer preview mode** (`pnpm dev:mock`): launches Vigil with a fully mocked API —
+  no GitHub connection required. Covers the complete flow: auth screen → sign-in → Review
+  Queue (4 mock PRs across GitHub and Azure DevOps) → Review Workspace (payments-service
+  #2847 with 8 findings). All 6 workspace tabs are populated with realistic content.
+
+- **Review Workspace redesign**: 3-panel layout matching the Claude Design handoff — 240px file
+  rail with risk dots and active teal accent rule, flex diff center with inline `vigil` findings
+  expanded on click, and a 320px conversation panel (AI summary + per-finding challenge thread).
+  Bottom strip with keyboard hints (`j`/`k` files, `n`/`p` findings, `m` approve) and
+  Comment / Request changes / Approve verdict buttons that open a compact compose overlay.
+  Diff backgrounds use the refined oklch palette from the design (`addBg`/`delBg`).
+
 - **Review Workspace** (`src/renderer/features/workspace/WorkspaceScreen.tsx`): full PR review
   screen with a unified diff view (syntax-highlighted, hunk headers, old/new line numbers),
   inline `FindingDot` markers in the gutter, a scrollable findings list panel on the right sorted

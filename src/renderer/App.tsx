@@ -8,13 +8,15 @@ import { Auth } from "./features/auth/Auth.js";
 import { ReviewQueue } from "./features/review-queue/ReviewQueue.js";
 import { Settings } from "./features/settings/Settings.js";
 import { WorkspaceScreen } from "./features/workspace/WorkspaceScreen.js";
+import { WorkspacePreview } from "./features/workspace/WorkspacePreview.js";
 
 type Route =
   | { screen: "checking" }
   | { screen: "auth" }
   | { screen: "queue"; accounts: readonly ConnectedAccount[] }
   | { screen: "settings"; accounts: readonly ConnectedAccount[] }
-  | { screen: "workspace"; pr: PullRequest; from: readonly ConnectedAccount[] };
+  | { screen: "workspace"; pr: PullRequest; from: readonly ConnectedAccount[] }
+  | { screen: "preview"; from: Route };
 
 function CheckingScreen() {
   const t = TOKENS.dark;
@@ -43,10 +45,15 @@ function CheckingScreen() {
   );
 }
 
+const MOCK_MODE = import.meta.env.VITE_MOCK === "1";
+
 export function App() {
-  const [route, setRoute] = useState<Route>({ screen: "checking" });
+  const [route, setRoute] = useState<Route>(
+    MOCK_MODE ? { screen: "auth" } : { screen: "checking" },
+  );
 
   useEffect(() => {
+    if (MOCK_MODE) return; // mock mode skips auth
     async function checkAccounts() {
       try {
         const result = await api.invoke("auth:getAccounts");
@@ -93,6 +100,9 @@ export function App() {
           pr={route.pr}
           onBack={() => setRoute({ screen: "queue", accounts: route.from })}
         />
+      )}
+      {route.screen === "preview" && (
+        <WorkspacePreview onBack={() => setRoute(route.from)} />
       )}
     </div>
   );

@@ -14,4 +14,22 @@ declare global {
   }
 }
 
-export const api: RendererApi = window.api;
+// Indirection so WorkspacePreview can swap in a mock before child effects run.
+let _impl: RendererApi = window.api;
+
+export const api: RendererApi = {
+  invoke(channel, ...args) {
+    return _impl.invoke(channel, ...args);
+  },
+  on(channel, handler) {
+    return _impl.on(channel, handler);
+  },
+};
+
+export function _overrideApi(mock: RendererApi): () => void {
+  const prev = _impl;
+  _impl = mock;
+  return () => {
+    _impl = prev;
+  };
+}

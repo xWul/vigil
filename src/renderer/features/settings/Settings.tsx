@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import type { ConnectedAccount } from "../../../shared/auth.js";
 import type { Settings as SettingsData } from "../../../shared/settings.js";
@@ -7,54 +7,121 @@ import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 
 type Platform = "github" | "azure-devops";
 type AiProvider = "anthropic" | "openai";
-type SaveState = "idle" | "saving" | "saved" | "error";
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
+// ── Brand marks ───────────────────────────────────────────────────────────────
 
-function GitHubIcon({ color }: { color: string }) {
+function GitHubMark({ size = 18, color }: { size?: number; color: string }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill={color}>
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: "block" }}>
+      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55v-1.93c-3.2.7-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.78 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.25 5.68.41.35.78 1.05.78 2.12v3.14c0 .3.21.66.79.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z" />
     </svg>
   );
 }
 
-function AzureIcon({ color }: { color: string }) {
+function AzureDevOpsMark({ size = 18 }: { size?: number }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: "block" }}>
+      <defs>
+        <linearGradient id="azdo-settings-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#0078d4" />
+          <stop offset="100%" stopColor="#005a9e" />
+        </linearGradient>
+      </defs>
       <path
-        d="M9.16 1L5.12 5.34 1 12.16h3.56L9.16 1zM9.88 2.04l-2.2 5.88 3.84 4.32-7.04 1.72H15L9.88 2.04z"
-        fill={color}
+        d="M22.5 6.4v11.7l-4.7 3.9-7.5-2.7v2.6L6.2 17 18 17.9V7.3l4.5-.9zM18 7.3L11 1.5l-3.4 3v3.9L1.5 10.3l2.1 2.7v6L11 22.5v-7.7l7-2.5z"
+        fill="url(#azdo-settings-g)"
       />
     </svg>
   );
 }
 
-// ── Section ───────────────────────────────────────────────────────────────────
+// ── Provider data ─────────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+const PROVIDER_INFO: Record<
+  AiProvider,
+  { name: string; description: string; modelsHint: string; models: string[] }
+> = {
+  anthropic: {
+    name: "Anthropic",
+    description: "Claude family — strong reasoning over long contexts.",
+    modelsHint: "Sonnet · Opus · Haiku",
+    models: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5-20251001"],
+  },
+  openai: {
+    name: "OpenAI",
+    description: "GPT family — broad model coverage.",
+    modelsHint: "GPT-5 · GPT-4.1 · o4",
+    models: ["gpt-5", "gpt-4.1", "o4-mini"],
+  },
+};
+
+const MODEL_LABELS: Record<string, string> = {
+  "claude-sonnet-4-6": "Claude Sonnet 4.6",
+  "claude-opus-4-7": "Claude Opus 4.7",
+  "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
+  "gpt-5": "GPT-5",
+  "gpt-4.1": "GPT-4.1",
+  "o4-mini": "o4-mini",
+};
+
+// ── Atoms ─────────────────────────────────────────────────────────────────────
+
+function SectionHeading({ title, subtitle }: { title: string; subtitle: string }) {
   const t = TOKENS.dark;
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div
+    <div style={{ marginBottom: 28 }}>
+      <h2
         style={{
+          margin: 0,
+          fontSize: 18,
+          fontWeight: 500,
+          letterSpacing: "-0.012em",
+          color: t.text,
           fontFamily: SANS,
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase" as const,
-          color: t.textFaint,
-          marginBottom: 12,
         }}
       >
         {title}
-      </div>
+      </h2>
+      <p
+        style={{
+          margin: "6px 0 0",
+          fontSize: 13.5,
+          color: t.textDim,
+          letterSpacing: "-0.003em",
+          lineHeight: 1.5,
+          fontFamily: SANS,
+        }}
+      >
+        {subtitle}
+      </p>
+    </div>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      style={{
+        fontSize: 12.5,
+        color: t.textDim,
+        fontWeight: 450,
+        marginBottom: 10,
+        fontFamily: SANS,
+        letterSpacing: "-0.003em",
+      }}
+    >
       {children}
     </div>
   );
 }
 
-// ── Account row ───────────────────────────────────────────────────────────────
+function SectionDivider() {
+  const t = TOKENS.dark;
+  return <div style={{ height: 1, background: t.border, margin: "52px 0" }} />;
+}
+
+// ── Connected account row ─────────────────────────────────────────────────────
 
 function AccountRow({
   account,
@@ -67,50 +134,69 @@ function AccountRow({
 }) {
   const t = TOKENS.dark;
   const isGitHub = account.platform === "github";
+  const platformLabel = isGitHub ? "GitHub" : "Azure DevOps";
 
   return (
     <div
       style={{
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "28px 1fr auto",
+        gap: 16,
         alignItems: "center",
-        gap: 12,
-        padding: "10px 14px",
-        background: t.surface,
-        borderRadius: 8,
-        marginBottom: 8,
+        padding: "18px 0",
+        borderBottom: `0.5px solid ${t.border}`,
       }}
     >
-      {isGitHub ? <GitHubIcon color={t.textDim} /> : <AzureIcon color={t.textDim} />}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 28,
+          height: 28,
+        }}
+      >
+        {isGitHub ? (
+          <GitHubMark size={18} color={t.text} />
+        ) : (
+          <AzureDevOpsMark size={18} />
+        )}
+      </div>
+      <div style={{ minWidth: 0 }}>
         <div
           style={{
-            fontFamily: SANS,
-            fontSize: 13,
-            fontWeight: 500,
+            fontSize: 14,
             color: t.text,
-            lineHeight: 1.3,
+            letterSpacing: "-0.005em",
+            fontFamily: SANS,
           }}
         >
-          {account.displayName}
+          {platformLabel}
         </div>
-        <div style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint, marginTop: 1 }}>
-          {account.login}
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 12.5,
+            color: t.textDim,
+            fontFamily: SANS,
+          }}
+        >
+          Signed in as{" "}
+          <span style={{ fontFamily: MONO, color: t.text }}>{account.login}</span>
         </div>
       </div>
       <button
         onClick={onSignOut}
         disabled={busy}
         style={{
-          fontFamily: SANS,
-          fontSize: 12,
-          color: busy ? t.textFaint : t.red,
           background: "none",
-          border: `1px solid ${busy ? t.border : "rgba(248,113,113,0.25)"}`,
-          borderRadius: 6,
-          padding: "4px 10px",
+          border: 0,
+          padding: 0,
+          fontFamily: SANS,
+          fontSize: 13,
+          color: busy ? t.textFaint : t.textDim,
           cursor: busy ? "default" : "pointer",
-          opacity: busy ? 0.5 : 1,
-          transition: "opacity 150ms",
+          transition: "color .12s",
         }}
       >
         {busy ? "Signing out…" : "Sign out"}
@@ -119,54 +205,104 @@ function AccountRow({
   );
 }
 
-// ── Provider toggle ───────────────────────────────────────────────────────────
+// ── Provider radio row ────────────────────────────────────────────────────────
 
-function ProviderToggle({
-  value,
-  onChange,
+function ProviderRow({
+  provider,
+  selected,
+  onClick,
 }: {
-  value: AiProvider | null;
-  onChange: (p: AiProvider) => void;
+  provider: AiProvider;
+  selected: boolean;
+  onClick: () => void;
 }) {
   const t = TOKENS.dark;
-
-  const btn = (p: AiProvider, label: string) => {
-    const active = value === p;
-    return (
-      <button
-        key={p}
-        onClick={() => onChange(p)}
-        style={{
-          flex: 1,
-          fontFamily: SANS,
-          fontSize: 13,
-          fontWeight: active ? 500 : 400,
-          color: active ? t.text : t.textDim,
-          background: active ? t.selected : "none",
-          border: "none",
-          borderRadius: 6,
-          padding: "7px 0",
-          cursor: "pointer",
-          transition: "background 150ms, color 150ms",
-        }}
-      >
-        {label}
-      </button>
-    );
-  };
+  const info = PROVIDER_INFO[provider];
 
   return (
     <div
+      onClick={onClick}
       style={{
-        display: "flex",
-        background: t.surface,
-        borderRadius: 8,
-        padding: 3,
-        gap: 2,
+        position: "relative",
+        display: "grid",
+        gridTemplateColumns: "22px 1fr auto",
+        gap: 14,
+        alignItems: "center",
+        padding: "14px 14px 14px 16px",
+        borderRadius: 6,
+        cursor: "default",
+        background: selected ? t.selected : "transparent",
+        transition: "background .12s",
       }}
     >
-      {btn("anthropic", "Anthropic")}
-      {btn("openai", "OpenAI")}
+      {selected && (
+        <span
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 10,
+            bottom: 10,
+            width: 2,
+            background: t.accent,
+            borderRadius: 2,
+          }}
+        />
+      )}
+      <span
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: "50%",
+          border: `1.5px solid ${selected ? t.accent : t.textFaint}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "border-color .12s",
+          flexShrink: 0,
+        }}
+      >
+        {selected && (
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: t.accent,
+            }}
+          />
+        )}
+      </span>
+      <div>
+        <div
+          style={{
+            fontSize: 14,
+            color: t.text,
+            letterSpacing: "-0.005em",
+            fontFamily: SANS,
+          }}
+        >
+          {info.name}
+        </div>
+        <div
+          style={{
+            marginTop: 3,
+            fontSize: 12,
+            color: t.textDim,
+            fontFamily: SANS,
+          }}
+        >
+          {info.description}
+        </div>
+      </div>
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 11,
+          color: t.textFaint,
+        }}
+      >
+        {info.modelsHint}
+      </div>
     </div>
   );
 }
@@ -186,119 +322,353 @@ function ApiKeyField({
 }) {
   const t = TOKENS.dark;
   const [value, setValue] = useState("");
-  const [state, setState] = useState<SaveState>("idle");
+  const [revealed, setRevealed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const placeholder = provider === "anthropic" ? "sk-ant-api03-…" : "sk-proj-…";
 
   async function handleSave() {
     if (!value.trim()) return;
-    setState("saving");
+    setSaving(true);
+    setSaveError(null);
     try {
       await onSave(value.trim());
       setValue("");
-      setState("saved");
-      setTimeout(() => setState("idle"), 2000);
     } catch {
-      setState("error");
+      setSaveError("Failed to save — try again");
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleDelete() {
-    setState("saving");
+    setSaving(true);
+    setSaveError(null);
     try {
       await onDelete();
-      setState("idle");
     } catch {
-      setState("error");
+      setSaveError("Failed to remove key");
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (hasKey && state !== "error") {
+  if (hasKey) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div>
         <div
           style={{
-            flex: 1,
-            fontFamily: MONO,
-            fontSize: 13,
-            color: t.textFaint,
-            background: t.surface,
-            borderRadius: 8,
-            padding: "9px 12px",
-            letterSpacing: "0.12em",
+            display: "flex",
+            alignItems: "center",
+            borderBottom: `1px solid ${t.border}`,
           }}
         >
-          ••••••••••••••••••••
+          <div
+            style={{
+              flex: 1,
+              fontFamily: MONO,
+              fontSize: 13.5,
+              color: t.text,
+              padding: "10px 0",
+              letterSpacing: "0.08em",
+            }}
+          >
+            {"•".repeat(32)}
+          </div>
+          <button
+            onClick={() => void handleDelete()}
+            disabled={saving}
+            style={{
+              marginLeft: 16,
+              fontSize: 12,
+              padding: "4px 0",
+              background: "none",
+              border: 0,
+              fontFamily: SANS,
+              color: saving ? t.textFaint : t.textDim,
+              cursor: saving ? "default" : "pointer",
+              transition: "color .12s",
+            }}
+          >
+            {saving ? "Removing…" : "Remove"}
+          </button>
         </div>
-        <button
-          onClick={() => void handleDelete()}
-          disabled={state === "saving"}
+        {saveError && (
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+              color: t.red,
+              fontFamily: SANS,
+            }}
+          >
+            {saveError}
+          </div>
+        )}
+        <div
           style={{
-            fontFamily: SANS,
-            fontSize: 12,
-            color: state === "saving" ? t.textFaint : t.red,
-            background: "none",
-            border: `1px solid ${state === "saving" ? t.border : "rgba(248,113,113,0.25)"}`,
-            borderRadius: 6,
-            padding: "8px 14px",
-            cursor: state === "saving" ? "default" : "pointer",
+            marginTop: 10,
+            fontSize: 11.5,
+            color: t.textFaint,
+            lineHeight: 1.55,
+            fontFamily: MONO,
           }}
         >
-          {state === "saving" ? "Removing…" : "Remove"}
-        </button>
+          Your key is stored in your OS keychain and never leaves your machine.
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", gap: 8 }}>
+    <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          borderBottom: `1px solid ${revealed ? t.accent : t.border}`,
+          transition: "border-color .12s",
+        }}
+      >
         <input
-          type="password"
+          type={revealed ? "text" : "password"}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleSave();
           }}
           placeholder={placeholder}
-          disabled={state === "saving"}
+          disabled={saving}
           style={{
             flex: 1,
+            minWidth: 0,
             fontFamily: MONO,
-            fontSize: 13,
+            fontSize: 13.5,
+            letterSpacing: "0.01em",
             color: t.text,
-            background: t.surface,
-            border: `1px solid ${t.border}`,
-            borderRadius: 8,
-            padding: "9px 12px",
+            background: "transparent",
+            border: 0,
             outline: "none",
+            padding: "10px 0",
           }}
         />
         <button
-          onClick={() => void handleSave()}
-          disabled={!value.trim() || state === "saving"}
+          onClick={() => setRevealed((r) => !r)}
           style={{
+            marginLeft: 16,
+            fontSize: 12,
+            padding: "4px 0",
+            minWidth: 38,
+            textAlign: "right",
+            background: "none",
+            border: 0,
             fontFamily: SANS,
-            fontSize: 13,
-            fontWeight: 500,
-            color: !value.trim() || state === "saving" ? t.textFaint : t.bg,
-            background: !value.trim() || state === "saving" ? t.surface : t.accent,
-            border: "none",
-            borderRadius: 8,
-            padding: "9px 18px",
-            cursor: !value.trim() || state === "saving" ? "default" : "pointer",
-            transition: "background 150ms, color 150ms",
+            color: t.textDim,
+            cursor: "pointer",
           }}
         >
-          {state === "saving" ? "Saving…" : "Save"}
+          {revealed ? "Hide" : "Show"}
         </button>
       </div>
-      {state === "saved" && (
-        <span style={{ fontFamily: SANS, fontSize: 12, color: t.green }}>Saved</span>
+      {saveError && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            color: t.red,
+            fontFamily: SANS,
+          }}
+        >
+          {saveError}
+        </div>
       )}
-      {state === "error" && (
-        <span style={{ fontFamily: SANS, fontSize: 12, color: t.red }}>Failed — try again</span>
+      {value.trim() && (
+        <button
+          onClick={() => void handleSave()}
+          disabled={saving}
+          style={{
+            marginTop: 10,
+            padding: "6px 14px",
+            borderRadius: 6,
+            border: 0,
+            background: saving ? t.border : t.accent,
+            color: saving ? t.textFaint : t.bg,
+            fontFamily: SANS,
+            fontSize: 12.5,
+            fontWeight: 500,
+            cursor: saving ? "default" : "pointer",
+          }}
+        >
+          {saving ? "Saving…" : "Save key"}
+        </button>
       )}
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 11.5,
+          color: t.textFaint,
+          lineHeight: 1.55,
+          fontFamily: MONO,
+        }}
+      >
+        Your key is stored in your OS keychain and never leaves your machine.
+      </div>
+    </div>
+  );
+}
+
+// ── Model dropdown ────────────────────────────────────────────────────────────
+
+function ModelDropdown({
+  provider,
+  value,
+  onChange,
+}: {
+  provider: AiProvider;
+  value: string | null;
+  onChange: (m: string) => void;
+}) {
+  const t = TOKENS.dark;
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const options = PROVIDER_INFO[provider].models;
+  const current = value && options.includes(value) ? value : options[0] ?? "";
+  const label = MODEL_LABELS[current] ?? current;
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          width: "100%",
+          border: 0,
+          borderBottom: `1px solid ${t.border}`,
+          padding: "10px 0",
+          background: "transparent",
+          cursor: "default",
+        }}
+      >
+        <span
+          style={{
+            flex: 1,
+            textAlign: "left",
+            fontSize: 14,
+            color: t.text,
+            letterSpacing: "-0.003em",
+            fontFamily: SANS,
+          }}
+        >
+          {label}
+        </span>
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+          <path
+            d="M2 4.2l3.5 3 3.5-3"
+            stroke={t.textDim}
+            strokeWidth="1.1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: t.surface,
+            borderRadius: 8,
+            padding: 4,
+            border: `0.5px solid ${t.border}`,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+            zIndex: 5,
+          }}
+        >
+          {options.map((o) => (
+            <button
+              key={o}
+              onClick={() => {
+                onChange(o);
+                setOpen(false);
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "7px 10px",
+                borderRadius: 6,
+                border: 0,
+                background: o === current ? t.selected : "transparent",
+                color: o === current ? t.text : t.textDim,
+                fontFamily: SANS,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              {MODEL_LABELS[o] ?? o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Segmented control ─────────────────────────────────────────────────────────
+
+function Segmented({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        padding: 3,
+        borderRadius: 7,
+        background: t.surface,
+        border: `0.5px solid ${t.border}`,
+      }}
+    >
+      {options.map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange(opt)}
+          style={{
+            border: 0,
+            padding: "7px 18px",
+            borderRadius: 5,
+            fontFamily: SANS,
+            fontSize: 13,
+            cursor: "pointer",
+            background: value === opt ? t.selected : "transparent",
+            color: value === opt ? t.text : t.textDim,
+            letterSpacing: "-0.003em",
+            transition: "color .12s, background .12s",
+          }}
+        >
+          {opt}
+        </button>
+      ))}
     </div>
   );
 }
@@ -316,6 +686,7 @@ export function Settings({
   const [accounts, setAccounts] = useState<readonly ConnectedAccount[]>(initialAccounts);
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [signingOut, setSigningOut] = useState<Platform | null>(null);
+  const [theme, setTheme] = useState("Dark");
 
   useEffect(() => {
     void api.invoke("settings:get").then((r) => {
@@ -364,6 +735,19 @@ export function Settings({
     );
   }
 
+  async function handleSetModel(model: string) {
+    await api.invoke("settings:set", { model });
+    setSettings((s) => (s ? { ...s, model } : s));
+  }
+
+  const selectedProvider = settings?.aiProvider ?? null;
+  const hasKey =
+    selectedProvider === "anthropic"
+      ? (settings?.hasAnthropicKey ?? false)
+      : selectedProvider === "openai"
+        ? (settings?.hasOpenAIKey ?? false)
+        : false;
+
   return (
     <div
       style={{
@@ -372,65 +756,111 @@ export function Settings({
         background: t.bg,
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        color: t.text,
+        fontFamily: SANS,
       }}
     >
-      {/* Draggable titlebar */}
+      {/* Top strip */}
       <div
         style={
           {
-            height: 52,
             display: "flex",
             alignItems: "center",
-            padding: "0 20px",
-            WebkitAppRegion: "drag",
+            gap: 18,
+            padding: "0 28px",
+            height: 52,
             flexShrink: 0,
+            borderBottom: `0.5px solid ${t.border}`,
+            WebkitAppRegion: "drag",
           } as React.CSSProperties
         }
-      ></div>
+      >
+        <button
+          onClick={() => onClose(accounts)}
+          style={
+            {
+              WebkitAppRegion: "no-drag",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              color: t.textDim,
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              fontFamily: SANS,
+              transition: "color .12s",
+            } as React.CSSProperties
+          }
+        >
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path
+              d="M7 2L3.5 5.5L7 9"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Queue
+        </button>
+        <div style={{ width: 0.5, height: 18, background: t.border }} />
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            letterSpacing: "-0.005em",
+          }}
+        >
+          Settings
+        </div>
+        <div style={{ flex: 1 }} />
+        <div
+          style={
+            {
+              WebkitAppRegion: "no-drag",
+              fontFamily: MONO,
+              fontSize: 11,
+              color: t.textFaint,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            } as React.CSSProperties
+          }
+        >
+          <span
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: t.green,
+              display: "inline-block",
+            }}
+          />
+          changes save automatically
+        </div>
+      </div>
 
-      {/* Scrollable body */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 0 48px" }}>
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 32px" }}>
-          {/* Back + title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 36 }}>
-            <button
-              onClick={() => onClose(accounts)}
-              style={{
-                fontFamily: SANS,
-                fontSize: 13,
-                color: t.textDim,
-                background: "none",
-                border: "none",
-                padding: "4px 0",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-              }}
-            >
-              <span style={{ fontSize: 15, lineHeight: 1 }}>←</span>
-              Back
-            </button>
-            <span style={{ color: t.border }}>·</span>
-            <span
-              style={{
-                fontFamily: SANS,
-                fontSize: 15,
-                fontWeight: 600,
-                color: t.text,
-                letterSpacing: "-0.01em",
-              }}
-            >
-              Settings
-            </span>
-          </div>
-
-          <Section title="Accounts">
+      {/* Scrollable content */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: "56px 32px 80px" }}>
+          {/* ── 1. Connected accounts ── */}
+          <SectionHeading
+            title="Connected accounts"
+            subtitle="Sign-in state for the platforms Vigil watches."
+          />
+          <div style={{ borderTop: `0.5px solid ${t.border}` }}>
             {accounts.length === 0 ? (
-              <p style={{ fontFamily: SANS, fontSize: 13, color: t.textFaint, margin: 0 }}>
+              <div
+                style={{
+                  padding: "18px 0",
+                  fontSize: 13.5,
+                  color: t.textFaint,
+                }}
+              >
                 No connected accounts.
-              </p>
+              </div>
             ) : (
               accounts.map((a) => (
                 <AccountRow
@@ -441,36 +871,69 @@ export function Settings({
                 />
               ))
             )}
-          </Section>
+          </div>
 
-          <Section title="AI Provider">
-            <ProviderToggle
-              value={settings?.aiProvider ?? null}
-              onChange={(p) => void handleSetProvider(p)}
-            />
-          </Section>
+          <SectionDivider />
 
-          {settings && (
+          {/* ── 2. AI provider ── */}
+          <SectionHeading
+            title="AI provider"
+            subtitle="The model Vigil uses to summarize PRs and surface risks."
+          />
+
+          <div style={{ marginBottom: 36 }}>
+            <FieldLabel>Provider</FieldLabel>
+            <div style={{ marginLeft: -16 }}>
+              {(["anthropic", "openai"] as AiProvider[]).map((p) => (
+                <ProviderRow
+                  key={p}
+                  provider={p}
+                  selected={selectedProvider === p}
+                  onClick={() => void handleSetProvider(p)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {selectedProvider && (
             <>
-              <Section title="Anthropic API Key">
+              <div style={{ marginBottom: 36 }}>
+                <FieldLabel>API key</FieldLabel>
                 <ApiKeyField
-                  provider="anthropic"
-                  hasKey={settings.hasAnthropicKey}
-                  onSave={(key) => handleSaveKey("anthropic", key)}
-                  onDelete={() => handleDeleteKey("anthropic")}
+                  provider={selectedProvider}
+                  hasKey={hasKey}
+                  onSave={(key) => handleSaveKey(selectedProvider, key)}
+                  onDelete={() => handleDeleteKey(selectedProvider)}
                 />
-              </Section>
+              </div>
 
-              <Section title="OpenAI API Key">
-                <ApiKeyField
-                  provider="openai"
-                  hasKey={settings.hasOpenAIKey}
-                  onSave={(key) => handleSaveKey("openai", key)}
-                  onDelete={() => handleDeleteKey("openai")}
+              <div>
+                <FieldLabel>Model</FieldLabel>
+                <ModelDropdown
+                  provider={selectedProvider}
+                  value={settings?.model ?? null}
+                  onChange={(m) => void handleSetModel(m)}
                 />
-              </Section>
+              </div>
             </>
           )}
+
+          <SectionDivider />
+
+          {/* ── 3. Appearance ── */}
+          <SectionHeading
+            title="Appearance"
+            subtitle="How Vigil looks on your machine."
+          />
+
+          <div>
+            <FieldLabel>Theme</FieldLabel>
+            <Segmented
+              options={["System", "Light", "Dark"]}
+              value={theme}
+              onChange={setTheme}
+            />
+          </div>
         </div>
       </div>
     </div>

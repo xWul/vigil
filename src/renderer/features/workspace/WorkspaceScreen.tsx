@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 
 import type {
   Diff,
   FileDiff,
   Hunk,
+  DiffLine,
   NewReview,
   PullRequest,
   ReviewVerdict,
@@ -11,537 +12,402 @@ import type {
 import type { Finding, FindingPass } from "../../../shared/review.js";
 import { api } from "../../api.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
+import type { TabId } from "./AnalysisTabs.js";
+import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
 
-// ── Local types ───────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type PassPhase = { phase: "running" } | { phase: "done"; count: number };
 type PassMap = Partial<Record<FindingPass, PassPhase>>;
 
-interface QueuedComment {
-  finding: Finding;
-  body: string;
+interface ConvoMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
-interface Draft {
-  verdict: ReviewVerdict | null;
-  body: string;
-  comments: readonly QueuedComment[];
+interface ChallengeState {
+  finding: Finding;
+  messages: ConvoMessage[];
+  streaming: boolean;
+  streamToken: string;
+  input: string;
 }
+
+// ── Diff color tokens ─────────────────────────────────────────────────────────
+
+const CODE = {
+  gutterFg: "#4a463f",
+  addBg: "oklch(0.32 0.045 150 / 0.32)",
+  delBg: "oklch(0.32 0.05 25 / 0.32)",
+  addMark: "oklch(0.65 0.06 150)",
+  delMark: "oklch(0.60 0.08 25)",
+} as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function severityColor(s: Finding["severity"] | null | undefined): string {
+  const t = TOKENS.dark;
+  if (s === "critical" || s === "high") return t.red;
+  if (s === "medium") return t.amber;
+  if (s === "low") return t.green;
+  return t.textFaint;
+}
+
+function shortPath(p: string): string {
+  const parts = p.split("/");
+  return parts.length <= 2 ? p : parts.slice(-2).join("/");
+}
 
 function lineId(file: string, line: number): string {
   return `dl-${file.replace(/[^a-zA-Z0-9]/g, "_")}-${line}`;
 }
 
-function severityColor(s: Finding["severity"]): string {
-  const t = TOKENS.dark;
-  if (s === "critical" || s === "high") return t.red;
-  if (s === "medium") return t.amber;
-  return t.green;
+function fileId(path: string): string {
+  return `fs-${path.replace(/[^a-zA-Z0-9]/g, "_")}`;
 }
 
-function passLabel(pass: FindingPass): string {
-  const labels: Record<FindingPass, string> = {
-    correctness: "Correctness",
-    security: "Security",
-    consistency: "Consistency",
-    complexity: "Complexity",
-    duplication: "Duplication",
-    smells: "Smells",
-    "debug-artifacts": "Debug",
-    "type-safety": "Types",
-    "change-classification": "Change",
-    regression: "Regression",
-  };
-  return labels[pass];
+function findingKey(f: Finding): string {
+  return `${f.file}:${f.lines?.start ?? 0}:${f.title}`;
 }
 
-function fallbackRiskScore(findings: readonly Finding[]): 1 | 2 | 3 | 4 | 5 {
-  if (findings.some((f) => f.severity === "critical")) return 5;
-  if (findings.some((f) => f.severity === "high")) return 4;
-  if (findings.some((f) => f.severity === "medium")) return 3;
-  if (findings.some((f) => f.severity === "low")) return 2;
-  return 1;
+function formatAge(date: Date): string {
+  const ms = Date.now() - date.getTime();
+  const h = Math.floor(ms / 3_600_000);
+  if (h < 1) return "<1h";
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d`;
+  return `${Math.floor(d / 30)}mo`;
 }
 
-function formatFindingComment(f: Finding): string {
-  return `**[${f.severity.toUpperCase()}] ${f.title}**\n\n${f.description}${f.evidence ? `\n\n\`\`\`\n${f.evidence}\n\`\`\`` : ""}`;
+function extractHunkContext(diff: Diff, finding: Finding): string {
+  if (!finding.lines) return "";
+  const file = diff.files.find((f) => f.newPath === finding.file);
+  if (!file) return "";
+  for (const hunk of file.hunks) {
+    const end = hunk.newStart + hunk.newCount;
+    if (finding.lines.start >= hunk.newStart && finding.lines.start < end) {
+      return hunk.lines
+        .map((l) => {
+          const p = l.kind === "added" ? "+" : l.kind === "removed" ? "-" : " ";
+          return `${p}${l.content}`;
+        })
+        .join("\n");
+    }
+  }
+  return "";
 }
-// ── SeverityBadge ─────────────────────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: Finding["severity"] }) {
-  const color = severityColor(severity);
+function reviewSummary(findings: readonly Finding[], reviewDone: boolean): string {
+  if (!reviewDone) return "Reviewing…";
+  if (findings.length === 0) return "No findings — this PR looks clean.";
+  const high = findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
+  const med = findings.filter((f) => f.severity === "medium").length;
+  const low = findings.length - high - med;
+  const parts: string[] = [];
+  if (high) parts.push(`${high} high`);
+  if (med) parts.push(`${med} medium`);
+  if (low) parts.push(`${low} low`);
+  return `Found ${findings.length} finding${findings.length !== 1 ? "s" : ""} — ${parts.join(", ")}.`;
+}
+
+// ── KbdHint ───────────────────────────────────────────────────────────────────
+
+function KbdHint({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
   return (
     <span
       style={{
-        fontFamily: SANS,
-        fontSize: 10,
-        fontWeight: 600,
-        letterSpacing: "0.07em",
-        textTransform: "uppercase" as const,
-        color,
-        background: `${color}22`,
-        border: `1px solid ${color}44`,
-        borderRadius: 4,
-        padding: "2px 6px",
-        whiteSpace: "nowrap" as const,
+        fontFamily: MONO,
+        fontSize: 10.5,
+        padding: "1px 5px 2px",
+        borderRadius: 3,
+        background: dark ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+        color: dark ? "rgba(0,0,0,0.55)" : TOKENS.dark.textDim,
+        border: dark ? "0.5px solid rgba(0,0,0,0.1)" : "0.5px solid rgba(255,255,255,0.06)",
       }}
     >
-      {severity}
+      {children}
     </span>
   );
 }
 
-// ── FindingDot ────────────────────────────────────────────────────────────────
+// ── TopStrip ──────────────────────────────────────────────────────────────────
 
-function FindingDot({
-  findings,
-  focused,
-  onClick,
-}: {
-  findings: Finding[];
-  focused: boolean;
-  onClick: () => void;
-}) {
-  const top = findings[0];
-  if (!top) return <div style={{ width: 16 }} />;
-  const color = severityColor(top.severity);
+function TopStrip({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
+  const t = TOKENS.dark;
+  const ref = pr.ref;
+  const repoLabel = ref.repo;
+  const prNum = ref.platform === "github" ? ref.number : ref.id;
+
   return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      title={`${findings.length} finding${findings.length > 1 ? "s" : ""}: ${top.title}`}
-      style={{
-        width: 16,
-        height: 16,
-        borderRadius: "50%",
-        background: focused ? color : `${color}66`,
-        border: `2px solid ${focused ? color : `${color}88`}`,
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 0,
-        flexShrink: 0,
-        transition: "background 120ms, border-color 120ms",
-        position: "relative" as const,
-      }}
+    <div
+      style={
+        {
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          gap: 18,
+          padding: "0 24px",
+          flexShrink: 0,
+          borderBottom: `0.5px solid ${t.border}`,
+          WebkitAppRegion: "drag",
+        } as React.CSSProperties
+      }
     >
-      {findings.length > 1 && (
-        <span
+      <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+        <button
+          onClick={onBack}
           style={{
-            position: "absolute" as const,
-            top: -5,
-            right: -5,
-            background: color,
-            color: "#fff",
-            fontSize: 8,
-            fontFamily: MONO,
-            fontWeight: 700,
-            borderRadius: 6,
-            padding: "0 3px",
-            lineHeight: "12px",
-            minWidth: 12,
-            textAlign: "center" as const,
+            background: "transparent",
+            border: 0,
+            color: t.textDim,
+            cursor: "pointer",
+            padding: "4px 8px 4px 0",
+            fontFamily: SANS,
+            fontSize: 13,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          {findings.length}
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path
+              d="M7 2L3.5 5.5L7 9"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Queue
+        </button>
+      </div>
+
+      <div style={{ width: 0.5, height: 18, background: t.border, flexShrink: 0 }} />
+
+      <div
+        style={
+          {
+            display: "flex",
+            alignItems: "baseline",
+            gap: 12,
+            minWidth: 0,
+            flex: 1,
+            WebkitAppRegion: "drag",
+          } as React.CSSProperties
+        }
+      >
+        <span
+          style={{
+            fontFamily: SANS,
+            fontSize: 14,
+            fontWeight: 500,
+            letterSpacing: "-0.005em",
+            color: t.text,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {pr.title}
         </span>
-      )}
-    </button>
+        <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint, flexShrink: 0 }}>
+          #{prNum}
+        </span>
+      </div>
+
+      <div
+        style={
+          {
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            fontFamily: MONO,
+            fontSize: 11,
+            color: t.textDim,
+            flexShrink: 0,
+            WebkitAppRegion: "drag",
+          } as React.CSSProperties
+        }
+      >
+        <span>{repoLabel}</span>
+        <span style={{ color: t.textFaint }}>·</span>
+        <span>{pr.author.login}</span>
+        <span style={{ color: t.textFaint }}>·</span>
+        <span>
+          {pr.sourceBranch} <span style={{ color: t.textFaint }}>←</span> {pr.targetBranch}
+        </span>
+        <span style={{ color: t.textFaint }}>·</span>
+        <span>{pr.state === "draft" ? "Draft" : "Open"}</span>
+        <span style={{ color: t.textFaint }}>·</span>
+        <span>{formatAge(pr.updatedAt)}</span>
+      </div>
+    </div>
   );
 }
 
-// ── PassStrip ─────────────────────────────────────────────────────────────────
+// ── FileRail ──────────────────────────────────────────────────────────────────
 
-function PassStrip({ passes, visible }: { passes: PassMap; visible: boolean }) {
+function FileRail({
+  files,
+  findings,
+  activeIdx,
+  onSelect,
+}: {
+  files: readonly FileDiff[];
+  findings: readonly Finding[];
+  activeIdx: number;
+  onSelect: (idx: number) => void;
+}) {
   const t = TOKENS.dark;
-  const entries = Object.entries(passes) as [FindingPass, PassPhase][];
-  if (!visible || entries.length === 0) return null;
+
+  const fileSeverity = useMemo(() => {
+    const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+    const map = new Map<string, Finding["severity"] | null>();
+    for (const f of findings) {
+      const curr = map.get(f.file);
+      if (!curr || (rank[f.severity] ?? 0) > (rank[curr] ?? 0)) {
+        map.set(f.file, f.severity);
+      }
+    }
+    return map;
+  }, [findings]);
 
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "6px 16px",
-        borderTop: `1px solid ${t.border}`,
-        background: t.bg,
+        width: 240,
         flexShrink: 0,
-        flexWrap: "wrap" as const,
+        borderRight: `0.5px solid ${t.border}`,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}
     >
-      <span style={{ fontFamily: SANS, fontSize: 11, color: t.textFaint, marginRight: 2 }}>
-        Analysis:
-      </span>
-      {entries.map(([pass, state]) => (
-        <span
-          key={pass}
-          style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            color: state.phase === "done" ? t.textDim : t.accent,
-            background: state.phase === "done" ? t.surface : `${t.accent}18`,
-            border: `1px solid ${state.phase === "done" ? t.border : `${t.accent}44`}`,
-            borderRadius: 4,
-            padding: "2px 7px",
-            whiteSpace: "nowrap" as const,
-          }}
-        >
-          {state.phase === "running" ? "⟳ " : "✓ "}
-          {passLabel(pass)}
-          {state.phase === "done" && state.count > 0 ? ` · ${state.count}` : ""}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-// ── DiffView ──────────────────────────────────────────────────────────────────
-
-function HunkView({
-  hunk,
-  file,
-  findingMap,
-  focusedFinding,
-  onSelectFinding,
-}: {
-  hunk: Hunk;
-  file: FileDiff;
-  findingMap: Map<string, Finding[]>;
-  focusedFinding: Finding | null;
-  onSelectFinding: (f: Finding) => void;
-}) {
-  const t = TOKENS.dark;
-  const header = `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@`;
-
-  return (
-    <div style={{ marginBottom: 1 }}>
       <div
         style={{
-          fontFamily: MONO,
-          fontSize: 11,
+          padding: "18px 20px 10px",
+          fontSize: 10.5,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase" as const,
           color: t.textFaint,
-          background: `${t.accent}0f`,
-          padding: "3px 12px",
-          borderTop: `1px solid ${t.border}`,
-          borderBottom: `1px solid ${t.border}`,
-          userSelect: "none" as const,
-        }}
-      >
-        {header}
-      </div>
-      {hunk.lines.map((line, i) => {
-        const lineFindings =
-          line.newLine !== null ? (findingMap.get(`${file.newPath}:${line.newLine}`) ?? []) : [];
-        const isFocused = focusedFinding !== null && lineFindings.includes(focusedFinding);
-        const isAdded = line.kind === "added";
-        const isRemoved = line.kind === "removed";
-
-        const bgColor = isFocused
-          ? `${severityColor(focusedFinding.severity)}22`
-          : isAdded
-            ? "rgba(46,160,67,0.10)"
-            : isRemoved
-              ? "rgba(248,81,73,0.10)"
-              : "transparent";
-
-        const prefixColor = isAdded ? t.green : isRemoved ? t.red : t.textFaint;
-        const prefix = isAdded ? "+" : isRemoved ? "-" : " ";
-
-        const id = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
-
-        return (
-          <div
-            key={i}
-            id={id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              background: bgColor,
-              minHeight: 20,
-              transition: "background 120ms",
-            }}
-          >
-            {/* Old line number */}
-            <div
-              style={{
-                width: 40,
-                textAlign: "right" as const,
-                fontFamily: MONO,
-                fontSize: 11,
-                color: t.textFaint,
-                padding: "1px 8px 1px 0",
-                flexShrink: 0,
-                userSelect: "none" as const,
-                opacity: isAdded ? 0 : 1,
-              }}
-            >
-              {line.oldLine ?? ""}
-            </div>
-            {/* New line number */}
-            <div
-              style={{
-                width: 40,
-                textAlign: "right" as const,
-                fontFamily: MONO,
-                fontSize: 11,
-                color: t.textFaint,
-                padding: "1px 8px 1px 0",
-                flexShrink: 0,
-                userSelect: "none" as const,
-                opacity: isRemoved ? 0 : 1,
-              }}
-            >
-              {line.newLine ?? ""}
-            </div>
-            {/* Finding dot */}
-            <div
-              style={{
-                width: 20,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              {lineFindings.length > 0 && (
-                <FindingDot
-                  findings={lineFindings}
-                  focused={isFocused}
-                  onClick={() => onSelectFinding(lineFindings[0]!)}
-                />
-              )}
-            </div>
-            {/* Prefix + content */}
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 12,
-                lineHeight: "20px",
-                color: isAdded ? t.text : isRemoved ? t.textDim : t.textDim,
-                padding: "0 12px 0 4px",
-                whiteSpace: "pre" as const,
-                overflow: "hidden",
-              }}
-            >
-              <span style={{ color: prefixColor, userSelect: "none" as const }}>{prefix}</span>
-              {line.content}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function FileView({
-  file,
-  findingMap,
-  focusedFinding,
-  onSelectFinding,
-}: {
-  file: FileDiff;
-  findingMap: Map<string, Finding[]>;
-  focusedFinding: Finding | null;
-  onSelectFinding: (f: Finding) => void;
-}) {
-  const t = TOKENS.dark;
-  const [collapsed, setCollapsed] = useState(false);
-
-  const statusColor =
-    file.status === "added" ? t.green : file.status === "deleted" ? t.red : t.amber;
-  const statusLabel =
-    file.status === "added"
-      ? "A"
-      : file.status === "deleted"
-        ? "D"
-        : file.status === "renamed"
-          ? "R"
-          : "M";
-
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <button
-        onClick={() => setCollapsed((c) => !c)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          width: "100%",
-          background: t.surface,
-          border: "none",
-          borderTop: `1px solid ${t.border}`,
-          borderBottom: collapsed ? `1px solid ${t.border}` : "none",
-          padding: "6px 12px",
-          cursor: "pointer",
-          textAlign: "left" as const,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            fontWeight: 700,
-            color: statusColor,
-            background: `${statusColor}22`,
-            borderRadius: 3,
-            padding: "1px 4px",
-            flexShrink: 0,
-          }}
-        >
-          {statusLabel}
-        </span>
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 12,
-            color: t.text,
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap" as const,
-          }}
-        >
-          {file.newPath}
-          {file.status === "renamed" && file.oldPath && (
-            <span style={{ color: t.textFaint }}> ← {file.oldPath}</span>
-          )}
-        </span>
-        <span style={{ color: t.textFaint, fontSize: 11, fontFamily: SANS, flexShrink: 0 }}>
-          {collapsed ? "▶" : "▼"}
-        </span>
-      </button>
-      {!collapsed &&
-        file.hunks.map((hunk, i) => (
-          <HunkView
-            key={i}
-            hunk={hunk}
-            file={file}
-            findingMap={findingMap}
-            focusedFinding={focusedFinding}
-            onSelectFinding={onSelectFinding}
-          />
-        ))}
-    </div>
-  );
-}
-
-// ── FindingList ───────────────────────────────────────────────────────────────
-
-function FindingList({
-  findings,
-  selectedIdx,
-  reviewDone,
-  onSelect,
-}: {
-  findings: readonly Finding[];
-  selectedIdx: number | null;
-  reviewDone: boolean;
-  onSelect: (f: Finding) => void;
-}) {
-  const t = TOKENS.dark;
-
-  if (!reviewDone && findings.length === 0) {
-    return (
-      <div style={{ padding: "24px 16px", fontFamily: SANS, fontSize: 12, color: t.textFaint }}>
-        Review running…
-      </div>
-    );
-  }
-
-  if (reviewDone && findings.length === 0) {
-    return (
-      <div style={{ padding: "24px 16px", fontFamily: SANS, fontSize: 12, color: t.textFaint }}>
-        No findings — this PR looks clean.
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
-      <div
-        style={{
-          padding: "10px 16px 8px",
           fontFamily: SANS,
-          fontSize: 11,
-          color: t.textFaint,
-          borderBottom: `1px solid ${t.border}`,
           flexShrink: 0,
         }}
       >
-        {findings.length} finding{findings.length !== 1 ? "s" : ""} · j/k to navigate · Enter to
-        open
+        Files
+        <span
+          style={{
+            marginLeft: 8,
+            letterSpacing: 0,
+            textTransform: "none" as const,
+            fontFamily: MONO,
+          }}
+        >
+          {files.length}
+        </span>
       </div>
-      <div style={{ overflowY: "auto", flex: 1 }}>
-        {findings.map((f, i) => {
-          const isSelected = i === selectedIdx;
-          const color = severityColor(f.severity);
-          const file = f.file ? (f.file.split("/").pop() ?? f.file) : "";
-          const loc = f.lines ? `:${f.lines.start}` : "";
+      <div style={{ flex: 1, overflowY: "auto", padding: "2px 8px 12px" }}>
+        {files.map((file, idx) => {
+          const isActive = idx === activeIdx;
+          const sev = fileSeverity.get(file.newPath) ?? null;
+          const statusColor =
+            file.status === "added" ? t.green : file.status === "deleted" ? t.red : t.amber;
+          const statusLabel =
+            file.status === "added"
+              ? "new"
+              : file.status === "deleted"
+                ? "del"
+                : file.status === "renamed"
+                  ? "ren"
+                  : null;
+          const adds = file.hunks.reduce(
+            (s, h) => s + h.lines.filter((l) => l.kind === "added").length,
+            0,
+          );
+          const dels = file.hunks.reduce(
+            (s, h) => s + h.lines.filter((l) => l.kind === "removed").length,
+            0,
+          );
+
           return (
             <div
-              key={i}
-              onClick={() => onSelect(f)}
+              key={file.newPath}
+              onClick={() => onSelect(idx)}
               style={{
-                padding: "8px 16px",
-                cursor: "pointer",
-                background: isSelected ? t.selected : "transparent",
-                borderLeft: `2px solid ${isSelected ? color : "transparent"}`,
-                borderBottom: `1px solid ${t.border}`,
+                position: "relative",
+                padding: "10px 12px",
+                borderRadius: 6,
+                cursor: "default",
+                marginBottom: 2,
+                background: isActive ? t.selected : "transparent",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 3,
-                }}
-              >
+              {isActive && (
                 <span
                   style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: "50%",
-                    background: color,
-                    flexShrink: 0,
+                    position: "absolute",
+                    left: -8,
+                    top: 10,
+                    bottom: 10,
+                    width: 2,
+                    background: t.accent,
+                    borderRadius: 2,
                   }}
                 />
-                <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>
-                  {passLabel(f.pass)}
-                </span>
-                {file && (
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {sev ? (
                   <span
                     style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: t.textFaint,
-                      marginLeft: "auto",
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      flexShrink: 0,
+                      background: severityColor(sev),
+                    }}
+                  />
+                ) : (
+                  <span style={{ width: 6, flexShrink: 0 }} />
+                )}
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 12,
+                    color: t.text,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap" as const,
+                    flex: 1,
+                  }}
+                >
+                  {shortPath(file.newPath)}
+                </span>
+                {statusLabel && (
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      color: statusColor,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase" as const,
+                      fontFamily: SANS,
                     }}
                   >
-                    {file}
-                    {loc}
+                    {statusLabel}
                   </span>
                 )}
               </div>
               <div
                 style={{
-                  fontFamily: SANS,
-                  fontSize: 12,
-                  color: isSelected ? t.text : t.textDim,
-                  lineHeight: 1.3,
-                  paddingLeft: 13,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap" as const,
+                  marginTop: 4,
+                  marginLeft: 14,
+                  fontFamily: MONO,
+                  fontSize: 10.5,
+                  color: t.textFaint,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {f.title}
+                +{adds} −{dels}
               </div>
             </div>
           );
@@ -551,243 +417,742 @@ function FindingList({
   );
 }
 
-// ── Right panel ───────────────────────────────────────────────────────────────
+// ── Diff center ───────────────────────────────────────────────────────────────
 
-function FindingDetail({
+function InlineFindingRow({
   finding,
+  expanded,
+  onToggle,
+  onAskVigil,
   hasAI,
-  onAddToReview,
 }: {
   finding: Finding;
+  expanded: boolean;
+  onToggle: () => void;
+  onAskVigil: () => void;
   hasAI: boolean;
-  onAddToReview: (f: Finding) => void;
 }) {
   const t = TOKENS.dark;
+  const color = severityColor(finding.severity);
+
   return (
-    <div style={{ padding: "16px 16px 0" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <SeverityBadge severity={finding.severity} />
-        <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>
-          {passLabel(finding.pass)}
-        </span>
-      </div>
-      <div
-        style={{
-          fontFamily: SANS,
-          fontSize: 13,
-          fontWeight: 600,
-          color: t.text,
-          lineHeight: 1.4,
-          marginBottom: 8,
-        }}
-      >
-        {finding.title}
-      </div>
-      <div
-        style={{
-          fontFamily: SANS,
-          fontSize: 12,
-          color: t.textDim,
-          lineHeight: 1.6,
-          marginBottom: 12,
-        }}
-      >
-        {finding.description}
-      </div>
-      {finding.evidence && (
-        <pre
+    <div
+      onClick={onToggle}
+      style={{
+        padding: "8px 18px 8px 100px",
+        cursor: "default",
+        background: expanded ? "rgba(255,255,255,0.015)" : "transparent",
+        borderTop: `0.5px solid ${t.border}`,
+        borderBottom: `0.5px solid ${t.border}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: color,
+            marginTop: 7,
+            flexShrink: 0,
+          }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontFamily: SANS,
+              fontSize: 12.5,
+              color: expanded ? t.text : t.textDim,
+              lineHeight: 1.5,
+              transition: "color .12s",
+            }}
+          >
+            {finding.title}
+          </div>
+          {expanded && (
+            <>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontFamily: SANS,
+                  fontSize: 12.5,
+                  color: t.textDim,
+                  lineHeight: 1.65,
+                  maxWidth: 640,
+                }}
+              >
+                {finding.description}
+              </div>
+              {finding.evidence && (
+                <pre
+                  style={{
+                    marginTop: 8,
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    color: t.textDim,
+                    background: t.surface,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 6,
+                    padding: "6px 10px",
+                    overflow: "auto",
+                    whiteSpace: "pre-wrap" as const,
+                    wordBreak: "break-all" as const,
+                  }}
+                >
+                  {finding.evidence}
+                </pre>
+              )}
+              <div style={{ marginTop: 10, display: "flex", gap: 14 }}>
+                {hasAI && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAskVigil();
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      color: t.accent,
+                      fontFamily: SANS,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Ask Vigil about this
+                  </button>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle();
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: 0,
+                    padding: 0,
+                    color: t.textDim,
+                    fontFamily: SANS,
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+        <span
           style={{
             fontFamily: MONO,
-            fontSize: 11,
-            color: t.textDim,
-            background: t.surface,
-            border: `1px solid ${t.border}`,
-            borderRadius: 6,
-            padding: "8px 10px",
-            overflow: "auto",
-            whiteSpace: "pre-wrap" as const,
-            wordBreak: "break-all" as const,
-            marginBottom: 12,
-            margin: "0 0 12px",
+            fontSize: 10.5,
+            color: t.textFaint,
+            letterSpacing: "0.04em",
+            flexShrink: 0,
           }}
         >
-          {finding.evidence}
-        </pre>
-      )}
-      <button
-        onClick={() => onAddToReview(finding)}
-        style={{
-          fontFamily: SANS,
-          fontSize: 12,
-          fontWeight: 500,
-          color: t.text,
-          background: t.surface,
-          border: `1px solid ${t.border}`,
-          borderRadius: 6,
-          padding: "6px 12px",
-          cursor: "pointer",
-          width: "100%",
-          textAlign: "center" as const,
-          marginBottom: 12,
-        }}
-      >
-        + Add to review
-      </button>
-      <div
-        style={{
-          fontFamily: SANS,
-          fontSize: 11,
-          color: t.textFaint,
-          textAlign: "center" as const,
-          marginBottom: 16,
-        }}
-      >
-        {hasAI ? "Challenge this · coming soon" : "Configure AI in Settings to challenge findings"}
+          vigil
+        </span>
       </div>
-      <div style={{ height: 1, background: t.border, margin: "0 -16px" }} />
     </div>
   );
 }
 
-function ReviewDraftPanel({
-  draft,
-  prUrl,
-  onChange,
-  onSubmit,
-  submitting,
-  submitted,
+function DiffRow({ line }: { line: DiffLine }) {
+  const isAdd = line.kind === "added";
+  const isDel = line.kind === "removed";
+  const bg = isAdd ? CODE.addBg : isDel ? CODE.delBg : "transparent";
+  const marker = isAdd ? "+" : isDel ? "−" : " ";
+  const markerColor = isAdd ? CODE.addMark : isDel ? CODE.delMark : TOKENS.dark.textFaint;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "42px 42px 16px 1fr",
+        background: bg,
+        minHeight: 20,
+        lineHeight: "20px",
+      }}
+    >
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 11.5,
+          textAlign: "right" as const,
+          paddingRight: 8,
+          color: CODE.gutterFg,
+          fontVariantNumeric: "tabular-nums",
+          userSelect: "none" as const,
+        }}
+      >
+        {line.oldLine ?? ""}
+      </span>
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 11.5,
+          textAlign: "right" as const,
+          paddingRight: 8,
+          color: CODE.gutterFg,
+          fontVariantNumeric: "tabular-nums",
+          userSelect: "none" as const,
+        }}
+      >
+        {line.newLine ?? ""}
+      </span>
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 12,
+          textAlign: "center" as const,
+          color: markerColor,
+          userSelect: "none" as const,
+        }}
+      >
+        {marker}
+      </span>
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 12.5,
+          paddingRight: 18,
+          whiteSpace: "pre" as const,
+          color: TOKENS.dark.textDim,
+        }}
+      >
+        {line.content}
+      </span>
+    </div>
+  );
+}
+
+function HunkBlock({
+  hunk,
+  file,
+  findingsByLine,
+  expandedKeys,
+  onToggleFinding,
+  onAskVigil,
+  hasAI,
 }: {
-  draft: Draft;
-  prUrl: string;
-  onChange: (d: Partial<Draft>) => void;
-  onSubmit: () => void;
-  submitting: boolean;
-  submitted: boolean;
+  hunk: Hunk;
+  file: FileDiff;
+  findingsByLine: Map<string, Finding[]>;
+  expandedKeys: Set<string>;
+  onToggleFinding: (key: string) => void;
+  onAskVigil: (f: Finding) => void;
+  hasAI: boolean;
+}) {
+  const t = TOKENS.dark;
+  const header = `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@`;
+
+  return (
+    <div>
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 11,
+          color: t.textFaint,
+          background: `${t.accent}0f`,
+          padding: "3px 12px",
+          borderTop: `0.5px solid ${t.border}`,
+          borderBottom: `0.5px solid ${t.border}`,
+          userSelect: "none" as const,
+        }}
+      >
+        {header}
+      </div>
+      {hunk.lines.map((line, i) => {
+        const lineFindings =
+          line.newLine !== null
+            ? (findingsByLine.get(`${file.newPath}:${line.newLine}`) ?? [])
+            : [];
+        const domId = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
+        return (
+          <div key={i} id={domId}>
+            <DiffRow line={line} />
+            {lineFindings.map((f) => {
+              const key = findingKey(f);
+              return (
+                <InlineFindingRow
+                  key={key}
+                  finding={f}
+                  expanded={expandedKeys.has(key)}
+                  onToggle={() => onToggleFinding(key)}
+                  onAskVigil={() => onAskVigil(f)}
+                  hasAI={hasAI}
+                />
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FileSection({
+  file,
+  findingsByLine,
+  expandedKeys,
+  onToggleFinding,
+  onAskVigil,
+  hasAI,
+}: {
+  file: FileDiff;
+  findingsByLine: Map<string, Finding[]>;
+  expandedKeys: Set<string>;
+  onToggleFinding: (key: string) => void;
+  onAskVigil: (f: Finding) => void;
+  hasAI: boolean;
+}) {
+  const t = TOKENS.dark;
+  const adds = file.hunks.reduce((s, h) => s + h.lines.filter((l) => l.kind === "added").length, 0);
+  const dels = file.hunks.reduce(
+    (s, h) => s + h.lines.filter((l) => l.kind === "removed").length,
+    0,
+  );
+
+  return (
+    <div id={fileId(file.newPath)}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "16px 24px 10px",
+          borderTop: `0.5px solid ${t.border}`,
+          background: t.bg,
+          position: "sticky" as const,
+          top: 0,
+          zIndex: 1,
+        }}
+      >
+        <span style={{ fontFamily: MONO, fontSize: 12.5, color: t.text }}>{file.newPath}</span>
+        {file.status === "added" && (
+          <span
+            style={{
+              fontSize: 9.5,
+              color: t.textFaint,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+            }}
+          >
+            new
+          </span>
+        )}
+        {file.status === "renamed" && file.oldPath && (
+          <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>
+            ← {file.oldPath}
+          </span>
+        )}
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 11,
+            color: t.textFaint,
+            marginLeft: "auto",
+          }}
+        >
+          +{adds} −{dels}
+        </span>
+      </div>
+      {file.hunks.map((hunk, i) => (
+        <HunkBlock
+          key={i}
+          hunk={hunk}
+          file={file}
+          findingsByLine={findingsByLine}
+          expandedKeys={expandedKeys}
+          onToggleFinding={onToggleFinding}
+          onAskVigil={onAskVigil}
+          hasAI={hasAI}
+        />
+      ))}
+      <div style={{ height: 6 }} />
+    </div>
+  );
+}
+
+function DiffCenter({
+  diff,
+  loadError,
+  findings,
+  expandedKeys,
+  onToggleFinding,
+  onAskVigil,
+  hasAI,
+  passes,
+  reviewDone,
+}: {
+  diff: Diff | null;
+  loadError: string | null;
+  findings: readonly Finding[];
+  expandedKeys: Set<string>;
+  onToggleFinding: (key: string) => void;
+  onAskVigil: (f: Finding) => void;
+  hasAI: boolean;
+  passes: PassMap;
+  reviewDone: boolean;
 }) {
   const t = TOKENS.dark;
 
-  if (submitted) {
-    return (
-      <div style={{ padding: 16 }}>
-        <div
-          style={{
-            fontFamily: SANS,
-            fontSize: 13,
-            color: t.green,
-            fontWeight: 500,
-            marginBottom: 8,
-          }}
-        >
-          Review submitted
-        </div>
-        <a
-          href={prUrl}
-          style={{ fontFamily: MONO, fontSize: 11, color: t.accent }}
-          onClick={(e) => {
-            e.preventDefault();
-            window.open(prUrl, "_blank");
-          }}
-        >
-          View on platform →
-        </a>
-      </div>
-    );
-  }
+  const findingsByLine = useMemo(() => {
+    const map = new Map<string, Finding[]>();
+    for (const f of findings) {
+      if (!f.lines) continue;
+      const key = `${f.file}:${f.lines.start}`;
+      const arr = map.get(key) ?? [];
+      arr.push(f);
+      map.set(key, arr);
+    }
+    return map;
+  }, [findings]);
 
-  const verdictBtn = (v: ReviewVerdict, label: string, color: string) => {
-    const active = draft.verdict === v;
-    return (
-      <button
-        onClick={() => onChange({ verdict: active ? null : v })}
-        style={{
-          flex: 1,
-          fontFamily: SANS,
-          fontSize: 11,
-          fontWeight: active ? 600 : 400,
-          color: active ? color : t.textDim,
-          background: active ? `${color}18` : "none",
-          border: `1px solid ${active ? `${color}66` : t.border}`,
-          borderRadius: 6,
-          padding: "5px 0",
-          cursor: "pointer",
-          transition: "all 120ms",
-        }}
-      >
-        {label}
-      </button>
-    );
-  };
+  const runningPasses = Object.entries(passes).filter(([, v]) => v.phase === "running");
 
   return (
-    <div style={{ padding: 16 }}>
-      <div
-        style={{
-          fontFamily: SANS,
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase" as const,
-          color: t.textFaint,
-          marginBottom: 10,
-        }}
-      >
-        Review
+    <div
+      style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: t.bg,
+      }}
+    >
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
+        {loadError ? (
+          <div style={{ padding: 32, fontFamily: SANS, fontSize: 13, color: t.red }}>
+            Failed to load diff: {loadError}
+          </div>
+        ) : !diff ? (
+          <div style={{ padding: 32, fontFamily: SANS, fontSize: 13, color: t.textFaint }}>
+            Loading diff…
+          </div>
+        ) : diff.files.length === 0 ? (
+          <div style={{ padding: 32, fontFamily: SANS, fontSize: 13, color: t.textFaint }}>
+            No changes in this PR.
+          </div>
+        ) : (
+          diff.files.map((file, i) => (
+            <FileSection
+              key={i}
+              file={file}
+              findingsByLine={findingsByLine}
+              expandedKeys={expandedKeys}
+              onToggleFinding={onToggleFinding}
+              onAskVigil={onAskVigil}
+              hasAI={hasAI}
+            />
+          ))
+        )}
+        <div style={{ height: 24 }} />
       </div>
 
-      {draft.comments.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          {draft.comments.map((c, i) => (
-            <div
-              key={i}
+      {!reviewDone && runningPasses.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 16px",
+            borderTop: `0.5px solid ${t.border}`,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontFamily: SANS, fontSize: 11, color: t.textFaint }}>Analyzing</span>
+          {runningPasses.map(([pass]) => (
+            <span
+              key={pass}
               style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 8,
-                padding: "6px 8px",
-                background: t.surface,
-                borderRadius: 6,
-                marginBottom: 4,
+                fontFamily: MONO,
+                fontSize: 11,
+                color: t.accent,
+                background: `${t.accent}18`,
+                border: `0.5px solid ${t.accent}44`,
+                borderRadius: 4,
+                padding: "1px 6px",
               }}
             >
-              <SeverityBadge severity={c.finding.severity} />
-              <span
-                style={{
-                  flex: 1,
-                  fontFamily: SANS,
-                  fontSize: 11,
-                  color: t.textDim,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap" as const,
-                }}
-              >
-                {c.finding.title}
-              </span>
-              <button
-                onClick={() => onChange({ comments: draft.comments.filter((_, j) => j !== i) })}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: t.textFaint,
-                  cursor: "pointer",
-                  padding: 0,
-                  fontSize: 12,
-                  lineHeight: 1,
-                  flexShrink: 0,
-                }}
-              >
-                ×
-              </button>
-            </div>
+              {pass}
+            </span>
           ))}
         </div>
       )}
+    </div>
+  );
+}
 
+// ── Conversation panel ────────────────────────────────────────────────────────
+
+function ConversationPanel({
+  challengeState,
+  reviewDone,
+  findings,
+  hasAI,
+  onInputChange,
+  onSubmit,
+}: {
+  challengeState: ChallengeState | null;
+  reviewDone: boolean;
+  findings: readonly Finding[];
+  hasAI: boolean;
+  onInputChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const t = TOKENS.dark;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [challengeState?.messages.length, challengeState?.streamToken]);
+
+  const summary = reviewSummary(findings, reviewDone);
+  const isStreaming = challengeState?.streaming ?? false;
+  const inputValue = challengeState?.input ?? "";
+
+  return (
+    <div
+      style={{
+        width: 320,
+        flexShrink: 0,
+        borderLeft: `0.5px solid ${t.border}`,
+        display: "flex",
+        flexDirection: "column",
+        background: t.bg,
+      }}
+    >
+      <div
+        style={{
+          padding: "18px 22px 12px",
+          fontSize: 10.5,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase" as const,
+          color: t.textFaint,
+          borderBottom: `0.5px solid ${t.border}`,
+          fontFamily: SANS,
+          flexShrink: 0,
+        }}
+      >
+        Conversation
+        {challengeState && (
+          <span
+            style={{
+              marginLeft: 8,
+              textTransform: "none" as const,
+              letterSpacing: 0,
+              fontFamily: MONO,
+              fontSize: 10.5,
+            }}
+          >
+            · {shortPath(challengeState.finding.file)}
+          </span>
+        )}
+      </div>
+
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "20px 22px" }}>
+        {!challengeState ? (
+          <div
+            style={{
+              fontFamily: SANS,
+              fontSize: 13,
+              color: t.text,
+              lineHeight: 1.65,
+              letterSpacing: "0.002em",
+            }}
+          >
+            {summary}
+          </div>
+        ) : (
+          <>
+            {challengeState.messages.map((msg, i) => (
+              <div key={i} style={{ marginBottom: 22 }}>
+                {msg.role === "user" ? (
+                  <div
+                    style={{
+                      fontFamily: SANS,
+                      fontSize: 13,
+                      color: t.text,
+                      lineHeight: 1.55,
+                      paddingLeft: 12,
+                      borderLeft: `1.5px solid ${t.border}`,
+                    }}
+                  >
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      fontFamily: SANS,
+                      fontSize: 13,
+                      color: t.text,
+                      lineHeight: 1.65,
+                      letterSpacing: "0.002em",
+                    }}
+                  >
+                    {msg.content}
+                  </div>
+                )}
+              </div>
+            ))}
+            {isStreaming && (
+              <div style={{ marginBottom: 22 }}>
+                <div
+                  style={{
+                    fontFamily: SANS,
+                    fontSize: 13,
+                    color: t.text,
+                    lineHeight: 1.65,
+                    letterSpacing: "0.002em",
+                  }}
+                >
+                  {challengeState.streamToken}
+                  <span
+                    style={
+                      {
+                        display: "inline-block",
+                        width: 7,
+                        height: 14,
+                        background: t.accent,
+                        marginLeft: 2,
+                        verticalAlign: -2,
+                        animation: "vigil-blink 1.1s steps(2, end) infinite",
+                      } as React.CSSProperties
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {hasAI && (
+        <div
+          style={{
+            borderTop: `0.5px solid ${t.border}`,
+            padding: "12px 16px 14px",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "9px 12px",
+              borderRadius: 8,
+              background: t.surface,
+            }}
+          >
+            <input
+              placeholder={
+                challengeState ? "Ask a follow-up…" : "Expand a finding to start a conversation…"
+              }
+              value={inputValue}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  onSubmit();
+                }
+              }}
+              disabled={!challengeState || isStreaming}
+              style={{
+                flex: 1,
+                border: 0,
+                background: "transparent",
+                color: t.text,
+                fontFamily: SANS,
+                fontSize: 13,
+                outline: "none",
+              }}
+            />
+            <KbdHint>⌘↵</KbdHint>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Verdict compose overlay ───────────────────────────────────────────────────
+
+function VerdictCompose({
+  verdict,
+  body,
+  onBodyChange,
+  onClose,
+  onSubmit,
+  submitting,
+}: {
+  verdict: ReviewVerdict;
+  body: string;
+  onBodyChange: (v: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}) {
+  const t = TOKENS.dark;
+  const label =
+    verdict === "approved"
+      ? "Approve"
+      : verdict === "changes_requested"
+        ? "Request changes"
+        : "Comment";
+  const color =
+    verdict === "approved" ? t.green : verdict === "changes_requested" ? t.red : t.textDim;
+
+  return (
+    <div
+      style={{
+        position: "absolute" as const,
+        bottom: 48,
+        left: 0,
+        right: 0,
+        padding: "16px 24px",
+        background: t.bg,
+        borderTop: `0.5px solid ${t.border}`,
+        zIndex: 10,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 500, color }}>{label}</span>
+        <button
+          onClick={onClose}
+          style={{
+            marginLeft: "auto",
+            background: "transparent",
+            border: 0,
+            color: t.textFaint,
+            cursor: "pointer",
+            fontFamily: SANS,
+            fontSize: 12,
+            padding: "2px 8px",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
       <textarea
-        value={draft.body}
-        onChange={(e) => onChange({ body: e.target.value })}
-        placeholder="Leave a comment…"
+        value={body}
+        onChange={(e) => onBodyChange(e.target.value)}
+        placeholder={
+          verdict === "approved" ? "Optional summary comment…" : "Describe what needs to change…"
+        }
         rows={3}
+        autoFocus
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            onSubmit();
+          }
+          if (e.key === "Escape") onClose();
+        }}
         style={{
           width: "100%",
           fontFamily: SANS,
@@ -799,44 +1164,165 @@ function ReviewDraftPanel({
           padding: "7px 9px",
           resize: "vertical" as const,
           outline: "none",
-          marginBottom: 8,
+          marginBottom: 10,
           boxSizing: "border-box" as const,
         }}
       />
-
-      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-        {verdictBtn("approved", "Approve", t.green)}
-        {verdictBtn("changes_requested", "Request changes", t.red)}
-        {verdictBtn("commented", "Comment", t.textDim)}
-      </div>
-
       <button
         onClick={onSubmit}
-        disabled={submitting || (!draft.body && draft.comments.length === 0 && !draft.verdict)}
+        disabled={submitting}
         style={{
-          width: "100%",
           fontFamily: SANS,
           fontSize: 13,
           fontWeight: 500,
-          color:
-            submitting || (!draft.body && draft.comments.length === 0 && !draft.verdict)
-              ? t.textFaint
-              : t.bg,
-          background:
-            submitting || (!draft.body && draft.comments.length === 0 && !draft.verdict)
-              ? t.surface
-              : t.accent,
+          color: submitting ? t.textFaint : t.bg,
+          background: submitting ? t.surface : t.accent,
           border: "none",
           borderRadius: 8,
-          padding: "9px 0",
-          cursor:
-            submitting || (!draft.body && draft.comments.length === 0 && !draft.verdict)
-              ? "default"
-              : "pointer",
+          padding: "8px 20px",
+          cursor: submitting ? "default" : "pointer",
           transition: "background 150ms, color 150ms",
         }}
       >
-        {submitting ? "Submitting…" : "Submit review"}
+        {submitting ? "Submitting…" : `Submit ${label.toLowerCase()}`}
+      </button>
+    </div>
+  );
+}
+
+// ── Bottom strip ──────────────────────────────────────────────────────────────
+
+function BottomStrip({
+  onComment,
+  onRequestChanges,
+  onApprove,
+  submitting,
+  submitted,
+  prUrl,
+}: {
+  onComment: () => void;
+  onRequestChanges: () => void;
+  onApprove: () => void;
+  submitting: boolean;
+  submitted: boolean;
+  prUrl: string;
+}) {
+  const t = TOKENS.dark;
+
+  if (submitted) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          padding: "0 24px",
+          height: 48,
+          flexShrink: 0,
+          borderTop: `0.5px solid ${t.border}`,
+          gap: 16,
+        }}
+      >
+        <span style={{ fontFamily: SANS, fontSize: 13, color: t.green, fontWeight: 500 }}>
+          Review submitted
+        </span>
+        <a
+          href={prUrl}
+          onClick={(e) => {
+            e.preventDefault();
+            window.open(prUrl, "_blank");
+          }}
+          style={{ fontFamily: MONO, fontSize: 11, color: t.accent }}
+        >
+          View on platform →
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        padding: "0 24px",
+        height: 48,
+        flexShrink: 0,
+        borderTop: `0.5px solid ${t.border}`,
+        gap: 18,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 11,
+          color: t.textFaint,
+          display: "flex",
+          gap: 14,
+          alignItems: "center",
+        }}
+      >
+        <span>
+          <KbdHint>j</KbdHint> <KbdHint>k</KbdHint>
+          <span style={{ marginLeft: 8 }}>files</span>
+        </span>
+        <span>
+          <KbdHint>n</KbdHint> <KbdHint>p</KbdHint>
+          <span style={{ marginLeft: 8 }}>findings</span>
+        </span>
+        <KbdHint>?</KbdHint>
+      </div>
+      <div style={{ flex: 1 }} />
+      <button
+        onClick={onComment}
+        disabled={submitting}
+        style={{
+          background: "transparent",
+          border: 0,
+          padding: "8px 12px",
+          fontFamily: SANS,
+          fontSize: 13,
+          color: t.textDim,
+          cursor: "pointer",
+        }}
+      >
+        Comment
+      </button>
+      <button
+        onClick={onRequestChanges}
+        disabled={submitting}
+        style={{
+          background: "transparent",
+          border: 0,
+          padding: "8px 12px",
+          fontFamily: SANS,
+          fontSize: 13,
+          color: t.textDim,
+          cursor: "pointer",
+        }}
+      >
+        Request changes
+      </button>
+      <button
+        onClick={onApprove}
+        disabled={submitting}
+        style={{
+          background: t.accent,
+          border: 0,
+          padding: "8px 18px",
+          borderRadius: 7,
+          fontFamily: SANS,
+          fontSize: 13,
+          fontWeight: 500,
+          color: "#0c1416",
+          cursor: "pointer",
+          letterSpacing: "-0.005em",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        Approve
+        <KbdHint dark>m</KbdHint>
       </button>
     </div>
   );
@@ -845,20 +1331,32 @@ function ReviewDraftPanel({
 // ── WorkspaceScreen ───────────────────────────────────────────────────────────
 
 export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
-  const t = TOKENS.dark;
-
   const [diff, setDiff] = useState<Diff | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [passes, setPasses] = useState<PassMap>({});
   const [reviewDone, setReviewDone] = useState(false);
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Draft>({ verdict: null, body: "", comments: [] });
+  const [hasAI, setHasAI] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [reviewCompletedAt, setReviewCompletedAt] = useState<Date | null>(null);
+
+  const [activeFileIdx, setActiveFileIdx] = useState(0);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const [focusedFindingIdx, setFocusedFindingIdx] = useState<number | null>(null);
+  const [challengeState, setChallengeState] = useState<ChallengeState | null>(null);
+  const [verdictState, setVerdictState] = useState<{
+    verdict: ReviewVerdict;
+    body: string;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [hasAI, setHasAI] = useState(false); // used for challenge thread gating
 
-  // Findings that have line positions — navigation targets
+  const regressionFindings = useMemo(
+    () => findings.filter((f) => f.pass === "regression"),
+    [findings],
+  );
+
   const sortedFindings = useMemo(
     () =>
       findings
@@ -871,32 +1369,10 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     [findings],
   );
 
-  const focusedFinding = selectedIdx !== null ? (sortedFindings[selectedIdx] ?? null) : null;
+  const focusedFinding =
+    focusedFindingIdx !== null ? (sortedFindings[focusedFindingIdx] ?? null) : null;
 
-  // Map from "file:line" → Finding[] for gutter dots
-  const findingMap = useMemo(() => {
-    const map = new Map<string, Finding[]>();
-    for (const f of findings) {
-      if (!f.lines) continue;
-      for (let ln = f.lines.start; ln <= f.lines.end; ln++) {
-        const key = `${f.file}:${ln}`;
-        const arr = map.get(key) ?? [];
-        arr.push(f);
-        map.set(key, arr);
-      }
-    }
-    return map;
-  }, [findings]);
-
-  // Scroll diff to focused finding
-  useEffect(() => {
-    if (!focusedFinding?.lines) return;
-    const id = lineId(focusedFinding.file, focusedFinding.lines.start);
-    const el = document.getElementById(id);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusedFinding]);
-
-  // Load diff + check settings + start review
+  // Load diff + settings + start review
   useEffect(() => {
     let mounted = true;
 
@@ -905,7 +1381,6 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         api.invoke("platform:getPRWithDiff", pr.ref),
         api.invoke("settings:get"),
       ]);
-
       if (!mounted) return;
 
       if (!diffResult.ok) {
@@ -913,7 +1388,6 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         return;
       }
       setDiff(diffResult.value.diff);
-      // Use the headSha from the full PR response — the list API (search) returns "" for headSha
       const headSha = diffResult.value.pr.headSha;
 
       if (settingsResult.ok) {
@@ -924,21 +1398,21 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         );
       }
 
-      // Cache-first
       const cached = await api.invoke("review:getCached", pr.ref, headSha);
       if (!mounted) return;
 
       if (cached.ok && cached.value) {
         setFindings([...cached.value.findings]);
         setReviewDone(true);
+        setReviewCompletedAt(new Date());
         return;
       }
 
-      // Auto-run
       const result = await api.invoke("review:run", pr.ref);
       if (!mounted) return;
       if (result.ok) setFindings([...result.value.findings]);
       setReviewDone(true);
+      setReviewCompletedAt(new Date());
     }
 
     void init();
@@ -947,7 +1421,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     };
   }, [pr]);
 
-  // Stream findings and pass updates
+  // Stream review events + challenge chunks
   useEffect(() => {
     const offFinding = api.on("review:finding", ({ finding }) => {
       setFindings((prev) => {
@@ -963,83 +1437,166 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       }));
     });
 
+    const offChunk = api.on("review:challengeChunk", ({ token, done }) => {
+      setChallengeState((prev) => {
+        if (!prev) return null;
+        if (done) {
+          return {
+            ...prev,
+            messages: [...prev.messages, { role: "assistant", content: prev.streamToken + token }],
+            streaming: false,
+            streamToken: "",
+          };
+        }
+        return { ...prev, streamToken: prev.streamToken + token };
+      });
+    });
+
     return () => {
       offFinding();
       offPass();
+      offChunk();
     };
   }, []);
 
-  // Keyboard navigation
+  // Scroll to focused finding + auto-expand it
+  useEffect(() => {
+    if (!focusedFinding?.lines) return;
+    const el = document.getElementById(lineId(focusedFinding.file, focusedFinding.lines.start));
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const key = findingKey(focusedFinding);
+    setExpandedKeys((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }, [focusedFinding]);
+
+  // Scroll to active file
+  useEffect(() => {
+    if (!diff) return;
+    const file = diff.files[activeFileIdx];
+    if (!file) return;
+    document
+      .getElementById(fileId(file.newPath))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeFileIdx, diff]);
+
+  async function handleChallengeSubmit() {
+    if (!challengeState?.input.trim() || challengeState.streaming || !diff) return;
+    const userMsg: ConvoMessage = { role: "user", content: challengeState.input.trim() };
+    const newMessages = [...challengeState.messages, userMsg];
+    const hunkContext = extractHunkContext(diff, challengeState.finding);
+    setChallengeState({
+      ...challengeState,
+      messages: newMessages,
+      streaming: true,
+      streamToken: "",
+      input: "",
+    });
+    await api.invoke("review:challenge", pr.ref, challengeState.finding, hunkContext, newMessages);
+  }
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const inField =
         e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
       if (inField) return;
 
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const tabOrder: TabId[] = ["overview", "diff", "semantic", "risks", "arch", "convo"];
+        const curr = tabOrder.indexOf(activeTab);
+        setActiveTab(
+          e.shiftKey
+            ? (tabOrder[(curr - 1 + tabOrder.length) % tabOrder.length] ?? "diff")
+            : (tabOrder[(curr + 1) % tabOrder.length] ?? "diff"),
+        );
+        return;
+      }
       if (e.key === "Escape") {
-        if (selectedIdx !== null) {
-          setSelectedIdx(null);
+        if (verdictState) {
+          setVerdictState(null);
+        } else if (challengeState) {
+          setChallengeState(null);
+        } else if (focusedFindingIdx !== null) {
+          setFocusedFindingIdx(null);
         } else {
           onBack();
         }
         return;
       }
-      if (e.key === "Enter" && selectedIdx === null && sortedFindings.length > 0) {
-        setSelectedIdx(0);
-        return;
-      }
-      if (e.key === "j" || e.key === "ArrowDown") {
+      if (e.key === "j") {
         e.preventDefault();
-        setSelectedIdx((i) => (i === null ? 0 : Math.min(sortedFindings.length - 1, i + 1)));
+        if (!diff) return;
+        setActiveFileIdx((i) => Math.min(diff.files.length - 1, i + 1));
       }
-      if (e.key === "k" || e.key === "ArrowUp") {
+      if (e.key === "k") {
         e.preventDefault();
-        setSelectedIdx((i) => (i === null ? 0 : Math.max(0, i - 1)));
+        setActiveFileIdx((i) => Math.max(0, i - 1));
       }
-      if (e.key === "a" && focusedFinding) {
-        handleAddToReview(focusedFinding);
+      if (e.key === "n") {
+        e.preventDefault();
+        if (sortedFindings.length === 0) return;
+        setFocusedFindingIdx((i) => (i === null ? 0 : Math.min(sortedFindings.length - 1, i + 1)));
+      }
+      if (e.key === "p") {
+        e.preventDefault();
+        if (sortedFindings.length === 0) return;
+        setFocusedFindingIdx((i) => (i === null ? sortedFindings.length - 1 : Math.max(0, i - 1)));
+      }
+      if (e.key === "m") {
+        setVerdictState({ verdict: "approved", body: "" });
       }
     },
-    [sortedFindings.length, selectedIdx, focusedFinding, onBack],
+    [
+      diff,
+      sortedFindings.length,
+      focusedFindingIdx,
+      verdictState,
+      challengeState,
+      onBack,
+      activeTab,
+    ],
   );
 
-  function handleAddToReview(f: Finding) {
-    setDraft((d) => {
-      if (d.comments.some((c) => c.finding === f)) return d;
-      return { ...d, comments: [...d.comments, { finding: f, body: formatFindingComment(f) }] };
+  function handleToggleFinding(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
     });
   }
 
-  function handleSelectFinding(f: Finding) {
-    const idx = sortedFindings.indexOf(f);
-    setSelectedIdx(idx >= 0 ? idx : null);
+  function handleAskVigil(finding: Finding) {
+    setChallengeState({
+      finding,
+      messages: [{ role: "assistant", content: `${finding.title}\n\n${finding.description}` }],
+      streaming: false,
+      streamToken: "",
+      input: "",
+    });
   }
 
-  async function handleSubmit() {
-    if (!diff) return;
+  async function handleSubmitReview() {
+    if (!verdictState) return;
     setSubmitting(true);
     const review: NewReview = {
-      verdict: draft.verdict ?? "commented",
-      body: draft.body,
-      comments: draft.comments.map((c) =>
-        c.finding.lines
-          ? {
-              kind: "inline" as const,
-              body: c.body,
-              path: c.finding.file,
-              line: c.finding.lines.start,
-            }
-          : { kind: "pr_comment" as const, body: c.body },
-      ),
+      verdict: verdictState.verdict,
+      body: verdictState.body,
+      comments: [],
     };
     const result = await api.invoke("platform:submitReview", pr.ref, review);
-    if (result.ok) setSubmitted(true);
+    if (result.ok) {
+      setSubmitted(true);
+      setVerdictState(null);
+    }
     setSubmitting(false);
   }
 
-  const riskScore = findings.length > 0 ? fallbackRiskScore(findings) : null;
-  const riskColor =
-    riskScore !== null && riskScore >= 4 ? t.red : riskScore === 3 ? t.amber : t.green;
+  const files = diff?.files ?? [];
 
   return (
     <div
@@ -1048,234 +1605,109 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       style={{
         width: "100%",
         height: "100%",
-        background: t.bg,
+        background: TOKENS.dark.bg,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
         outline: "none",
+        position: "relative" as const,
       }}
     >
-      {/* Titlebar */}
-      <div
-        style={
-          {
-            height: 48,
-            display: "flex",
-            alignItems: "center",
-            padding: "0 16px",
-            gap: 12,
-            borderBottom: `1px solid ${t.border}`,
-            flexShrink: 0,
-            WebkitAppRegion: "drag",
-          } as React.CSSProperties
-        }
-      >
-        <div
-          style={
-            {
-              WebkitAppRegion: "no-drag",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            } as React.CSSProperties
-          }
-        >
-          <button
-            onClick={onBack}
-            style={{
-              fontFamily: SANS,
-              fontSize: 12,
-              color: t.textDim,
-              background: "none",
-              border: "none",
-              padding: "3px 0",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <span style={{ fontSize: 14, lineHeight: 1 }}>←</span>
-            Queue
-          </button>
-        </div>
-        <div style={{ flex: 1, minWidth: 0, WebkitAppRegion: "drag" } as React.CSSProperties}>
-          <div
-            style={{
-              fontFamily: SANS,
-              fontSize: 13,
-              fontWeight: 500,
-              color: t.text,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {pr.title}
-          </div>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint, marginTop: 1 }}>
-            {pr.author.login} · {pr.sourceBranch} → {pr.targetBranch}
-          </div>
-        </div>
-        {riskScore !== null && (
-          <div
-            style={
-              {
-                WebkitAppRegion: "no-drag",
-                fontFamily: MONO,
-                fontSize: 11,
-                fontWeight: 700,
-                color: riskColor,
-                background: `${riskColor}18`,
-                border: `1px solid ${riskColor}44`,
-                borderRadius: 4,
-                padding: "3px 8px",
-                flexShrink: 0,
-              } as React.CSSProperties
+      <TopStrip pr={pr} onBack={onBack} />
+      <TabBar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        findings={findings}
+        reviewCompletedAt={reviewCompletedAt}
+      />
+
+      {activeTab === "diff" ? (
+        <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+          <FileRail
+            files={files}
+            findings={findings}
+            activeIdx={activeFileIdx}
+            onSelect={setActiveFileIdx}
+          />
+          <DiffCenter
+            diff={diff}
+            loadError={loadError}
+            findings={findings}
+            expandedKeys={expandedKeys}
+            onToggleFinding={handleToggleFinding}
+            onAskVigil={handleAskVigil}
+            hasAI={hasAI}
+            passes={passes}
+            reviewDone={reviewDone}
+          />
+          <ConversationPanel
+            challengeState={challengeState}
+            reviewDone={reviewDone}
+            findings={findings}
+            hasAI={hasAI}
+            onInputChange={(v) =>
+              setChallengeState((prev) => (prev ? { ...prev, input: v } : null))
             }
-          >
-            Risk {riskScore}/5
-          </div>
-        )}
-        {findings.length > 0 && (
-          <div
-            style={
-              {
-                WebkitAppRegion: "no-drag",
-                fontFamily: SANS,
-                fontSize: 11,
-                color: t.textFaint,
-                flexShrink: 0,
-              } as React.CSSProperties
-            }
-          >
-            {findings.length} finding{findings.length !== 1 ? "s" : ""}
-          </div>
-        )}
-      </div>
-
-      {/* Main content */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* Left: diff */}
-        <div
-          style={{
-            flex: "0 0 65%",
-            display: "flex",
-            flexDirection: "column",
-            borderRight: `1px solid ${t.border}`,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-            {loadError ? (
-              <div
-                style={{
-                  padding: 32,
-                  fontFamily: SANS,
-                  fontSize: 13,
-                  color: t.red,
-                }}
-              >
-                Failed to load diff: {loadError}
-              </div>
-            ) : !diff ? (
-              <div
-                style={{
-                  padding: 32,
-                  fontFamily: SANS,
-                  fontSize: 13,
-                  color: t.textFaint,
-                }}
-              >
-                Loading diff…
-              </div>
-            ) : diff.files.length === 0 ? (
-              <div
-                style={{
-                  padding: 32,
-                  fontFamily: SANS,
-                  fontSize: 13,
-                  color: t.textFaint,
-                }}
-              >
-                No changes in this PR.
-              </div>
-            ) : (
-              diff.files.map((file, i) => (
-                <FileView
-                  key={i}
-                  file={file}
-                  findingMap={findingMap}
-                  focusedFinding={focusedFinding}
-                  onSelectFinding={handleSelectFinding}
-                />
-              ))
-            )}
-          </div>
-          <PassStrip passes={passes} visible={!reviewDone || Object.keys(passes).length > 0} />
-        </div>
-
-        {/* Right: panel */}
-        <div
-          style={{
-            flex: "0 0 35%",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            borderLeft: `1px solid ${t.border}`,
-          }}
-        >
-          {focusedFinding ? (
-            <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1 }}>
-              <button
-                onClick={() => setSelectedIdx(null)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "8px 16px",
-                  background: "transparent",
-                  border: "none",
-                  borderBottom: `1px solid ${t.border}`,
-                  cursor: "pointer",
-                  fontFamily: SANS,
-                  fontSize: 11,
-                  color: t.textFaint,
-                  textAlign: "left" as const,
-                  flexShrink: 0,
-                }}
-              >
-                ← All findings
-              </button>
-              <div style={{ overflowY: "auto", flex: 1 }}>
-                <FindingDetail
-                  finding={focusedFinding}
-                  hasAI={hasAI}
-                  onAddToReview={handleAddToReview}
-                />
-              </div>
-            </div>
-          ) : (
-            <FindingList
-              findings={sortedFindings}
-              selectedIdx={selectedIdx}
-              reviewDone={reviewDone}
-              onSelect={handleSelectFinding}
-            />
-          )}
-
-          <div style={{ height: 1, background: t.border }} />
-
-          <ReviewDraftPanel
-            draft={draft}
-            prUrl={pr.url}
-            onChange={(d) => setDraft((prev) => ({ ...prev, ...d }))}
-            onSubmit={() => void handleSubmit()}
-            submitting={submitting}
-            submitted={submitted}
+            onSubmit={() => void handleChallengeSubmit()}
           />
         </div>
-      </div>
+      ) : activeTab === "overview" ? (
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <OverviewTab
+            pr={pr}
+            findings={findings}
+            diff={diff}
+            passes={passes}
+            reviewDone={reviewDone}
+            reviewCompletedAt={reviewCompletedAt}
+          />
+        </div>
+      ) : activeTab === "risks" ? (
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <RisksTab findings={regressionFindings} />
+        </div>
+      ) : activeTab === "convo" ? (
+        <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+          <ConversationPanel
+            challengeState={challengeState}
+            reviewDone={reviewDone}
+            findings={findings}
+            hasAI={hasAI}
+            onInputChange={(v) =>
+              setChallengeState((prev) => (prev ? { ...prev, input: v } : null))
+            }
+            onSubmit={() => void handleChallengeSubmit()}
+          />
+        </div>
+      ) : activeTab === "semantic" ? (
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <SemanticTab />
+        </div>
+      ) : activeTab === "arch" ? (
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <ArchTab />
+        </div>
+      ) : null}
+
+      {verdictState && (
+        <VerdictCompose
+          verdict={verdictState.verdict}
+          body={verdictState.body}
+          onBodyChange={(v) => setVerdictState((prev) => (prev ? { ...prev, body: v } : null))}
+          onClose={() => setVerdictState(null)}
+          onSubmit={() => void handleSubmitReview()}
+          submitting={submitting}
+        />
+      )}
+
+      <BottomStrip
+        onComment={() => setVerdictState({ verdict: "commented", body: "" })}
+        onRequestChanges={() => setVerdictState({ verdict: "changes_requested", body: "" })}
+        onApprove={() => setVerdictState({ verdict: "approved", body: "" })}
+        submitting={submitting}
+        submitted={submitted}
+        prUrl={pr.url}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-13. Phase 4 complete. Phase 5 in progress.
+> **Status:** Living document. Last updated 2026-05-14. Phase 4 complete. Phase 5 in progress.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -240,13 +240,26 @@ _Phase 4 complete 2026-05-13._
   - [x] Keyboard navigation: j/k through findings, Enter to open detail, Escape to return/back, a to add
   - [x] Pass progress strip: ⟳ per pass while running, ✓ N when complete
   - [x] Auto-run on first open; cache-first on return visits
-  - [ ] ChallengeThread: per-finding AI conversation (IPC wired, UI pending)
+  - [x] ChallengeThread: per-finding AI conversation — streaming IPC wired, inline "Ask Vigil"
+        button per finding, dedicated Conversation tab, streaming cursor animation
+  - [x] 6-lens tab bar (Tab key cycles): Overview, Diff, Semantic, Silent risks, Architecture,
+        Conversation — with finding counts and `reviewed X ago` timestamp
+  - [x] Overview tab: pulse metrics strip, top-findings list, analysis passes badge list,
+        activity timeline rail
+  - [x] Silent risks tab: regression findings table with evidence cells, severity counts,
+        detector legend rail
+  - [x] Semantic tab: numbered change cards (BEHAVIOR/SECURITY/REFACTOR badges), before/after
+        code blocks, plain-English explanation, risk notes
+  - [x] Architecture tab: metrics strip, layer map diagram with violation highlights,
+        violations table with layer badges and file:line pointers
   - [ ] Hunk-level collapse / expand
 - [x] Review result cache (`ReviewCache`): JSON in `userData/reviews/` keyed by `headSha`,
       7-day TTL. Revisiting a PR loads instantly.
 - [x] Test files excluded from analysis (`*.test.*`, `*.spec.*` filtered before all passes)
 - [x] Streaming UI: `review:pass` start/complete events emitted per pass;
       PassStrip transitions in real time
+- [x] Developer preview mode (`pnpm dev:mock`): full mock API covering auth → queue → workspace;
+      all 6 workspace tabs populated with realistic content; no GitHub connection required
 
 **Exit criteria:** The app feels like a review tool, not a generic
 IDE with diffs bolted on. A reviewer can complete a real review
