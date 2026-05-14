@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { KeychainTokenStore } from "./auth/KeychainTokenStore.js";
 import { FileLogger } from "./logger.js";
 import { ReviewCache } from "./ai/ReviewCache.js";
+import { RepoCache } from "./git/RepoCache.js";
 import { KeychainSecretStore } from "./settings/SecretStore.js";
 import { SettingsStore } from "./settings/SettingsStore.js";
 import { registerHandlers } from "./ipc/index.js";
@@ -21,6 +22,7 @@ const settingsStore = new SettingsStore(
   secretStore,
 );
 const reviewCache = new ReviewCache(join(app.getPath("userData"), "reviews"));
+const repoCache = new RepoCache(join(app.getPath("userData"), "repos"), logger);
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -57,6 +59,8 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
+void repoCache.evict();
+
 void app.whenReady().then(() => {
   if (process.platform === "darwin") {
     const icon = nativeImage.createFromPath(
@@ -66,12 +70,12 @@ void app.whenReady().then(() => {
   }
 
   const mainWindow = createWindow();
-  registerHandlers(mainWindow, tokenStore, settingsStore, logger, reviewCache);
+  registerHandlers(mainWindow, tokenStore, settingsStore, logger, reviewCache, repoCache);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const win = createWindow();
-      registerHandlers(win, tokenStore, settingsStore, logger, reviewCache);
+      registerHandlers(win, tokenStore, settingsStore, logger, reviewCache, repoCache);
     }
   });
 });

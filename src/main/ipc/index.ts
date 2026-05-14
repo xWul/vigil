@@ -22,6 +22,7 @@ import { SilentRegressionAnalyzer } from "../ai/analyzers/SilentRegressionAnalyz
 import { buildReviewContext } from "../ai/buildReviewContext.js";
 import { runReview } from "../ai/runReview.js";
 import type { ReviewCache } from "../ai/ReviewCache.js";
+import type { RepoCache } from "../git/RepoCache.js";
 import { AzureDevOpsProvider } from "../platforms/AzureDevOpsProvider.js";
 import { GitHubProvider } from "../platforms/GitHubProvider.js";
 import type { Logger } from "../../shared/logger.js";
@@ -61,7 +62,11 @@ export function registerHandlers(
   settingsStore: SettingsStore,
   logger: Logger,
   reviewCache: ReviewCache,
+  repoCache: RepoCache,
 ): void {
+  repoCache.setStatusListener((event) => {
+    mainWindow.webContents.send("git:cacheStatus", event);
+  });
   // ── Auth ────────────────────────────────────────────────────────────────
 
   handle("auth:signIn", async (platform) => {
@@ -214,7 +219,7 @@ export function registerHandlers(
         ? new GitHubProvider(logger)
         : new AzureDevOpsProvider(ref.platform === "azure-devops" ? ref.org : "", logger);
 
-    const contextResult = await buildReviewContext(session, provider, ref);
+    const contextResult = await buildReviewContext(session, provider, ref, undefined, repoCache);
     if (!contextResult.ok) return contextResult;
 
     const context = contextResult.value;

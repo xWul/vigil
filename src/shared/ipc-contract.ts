@@ -61,4 +61,9 @@ export interface IpcEvents {
     readonly count: number;
   };
   "review:challengeChunk": { readonly token: string; readonly done: boolean };
+  "git:cacheStatus": {
+    readonly repoKey: string;
+    readonly status: "cloning" | "fetching" | "ready" | "error";
+    readonly error?: string;
+  };
 }

@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cross-file import context for consistency pass**: when the local repo cache is
+  available, relative imports from changed files are resolved and fetched from the cache
+  (capped at 20 % of the token budget). The consistency pass AI can now compare new code
+  against the patterns established in imported-but-unchanged files — the scenario most
+  likely to surface real consistency violations.
+
+- **Local repo cache (Phase 6)**: Vigil now clones each reviewed repository to disk using
+  `simple-git` and blobless partial clones (`--filter=blob:none`). After the first review of
+  a repo, file content is read locally via `git show {sha}:{path}` instead of making one API
+  call per changed file. Reduces rate-limit consumption, adds offline resilience, and
+  unlocks cross-file context for future AI passes. Clones run in the background when a PR is
+  opened; the API path remains active as a fallback until the clone completes. Cache eviction
+  removes repos older than 30 days and enforces a 2 GB LRU cap. Requires git ≥ 2.22; the
+  cache is automatically disabled and falls back to API calls on machines that don't meet this
+  requirement.
+
+- **Hunk collapse / expand**: clicking any `@@ ... @@` hunk header in the diff view
+  collapses that hunk, showing only the header with a `· N lines` count hint and a
+  rotating chevron. Click again to expand. Keyboard finding navigation (`n`/`p`)
+  automatically uncollapses the hunk containing the focused finding before scrolling to it.
+
+- **File filter for analysis pipeline**: binary and media assets (images, fonts, SVG, audio,
+  video), auto-generated lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, etc.),
+  documentation (`.md`, `.mdx`, `.txt`), and minified/map output (`.min.js`, `.js.map`) are
+  now excluded before any analysis pass runs. Reduces token usage and eliminates noise findings
+  on non-reviewable files. Extends the existing test file exclusion.
+
 - **PR Analysis tabs**: 6-lens tab bar above the workspace — Overview (pulse metrics, top
   findings, activity timeline), Diff (3-panel inline review), Silent risks (4-col regression
   table with evidence cells and detector legend), Semantic (numbered change cards with

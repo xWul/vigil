@@ -16,6 +16,8 @@ Look for:
 
 Base your findings strictly on what is visible in the diff and provided file contents. Do not invent conventions not shown.
 
+Some `<file>` entries may not appear in the diff — these are files imported by the changed code, included to show patterns already established in the codebase. Use them as authoritative examples of existing conventions when evaluating the diff.
+
 Respond with a JSON array of findings. Each finding must have exactly these fields:
 {
 "severity": "critical" | "high" | "medium" | "low" | "info",

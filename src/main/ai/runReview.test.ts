@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ok } from "../../shared/result.js";
 import type { AIProvider, AIRequest } from "./AIProvider.js";
 import type { CodeAnalyzer, Finding, ReviewContext } from "./CodeAnalyzer.js";
-import { runReview } from "./runReview.js";
+import { isNonReviewable, runReview } from "./runReview.js";
 
 const BASE_CONTEXT: ReviewContext = {
   pr: {
@@ -62,6 +62,47 @@ const STATIC_FINDING: Finding = {
   pass: "complexity",
   source: "static",
 };
+
+describe("isNonReviewable", () => {
+  it("filters test files", () => {
+    expect(isNonReviewable("src/foo.test.ts")).toBe(true);
+    expect(isNonReviewable("src/foo.spec.tsx")).toBe(true);
+    expect(isNonReviewable("src/foo.test.js")).toBe(true);
+  });
+
+  it("filters binary and media assets", () => {
+    expect(isNonReviewable("assets/logo.png")).toBe(true);
+    expect(isNonReviewable("src/icons/arrow.svg")).toBe(true);
+    expect(isNonReviewable("public/font.woff2")).toBe(true);
+    expect(isNonReviewable("dist/app.pdf")).toBe(true);
+  });
+
+  it("filters lockfiles by filename regardless of directory", () => {
+    expect(isNonReviewable("pnpm-lock.yaml")).toBe(true);
+    expect(isNonReviewable("packages/core/package-lock.json")).toBe(true);
+    expect(isNonReviewable("yarn.lock")).toBe(true);
+    expect(isNonReviewable("Cargo.lock")).toBe(true);
+  });
+
+  it("filters documentation files", () => {
+    expect(isNonReviewable("README.md")).toBe(true);
+    expect(isNonReviewable("docs/guide.mdx")).toBe(true);
+    expect(isNonReviewable("CHANGELOG.txt")).toBe(true);
+  });
+
+  it("filters minified and map files", () => {
+    expect(isNonReviewable("dist/bundle.min.js")).toBe(true);
+    expect(isNonReviewable("dist/styles.min.css")).toBe(true);
+    expect(isNonReviewable("dist/app.js.map")).toBe(true);
+  });
+
+  it("does not filter regular source files", () => {
+    expect(isNonReviewable("src/foo.ts")).toBe(false);
+    expect(isNonReviewable("src/components/Button.tsx")).toBe(false);
+    expect(isNonReviewable("src/utils/format.js")).toBe(false);
+    expect(isNonReviewable("src/renderer/env.d.ts")).toBe(false);
+  });
+});
 
 describe("runReview", () => {
   it("returns static findings when no AI provider", async () => {

@@ -24,10 +24,43 @@ function loadPrompt(name: string): string {
   return readFileSync(join(PROMPTS_DIR, `${name}.md`), "utf-8");
 }
 
-const TEST_FILE_RE = /\.(test|spec)\.[jt]sx?$/;
+// Test files — no logic to audit
+const TEST_RE = /\.(test|spec)\.[jt]sx?$/;
 
-function filterTestFiles(diff: Diff): Diff {
-  return { files: diff.files.filter((f) => !TEST_FILE_RE.test(f.newPath)) };
+// Binary and media assets — no text content worth reviewing
+const BINARY_RE =
+  /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff?|avif|woff2?|ttf|otf|eot|mp[34]|wav|ogg|pdf|zip|tar|gz|br|exe|dll|so|dylib)$/i;
+
+// Auto-generated lockfiles — not worth reviewing
+const LOCK_FILENAMES = new Set([
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "Gemfile.lock",
+  "Cargo.lock",
+  "poetry.lock",
+  "composer.lock",
+]);
+
+// Documentation — prose, not code
+const DOC_RE = /\.(md|mdx|txt|rst|adoc)$/i;
+
+// Minified or compiled output
+const GENERATED_RE = /\.(min\.(js|css)|[jt]s\.map|css\.map)$/;
+
+export function isNonReviewable(filePath: string): boolean {
+  const filename = filePath.split("/").at(-1) ?? filePath;
+  return (
+    TEST_RE.test(filePath) ||
+    BINARY_RE.test(filePath) ||
+    LOCK_FILENAMES.has(filename) ||
+    DOC_RE.test(filePath) ||
+    GENERATED_RE.test(filePath)
+  );
+}
+
+function filterNonReviewableFiles(diff: Diff): Diff {
+  return { files: diff.files.filter((f) => !isNonReviewable(f.newPath)) };
 }
 
 function renderDiff(diff: Diff): string {
@@ -266,13 +299,13 @@ export async function runReview(
   const allFindings: Finding[] = [];
   const start = Date.now();
 
-  const filteredContext = { ...context, diff: filterTestFiles(context.diff) };
+  const filteredContext = { ...context, diff: filterNonReviewableFiles(context.diff) };
   const skippedCount = context.diff.files.length - filteredContext.diff.files.length;
 
   logger.info("review.start", {
     pr: context.pr.title,
     fileCount: filteredContext.diff.files.length,
-    skippedTestFiles: skippedCount,
+    skippedFiles: skippedCount,
     hasAI: aiProvider !== null,
   });
 
