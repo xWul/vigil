@@ -9,6 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Silent Regression Detector** (`SilentRegressionAnalyzer`): a new diff-aware `CodeAnalyzer` that
+  flags behavioral changes matching known high-risk patterns using "paired hunk analysis" — comparing
+  adjacent removed→added blocks within hunks rather than scanning lines in isolation. Five detectors:
+  (1) **Condition operator changes** — flags risky operator swaps (`>=` → `===`, `||` → `&&`, etc.)
+  in conditional context when the surrounding code is structurally similar; severity `high`.
+  (2) **Error handling removal/change** — flags removed `catch` blocks and `return null` changed to
+  `throw` within catch context; severity `high`.
+  (3) **Numeric constant changes** — flags number literal changes in lines containing sensitivity
+  keywords (`timeout`, `retry`, `delay`, `backoff`, etc.); severity `medium`.
+  (4) **Async pattern changes** — flags sequential `await` calls replaced by `Promise.all`,
+  `Promise.allSettled`, `Promise.race`, or `Promise.any`; severity `medium`.
+  (5) **Side effect introductions** — flags new `localStorage`, `sessionStorage`, `document.cookie`,
+  `indexedDB`, and Node.js `fs.write*`/`fs.rm*` calls in added lines; severity `medium`.
+  All detectors require multiple corroborating signals to minimize false positives. 23 new tests.
+  Spec: `docs/specs/silent-regression-detector.md`.
+
+- **Extended static analyzers** (`DebugArtifactsAnalyzer`, `TypeSafetyAnalyzer`, `ChangeClassifierAnalyzer`):
+  three new diff-aware `CodeAnalyzer` implementations. Unlike the existing full-file analyzers, these
+  operate on the diff itself — flagging only what the PR _introduced_, not pre-existing debt.
+  `DebugArtifactsAnalyzer` flags newly added `console.*` calls (low), `debugger` statements (medium),
+  and `TODO`/`FIXME`/`HACK`/`XXX` markers (info). `TypeSafetyAnalyzer` flags `as any` and double-cast
+  patterns (medium), `@ts-ignore` (medium), `@ts-expect-error` (info), and non-null assertions (low)
+  in added lines only. `ChangeClassifierAnalyzer` classifies each changed file as behavior/refactor/test/config
+  using control-flow keyword heuristics and always emits a PR-level summary finding; when the PR title
+  signals a refactor but behavior-change files exist, it also emits a medium-severity intent-mismatch finding.
+  Documented limitation: the keyword heuristic misclassifies rename-heavy diffs as behavior changes.
+  31 new tests. Spec: `docs/specs/static-analyzers-extended.md`.
+
+- **Phase 3 — AI review pipeline**: hybrid static-analysis + AI review
+  pipeline. Three `CodeAnalyzer` implementations run unconditionally
+  (no API key required): `ComplexityAnalyzer` (cyclomatic complexity via
+  TypeScript compiler API), `DuplicationAnalyzer` (sliding-window line
+  hash), `SmellsAnalyzer` (long functions, deep nesting, too many
+  parameters). Optional `AIProvider` layer adds three sequential AI
+  passes (correctness, security, consistency) plus a summary pass that
+  produces a 3–5 sentence summary and a 1–5 risk score. `AnthropicProvider`
+  (`@anthropic-ai/sdk`) and `OpenAIProvider` (`openai`) both stream via
+  `AsyncIterable<string>`. Context builder fetches file contents at HEAD
+  via the new `PlatformProvider.getFileContent` method, respecting a
+  160k-token budget. Prompt-injection defense: all untrusted PR content
+  wrapped in XML tags with explicit system-prompt instructions.
+  `pnpm review <pr-url>` is the Phase 3 exit criterion. 20 new tests.
+- `PlatformProvider.getFileContent(session, ref, path, commitSha)`:
+  fetches file content at a specific commit. `GitHubProvider` uses
+  `octokit.rest.repos.getContent`; `AzureDevOpsProvider` uses the ADO
+  items API with a raw text response.
+- `PullRequest.headSha`: head commit SHA, populated by `getPullRequest`
+  for both providers. Required by the context builder for file fetching.
+- ADR-0007: Hybrid Review Pipeline — records the decision to run static
+  analysis alongside (optional) AI, making the tool useful without an
+  API key.
+- ADR-0008: AIProvider Streaming via AsyncIterable — records the single
+  `stream` method design over a `complete` + `stream` pair.
+
 - **Phase 2 — Platform providers and PR fetching**: `GitHubProvider`
   fetches PRs and diffs from GitHub using `@octokit/rest` (search-based
   review queue, per-file unified diff parsing into structured `Diff`).

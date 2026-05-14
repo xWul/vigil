@@ -29,6 +29,7 @@ export interface PullRequest {
   readonly url: string;
   readonly targetBranch: string;
   readonly sourceBranch: string;
+  readonly headSha: string;
 }
 
 export interface DiffLine {

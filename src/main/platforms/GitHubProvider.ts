@@ -111,6 +111,7 @@ export class GitHubProvider implements PlatformProvider {
           url: item.html_url,
           targetBranch: "",
           sourceBranch: "",
+          headSha: "",
         });
       }
 
@@ -158,6 +159,7 @@ export class GitHubProvider implements PlatformProvider {
         url: data.html_url,
         targetBranch: data.base.ref,
         sourceBranch: data.head.ref,
+        headSha: data.head.sha,
       };
 
       this.logger.debug("github.getPullRequest.complete", { title: data.title });
@@ -291,6 +293,36 @@ export class GitHubProvider implements PlatformProvider {
           })),
       });
       return ok(undefined);
+    } catch (e) {
+      return err(toPlatformError(e));
+    }
+  }
+
+  async getFileContent(
+    session: AuthSession,
+    ref: PRRef,
+    path: string,
+    commitSha: string,
+  ): Promise<Result<string, PlatformError>> {
+    if (ref.platform !== "github") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+    const octokit = new Octokit({ auth: session.accessToken });
+
+    try {
+      const { data } = await octokit.rest.repos.getContent({
+        owner: ref.owner,
+        repo: ref.repo,
+        path,
+        ref: commitSha,
+      });
+
+      if (Array.isArray(data) || data.type !== "file") {
+        return err({ code: "not_found" });
+      }
+
+      const content = Buffer.from(data.content, "base64").toString("utf-8");
+      return ok(content);
     } catch (e) {
       return err(toPlatformError(e));
     }

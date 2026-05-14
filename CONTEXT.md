@@ -144,3 +144,97 @@ The decision the reviewer submits on a PR: `"approved"`,
 approval decision). Submitted via `PlatformProvider.submitReview`.
 
 ---
+
+## Finding
+
+The atomic unit of review output. Produced by either a `CodeAnalyzer`
+(static analysis) or an AI review pass. Fields:
+
+- `severity` — `"critical" | "high" | "medium" | "low" | "info"`
+- `title` — one-line summary of the issue
+- `description` — 2–4 sentences explaining the issue
+- `evidence` — the exact code snippet or diff lines that triggered this finding
+- `file` — file path where the finding applies
+- `lines` — `{ start, end }` line range, or `null` for PR-level findings
+- `pass` — which pass produced it:
+  - AI passes: `"correctness" | "security" | "consistency"`
+  - Full-file static passes: `"complexity" | "duplication" | "smells"`
+  - Diff-aware static passes: `"debug-artifacts" | "type-safety" | "change-classification" | "regression"`
+- `source` — `"static"` or `"ai"`, distinguishing the analysis lane
+
+A `Finding` is always scoped to a single file (or the PR as a whole). It never spans multiple files.
+
+---
+
+## ReviewResult
+
+The aggregated output of a full review pipeline run. Contains:
+
+- `findings` — all `Finding[]` from both static analysis and AI passes combined
+- `summary` — a 3–5 sentence synthesis produced by the summary AI pass, receiving only the prior findings (not the diff or file content)
+- `riskScore` — `1 | 2 | 3 | 4 | 5` assigned by the summary pass as a holistic judgment (1 = trivial, 5 = do not merge); not computed mechanically from finding counts
+
+AI is optional — if no `AIProvider` is configured, `ReviewResult` still contains static analysis findings, an empty summary, and no risk score.
+
+---
+
+## ReviewContext
+
+The input assembled once by the context builder and consumed by all review passes (both `CodeAnalyzer` and the AI review engine). Contains:
+
+- `pr` — the `PullRequest` metadata
+- `diff` — the full structured `Diff`
+- `files` — a map of `path → file content at HEAD` for changed files that fit within the token budget; deleted files have no entry
+- `tokenBudget` — the maximum token count for this review run
+
+The `AuthSession` is not included — the context builder fetches file contents before constructing `ReviewContext`, so credentials never leak into the review pipeline.
+
+---
+
+## CodeAnalyzer
+
+A local analysis pass that produces `Finding[]` from code structure alone — no LLM involved. Each `CodeAnalyzer` has an `id` and receives a `ReviewContext`. Implementations:
+
+Full-file analyzers (examine file content at HEAD):
+
+- `ComplexityAnalyzer` — cyclomatic complexity per function; flags functions above threshold
+- `DuplicationAnalyzer` — detects copy-pasted blocks across changed files using line hashing
+- `SmellsAnalyzer` — structural smells: long functions, long parameter lists, deep nesting
+
+Diff-aware analyzers (examine the diff itself, not file content):
+
+- `DebugArtifactsAnalyzer` — flags newly added `console.*` calls, `debugger` statements, and `TODO`/`FIXME`/`HACK` markers in added lines only
+- `TypeSafetyAnalyzer` — flags newly added `as any`, `@ts-ignore`, non-null assertions, and double-cast patterns in added lines only
+- `ChangeClassifierAnalyzer` — classifies each changed file as behavior/refactor/test/config using control-flow keyword heuristics; emits a PR-level summary and (conditionally) an intent-mismatch finding
+- `SilentRegressionAnalyzer` — detects high-risk behavioral change patterns using paired hunk analysis: condition operator changes, error handling removal/change, numeric constant changes in sensitive contexts, async execution pattern changes, and side effect introductions
+
+All analyzers only examine files that appear in the diff. `CodeAnalyzer` failures are silent — a failed analyzer logs a warning and returns empty findings; it never blocks the review.
+
+---
+
+## SilentRegression
+
+A behavioral change in a PR that matches a known high-risk pattern and
+is non-obvious from a quick visual scan of the diff. Detected by
+`SilentRegressionAnalyzer` without AI. The risk is intrinsic to the
+change pattern — not dependent on whether tests cover the changed code.
+
+Distinct from a code smell (structural issue with no immediate behavioral
+risk) and from a security finding (a separate category tracked by the AI
+security pass).
+
+Known patterns: condition operator changes, error handling removal or
+change, numeric constant changes in sensitive contexts, async execution
+pattern changes, and side effect introductions.
+
+---
+
+## AIProvider
+
+The abstraction over LLM providers. Receives an `AIRequest` (system prompt, messages, model, maxTokens) and returns an `AsyncIterable<string>` of token chunks. Callers that need the full response use a `collectStream` helper.
+
+Model selection is the caller's responsibility — the model name is passed in `AIRequest.model`. `AIProvider` does not know about keychain or BYOK storage; it receives its API key at construction time.
+
+Implementations: `AnthropicProvider` (`@anthropic-ai/sdk`) and `OpenAIProvider` (`openai` package).
+
+---

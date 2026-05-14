@@ -33,12 +33,15 @@
     "auth:github": "tsx scripts/test-auth-github.ts",
     "auth:ado": "tsx scripts/test-auth-ado.ts",
     "fetch-pr": "tsx scripts/fetch-pr.ts",
+    "review": "tsx scripts/review.ts",
     "prepare": "echo 'Vigil ready. Run pnpm dev to start.'"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.2",
     "@azure/msal-node": "^5.2.0",
     "@napi-rs/keyring": "^1.3.0",
     "@octokit/rest": "^22.0.1",
+    "openai": "^6.37.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "zustand": "5.0.2"
