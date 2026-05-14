@@ -349,3 +349,9 @@ The application itself uses LLMs. A few specific rules:
 - The architecture and these conventions exist to make decisions
   faster, not to be followed blindly. If something here is genuinely
   wrong for a situation, surface it and we'll update this file.
+
+All detailed coding guidelines are in the skills:
+
+- Use `software-engineering` skill for core principles
+- Use `typescript` skill for TypeScript/JavaScript standards
+- Use `react` skill for React/Next.js best practices
