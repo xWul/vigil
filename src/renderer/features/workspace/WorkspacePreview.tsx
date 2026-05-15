@@ -407,6 +407,30 @@ const MOCK_FINDINGS: readonly Finding[] = [
       "payment.ts now throws on charge failure while the rest of the service layer returns Result objects. This mixes two error-handling conventions in the same layer. Standardise on one pattern — callers of processPayment will need to wrap it in a try/catch where they currently expect a Result.",
     evidence: "",
   },
+  // Change classification — summary (always emitted by ChangeClassifierAnalyzer)
+  {
+    pass: "change-classification",
+    source: "static",
+    severity: "info",
+    file: "",
+    lines: null,
+    title: "Change breakdown: 3 behavior",
+    description:
+      "Behavior files: src/api/payment.ts, src/utils/retry.ts, src/middleware/auth.ts. Note: classification is heuristic — rename-heavy PRs may show false behavior positives.",
+    evidence: "",
+  },
+  // Change classification — intent mismatch (title says "refactor" but all files have control-flow changes)
+  {
+    pass: "change-classification",
+    source: "static",
+    severity: "medium",
+    file: "",
+    lines: null,
+    title: "Intent mismatch: PR describes a refactor but contains behavior changes",
+    description:
+      "The PR title suggests a refactor but 3 file(s) contain control-flow changes: src/api/payment.ts, src/utils/retry.ts, src/middleware/auth.ts. Verify these changes are intentional. Note: classification is heuristic — rename-heavy diffs may trigger false positives.",
+    evidence: "refactor: migrate payment processor to async queue pipeline",
+  },
   // Architecture — direct circular dependency
   {
     pass: "architecture",
