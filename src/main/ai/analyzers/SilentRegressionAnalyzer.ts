@@ -236,11 +236,13 @@ function detectErrorHandlingChanges(file: FileDiff): Finding[] {
     // Pattern A: catch block removed
     if (removedHasCatch && !addedHasCatch) {
       const catchLine = removedLines.find((l) => CATCH_RE.test(l.content))!;
+      const isLikelyRefactor = addedLines.length > 0;
       findings.push({
-        severity: "high",
+        severity: isLikelyRefactor ? "medium" : "high",
         title: "Catch block removed",
-        description:
-          "A catch block was removed. Errors that were previously handled will now propagate to callers. Check all call sites.",
+        description: isLikelyRefactor
+          ? "A catch block was removed alongside new code. Verify that the replacement code still handles errors from this scope — it may have been refactored into a helper, or accidentally dropped."
+          : "A catch block was removed. Errors that were previously handled will now propagate to callers. Check all call sites.",
         evidence: `- ${catchLine.content.trim()}`,
         file: file.newPath,
         lines: null,

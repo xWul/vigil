@@ -5,6 +5,9 @@ import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeA
 const WINDOW_SIZE = 6;
 const MIN_LINE_LENGTH = 10;
 
+// Module-level declarations that appear verbatim across many files — not logic worth flagging.
+const STRUCTURAL_LINE_RE = /^(import\s|export\s*(\{|type\s*[\w{]|\*\s+from|default\s+[A-Za-z_$]))/;
+
 function hashLines(lines: readonly string[]): string {
   return lines.join("\n");
 }
@@ -19,7 +22,12 @@ function extractBlocks(filePath: string, content: string): Block[] {
   const rawLines = content.split("\n");
   const meaningfulLines = rawLines
     .map((line, i) => ({ line: line.trim(), original: i + 1 }))
-    .filter((l) => l.line.length >= MIN_LINE_LENGTH && !l.line.startsWith("//"));
+    .filter(
+      (l) =>
+        l.line.length >= MIN_LINE_LENGTH &&
+        !l.line.startsWith("//") &&
+        !STRUCTURAL_LINE_RE.test(l.line),
+    );
 
   const blocks: Block[] = [];
   for (let i = 0; i <= meaningfulLines.length - WINDOW_SIZE; i++) {

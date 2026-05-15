@@ -22,6 +22,7 @@ function computeComplexity(node: ts.Node): number {
   let complexity = 1;
 
   function visit(n: ts.Node): void {
+    if (isFunctionLike(n)) return;
     if (BRANCH_KINDS.has(n.kind)) {
       complexity++;
     } else if (ts.isBinaryExpression(n)) {
@@ -70,7 +71,24 @@ function isFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
   );
 }
 
-function analyzeFile(filePath: string, content: string): Finding[] {
+interface LineRange {
+  start: number;
+  end: number;
+}
+
+function overlapsAnyRange(
+  funcStart: number,
+  funcEnd: number,
+  ranges: readonly LineRange[],
+): boolean {
+  return ranges.some((r) => funcStart <= r.end && funcEnd >= r.start);
+}
+
+function analyzeFile(
+  filePath: string,
+  content: string,
+  changedRanges?: readonly LineRange[],
+): Finding[] {
   const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
   const findings: Finding[] = [];
 
@@ -78,18 +96,23 @@ function analyzeFile(filePath: string, content: string): Finding[] {
     if (isFunctionLike(node)) {
       const complexity = computeComplexity(node);
       if (complexity > COMPLEXITY_THRESHOLD) {
-        const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-        const name = getFunctionName(node);
-        findings.push({
-          severity: complexity > 20 ? "high" : "medium",
-          title: `High cyclomatic complexity in "${name}" (${complexity})`,
-          description: `The function "${name}" has a cyclomatic complexity of ${complexity}, exceeding the threshold of ${COMPLEXITY_THRESHOLD}. High complexity makes the function harder to test and understand. Consider extracting smaller, focused functions.`,
-          evidence: content.slice(node.getStart(), node.getStart() + 120).split("\n")[0] ?? "",
-          file: filePath,
-          lines: { start: line + 1, end: line + 1 },
-          pass: "complexity",
-          source: "static",
-        });
+        const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+        const funcStart = start.line + 1;
+        const funcEnd = end.line + 1;
+        if (!changedRanges || overlapsAnyRange(funcStart, funcEnd, changedRanges)) {
+          const name = getFunctionName(node);
+          findings.push({
+            severity: complexity > 20 ? "high" : "medium",
+            title: `High cyclomatic complexity in "${name}" (${complexity})`,
+            description: `The function "${name}" has a cyclomatic complexity of ${complexity}, exceeding the threshold of ${COMPLEXITY_THRESHOLD}. High complexity makes the function harder to test and understand. Consider extracting smaller, focused functions.`,
+            evidence: content.slice(node.getStart(), node.getStart() + 120).split("\n")[0] ?? "",
+            file: filePath,
+            lines: { start: funcStart, end: funcStart },
+            pass: "complexity",
+            source: "static",
+          });
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -119,7 +142,15 @@ export class ComplexityAnalyzer implements CodeAnalyzer {
       const content = context.files.get(file.newPath);
       if (!content) continue;
 
-      findings.push(...analyzeFile(file.newPath, content));
+      if (file.status === "added") {
+        findings.push(...analyzeFile(file.newPath, content));
+      } else {
+        const changedRanges = file.hunks.map((h) => ({
+          start: h.newStart,
+          end: h.newStart + h.newCount - 1,
+        }));
+        findings.push(...analyzeFile(file.newPath, content, changedRanges));
+      }
     }
 
     return Promise.resolve(ok(findings));

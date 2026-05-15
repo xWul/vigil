@@ -17,8 +17,10 @@ function classifyFile(file: FileDiff): FileLabel {
   if (TEST_PATTERN.test(path)) return "test";
   if (CONFIG_PATTERN.test(path)) return "config";
 
-  // Deleted files: no hunks to scan, classify by path only
-  if (file.status === "deleted") return "behavior";
+  // Deleted files have no hunks to scan. Deletions remove behavior rather than adding it,
+  // so classifying them as "behavior" would produce false-positive intent-mismatch findings
+  // on cleanup PRs (e.g., "refactor: remove old auth module" deleting a source file).
+  if (file.status === "deleted") return "refactor";
 
   for (const hunk of file.hunks) {
     for (const line of hunk.lines) {

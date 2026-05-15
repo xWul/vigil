@@ -10,8 +10,16 @@ import type {
   ReviewVerdict,
 } from "../../../shared/model/index.js";
 import type { Finding, FindingPass } from "../../../shared/review.js";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { api } from "../../api.js";
-import { useDiff, useSettings, useCachedReview, useInvalidateReview } from "../../lib/queries.js";
+import {
+  useDiff,
+  useSettings,
+  useCachedReview,
+  useInvalidateReview,
+  queryKeys,
+} from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 import type { TabId } from "./AnalysisTabs.js";
 import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
@@ -1535,6 +1543,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
 
   const cachedReviewQuery = useCachedReview(pr.ref, headSha);
   const invalidateReview = useInvalidateReview();
+  const queryClient = useQueryClient();
 
   const [findings, setFindings] = useState<Finding[]>([]);
   const [passes, setPasses] = useState<PassMap>({});
@@ -1593,7 +1602,14 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     if (cachedReviewQuery.data?.ok && cachedReviewQuery.data.value) return;
 
     void api.invoke("review:run", pr.ref).then((result) => {
-      if (result.ok) setFindings([...result.value.findings]);
+      if (result.ok) {
+        setFindings([...result.value.findings]);
+        // Seed the TanStack cache so revisiting this PR skips re-running the review.
+        queryClient.setQueryData(queryKeys.review(pr.ref, headSha), {
+          ok: true,
+          value: result.value,
+        });
+      }
       setReviewDone(true);
       setReviewCompletedAt(new Date());
     });
@@ -1897,6 +1913,18 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
             passes={passes}
             reviewDone={reviewDone}
             reviewCompletedAt={reviewCompletedAt}
+            onFindingClick={(finding) => {
+              const idx = sortedFindings.findIndex(
+                (f) =>
+                  f.file === finding.file &&
+                  f.lines?.start === finding.lines?.start &&
+                  f.title === finding.title,
+              );
+              if (idx !== -1) {
+                setFocusedFindingIdx(idx);
+                setActiveTab("diff");
+              }
+            }}
           />
         </div>
       ) : activeTab === "risks" ? (

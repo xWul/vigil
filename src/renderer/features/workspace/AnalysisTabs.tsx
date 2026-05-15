@@ -225,6 +225,33 @@ export function TabBar({
 
 // ── OverviewTab ───────────────────────────────────────────────────────────────
 
+function SeverityBreakdown({
+  high,
+  med,
+  low,
+  reviewDone,
+}: {
+  high: number;
+  med: number;
+  low: number;
+  reviewDone: boolean;
+}) {
+  const t = TOKENS.dark;
+  if (!reviewDone && high === 0 && med === 0 && low === 0) {
+    return <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>running…</span>;
+  }
+  if (high === 0 && med === 0 && low === 0) {
+    return <span style={{ fontFamily: MONO, fontSize: 11, color: t.green }}>none</span>;
+  }
+  return (
+    <span style={{ display: "flex", gap: 10, fontFamily: MONO, fontSize: 11 }}>
+      {high > 0 && <span style={{ color: t.red }}>{high} high</span>}
+      {med > 0 && <span style={{ color: t.amber }}>{med} med</span>}
+      {low > 0 && <span style={{ color: t.textDim }}>{low} low</span>}
+    </span>
+  );
+}
+
 function PulseMetric({
   label,
   value,
@@ -236,7 +263,7 @@ function PulseMetric({
   label: string;
   value: string | number;
   unit?: string;
-  note?: string;
+  note?: React.ReactNode;
   noteColor?: string;
   last?: boolean;
 }) {
@@ -301,6 +328,7 @@ export function OverviewTab({
   passes,
   reviewDone,
   reviewCompletedAt,
+  onFindingClick,
 }: {
   pr: PullRequest;
   findings: readonly Finding[];
@@ -308,6 +336,7 @@ export function OverviewTab({
   passes: PassMap;
   reviewDone: boolean;
   reviewCompletedAt: Date | null;
+  onFindingClick?: (finding: Finding) => void;
 }) {
   const t = TOKENS.dark;
 
@@ -315,6 +344,7 @@ export function OverviewTab({
     (f) => f.severity === "critical" || f.severity === "high",
   ).length;
   const medCount = findings.filter((f) => f.severity === "medium").length;
+  const lowCount = findings.filter((f) => f.severity === "low" || f.severity === "info").length;
   const regressionCount = findings.filter((f) => f.pass === "regression").length;
   const filesChanged = diff?.files.length ?? 0;
   const linesAdded =
@@ -367,16 +397,12 @@ export function OverviewTab({
           label="Findings"
           value={findings.length}
           note={
-            highCount > 0
-              ? `${highCount} high`
-              : medCount > 0
-                ? `${medCount} medium`
-                : reviewDone
-                  ? "none critical"
-                  : "running…"
-          }
-          noteColor={
-            highCount > 0 ? t.red : medCount > 0 ? t.amber : reviewDone ? t.green : t.textFaint
+            <SeverityBreakdown
+              high={highCount}
+              med={medCount}
+              low={lowCount}
+              reviewDone={reviewDone}
+            />
           }
         />
         <PulseMetric
@@ -468,10 +494,37 @@ export function OverviewTab({
               >
                 Worth your attention
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {topFindings.map((f, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <RiskDot sev={f.severity} size={7} />
+                  <button
+                    key={i}
+                    onClick={() => onFindingClick?.(f)}
+                    disabled={!onFindingClick}
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "flex-start",
+                      background: "transparent",
+                      border: "none",
+                      padding: "10px 12px",
+                      margin: "0 -12px",
+                      borderRadius: 6,
+                      cursor: onFindingClick ? "pointer" : "default",
+                      textAlign: "left" as const,
+                      width: "calc(100% + 24px)",
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (onFindingClick)
+                        (e.currentTarget as HTMLButtonElement).style.background = `${t.surface}`;
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                    }}
+                  >
+                    <div style={{ paddingTop: 3, flexShrink: 0 }}>
+                      <RiskDot sev={f.severity} size={7} />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
@@ -496,7 +549,20 @@ export function OverviewTab({
                         {f.lines ? `:${f.lines.start}` : ""}
                       </div>
                     </div>
-                  </div>
+                    {onFindingClick && (
+                      <div
+                        style={{
+                          flexShrink: 0,
+                          alignSelf: "center",
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: t.textFaint,
+                        }}
+                      >
+                        →
+                      </div>
+                    )}
+                  </button>
                 ))}
               </div>
             </>

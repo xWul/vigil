@@ -287,6 +287,23 @@ export interface RunReviewOptions {
   onPass?: (pass: FindingPass, status: "start" | "complete", count: number) => void;
 }
 
+const MAX_FINDINGS_PER_ANALYZER = 10;
+
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  info: 0,
+};
+
+function capFindings(findings: readonly Finding[]): Finding[] {
+  if (findings.length <= MAX_FINDINGS_PER_ANALYZER) return [...findings];
+  return [...findings]
+    .sort((a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0))
+    .slice(0, MAX_FINDINGS_PER_ANALYZER);
+}
+
 export async function runReview(
   context: ReviewContext,
   analyzers: readonly CodeAnalyzer[],
@@ -317,13 +334,15 @@ export async function runReview(
       try {
         const result = await analyzer.analyze(filteredContext);
         if (result.ok) {
+          const capped = capFindings(result.value);
           logger.info("analyzer.complete", {
             id: analyzer.id,
-            findingCount: result.value.length,
+            findingCount: capped.length,
+            rawCount: result.value.length,
             latencyMs: Date.now() - analyzerStart,
           });
-          onPass(pass, "complete", result.value.length);
-          return result.value;
+          onPass(pass, "complete", capped.length);
+          return capped;
         }
         logger.warn("analyzer.failed", { id: analyzer.id, code: result.error.code });
         onPass(pass, "complete", 0);
