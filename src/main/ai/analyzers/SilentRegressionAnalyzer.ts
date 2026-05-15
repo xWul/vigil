@@ -1,3 +1,5 @@
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { DiffLine, FileDiff, Hunk } from "../../platforms/model/index.js";
@@ -480,25 +482,35 @@ function detectSideEffectIntroductions(file: FileDiff): Finding[] {
 // SilentRegressionAnalyzer
 // ---------------------------------------------------------------------------
 
-const DETECTORS = [
-  detectConditionChanges,
-  detectErrorHandlingChanges,
-  detectNumericChanges,
-  detectAsyncPatternChanges,
-  detectSideEffectIntroductions,
-];
+type RegressionConfig = ResolvedAnalyzerConfig["analyzers"]["regression"];
 
 export class SilentRegressionAnalyzer implements CodeAnalyzer {
   readonly id = "regression" as const;
+  private readonly cfg: RegressionConfig;
+
+  constructor(config?: RegressionConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.regression;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
+
+    const d = this.cfg.detectors;
+    type Detector = typeof detectConditionChanges;
+    const detectors: Detector[] = [];
+    if (d.conditionChanges) detectors.push(detectConditionChanges);
+    if (d.errorHandling) detectors.push(detectErrorHandlingChanges);
+    if (d.numericChanges) detectors.push(detectNumericChanges);
+    if (d.asyncPatterns) detectors.push(detectAsyncPatternChanges);
+    if (d.sideEffects) detectors.push(detectSideEffectIntroductions);
+
     const findings: Finding[] = [];
 
     for (const file of context.diff.files) {
       if (file.status === "deleted") continue;
       if (!TS_JS.test(file.newPath)) continue;
 
-      for (const detect of DETECTORS) {
+      for (const detect of detectors) {
         try {
           findings.push(...detect(file));
         } catch {

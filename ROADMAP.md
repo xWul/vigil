@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-14. Phase 7 complete (OAuth registration is a user action, not code). Phase 8 next.
+> **Status:** Living document. Last updated 2026-05-15. Phase 7 complete (OAuth registration is a user action, not code). Phase 8 (configurable analyzer settings) planned and specced. Phase 9 (distribution) next after that.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -329,7 +329,40 @@ an AI key, and complete a real review without needing to read the source code.
 
 ---
 
-## Phase 8 — Distribution (v0.1 release)
+## Phase 8 — Configurable Analyzer Settings
+
+**Goal:** Every static analysis parameter is tunable per repository through a
+workspace UI panel. Config is stored in `userData` per-repo; teams can export
+it as `.vigilrc` for committing to their repository.
+
+Spec: `docs/specs/analyzer-config.md` — ADR-0012
+
+- [ ] `src/shared/analyzer-config.ts`: `AnalyzerConfig` type (all fields optional),
+      `ResolvedAnalyzerConfig` (all fields required), `resolveAnalyzerConfig()` helper
+- [ ] `settings:getAnalyzerConfig` and `settings:setAnalyzerConfig` IPC channels
+      added to `src/shared/ipc-contract.ts`; main-side handlers read/write
+      `electron-store` keyed by `{platform}/{owner}/{repo}`
+- [ ] All eight analyzer constructors accept their config slice; `enabled: false`
+      returns `ok([])` immediately
+- [ ] `runReview.ts`: `MAX_FINDINGS_PER_ANALYZER` reads from `config.maxFindingsPerAnalyzer`
+- [ ] `src/main/ipc/index.ts`: reads config before constructing analyzers; passes
+      slices to each constructor
+- [ ] Workspace bottom strip: `⚙` icon button (keyboard shortcut `,`) opens the
+      Analyzer Settings overlay
+- [ ] Analyzer Settings overlay: grouped sections (Static passes / Diff passes /
+      Pipeline), enable toggles, threshold number inputs, per-detector sub-toggles,
+      Save button, Restore defaults button
+- [ ] "Export as .vigilrc" button: copies minimal (non-default-only) JSON to clipboard
+- [ ] "Analyzer settings saved — re-run to apply" toast on save
+- [ ] Tests: `resolveAnalyzerConfig` unit tests; per-analyzer disabled/threshold tests
+
+**Exit criteria:** A user can disable the Smells analyzer, raise the complexity
+threshold to 15, re-run the review, and see the changes reflected. Exporting
+`.vigilrc` produces valid, minimal JSON matching the schema.
+
+---
+
+## Phase 9 — Distribution (v0.1 release)
 
 **Goal:** Someone other than the author can install and use Vigil.
 
@@ -345,10 +378,15 @@ gets a working review on a PR in under 10 minutes.
 
 ---
 
-## Phase 9 — Post-v0.1 improvements (backlog)
+## Phase 10 — Post-v0.1 improvements (backlog)
 
 Not blockers for v0.1 but natural next investments after release:
 
+- [ ] **Auto-read `.vigilrc` from repo**: at review start, fetch `.vigilrc` from
+      the repo root via `PlatformProvider.getFileContent` (one extra API call);
+      merge with `userData` config (repo file wins); fall back silently on 404
+      or parse error. Enables team-shared analysis conventions without manual import.
+      See ADR-0012.
 - [ ] **Auto-update** (`electron-updater`): without this, users on v0.1 are
       stranded. Integrate with GitHub Releases. High priority post-v0.1.
 - [ ] **System notification on review complete**: Electron `Notification` API.

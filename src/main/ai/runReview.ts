@@ -284,10 +284,9 @@ async function runAIPass(
 export interface RunReviewOptions {
   model: string;
   maxTokensPerPass?: number;
+  maxFindingsPerAnalyzer?: number;
   onPass?: (pass: FindingPass, status: "start" | "complete", count: number) => void;
 }
-
-const MAX_FINDINGS_PER_ANALYZER = 10;
 
 const SEVERITY_RANK: Record<string, number> = {
   critical: 4,
@@ -297,11 +296,11 @@ const SEVERITY_RANK: Record<string, number> = {
   info: 0,
 };
 
-function capFindings(findings: readonly Finding[]): Finding[] {
-  if (findings.length <= MAX_FINDINGS_PER_ANALYZER) return [...findings];
+function capFindings(findings: readonly Finding[], max: number): Finding[] {
+  if (findings.length <= max) return [...findings];
   return [...findings]
     .sort((a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0))
-    .slice(0, MAX_FINDINGS_PER_ANALYZER);
+    .slice(0, max);
 }
 
 export async function runReview(
@@ -312,6 +311,7 @@ export async function runReview(
   logger: Logger = new NoopLogger(),
 ): Promise<Result<ReviewResult, ReviewError>> {
   const maxTokensPerPass = options.maxTokensPerPass ?? 4096;
+  const maxFindingsPerAnalyzer = options.maxFindingsPerAnalyzer ?? 10;
   const onPass = options.onPass ?? (() => undefined);
   const allFindings: Finding[] = [];
   const start = Date.now();
@@ -334,7 +334,7 @@ export async function runReview(
       try {
         const result = await analyzer.analyze(filteredContext);
         if (result.ok) {
-          const capped = capFindings(result.value);
+          const capped = capFindings(result.value, maxFindingsPerAnalyzer);
           logger.info("analyzer.complete", {
             id: analyzer.id,
             findingCount: capped.length,

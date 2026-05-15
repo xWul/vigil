@@ -1,3 +1,5 @@
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
@@ -134,10 +136,18 @@ function buildTitle(cycle: string[]): string {
 // Analyzer
 // ---------------------------------------------------------------------------
 
+type ArchitectureConfig = ResolvedAnalyzerConfig["analyzers"]["architecture"];
+
 export class ArchitectureAnalyzer implements CodeAnalyzer {
   readonly id = "architecture" as const;
+  private readonly cfg: ArchitectureConfig;
+
+  constructor(config?: ArchitectureConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.architecture;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
     const changedPaths = new Set(
       context.diff.files.filter((f) => TS_JS.test(f.newPath)).map((f) => f.newPath),
     );

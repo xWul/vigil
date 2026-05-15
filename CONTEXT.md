@@ -399,3 +399,40 @@ Channel naming: `namespace:action` (e.g. `auth:signIn`, `review:run`).
 Namespaces: `auth`, `platform`, `review`, `settings`.
 
 ---
+
+## AnalyzerConfig
+
+The structured configuration object that controls static analysis behaviour
+for a specific repository. Contains enable/disable flags and numeric
+thresholds for each `CodeAnalyzer`, plus the pipeline-level
+`maxFindingsPerAnalyzer` cap.
+
+`AnalyzerConfig` is per-repo (keyed by `{platform}/{owner}/{repo}`) and
+stored in Electron's `userData` directory. It is not stored in the git
+repository — teams who want to share it commit a `.vigilrc` file manually
+using Vigil's "Export as .vigilrc" clipboard button (see ADR-0012).
+
+`AnalyzerConfig` travels from the IPC handler into each `CodeAnalyzer`
+constructor at review time. It does not appear in `ReviewContext` — it
+governs how analyzers behave, not what they receive as input.
+
+Hardcoded defaults apply for any key absent from the stored config:
+
+- `complexity.threshold` = 10
+- `smells.maxFunctionLines` = 50, `maxParams` = 4, `maxNesting` = 3
+- `duplication.minBlockLines` = 6
+- All detectors and analyzers enabled by default
+- `maxFindingsPerAnalyzer` = 10
+
+---
+
+## `.vigilrc`
+
+The portable, committable form of `AnalyzerConfig`. A JSON file placed at
+the repository root that teams can commit to share analysis conventions.
+Vigil does not auto-read `.vigilrc` from repositories in the current
+version — it is generated from the workspace config panel via "Export as
+.vigilrc" and committed manually. Auto-reading is planned for a future
+phase (see ADR-0012).
+
+---

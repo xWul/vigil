@@ -1,10 +1,10 @@
 import ts from "typescript";
 
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
-
-const COMPLEXITY_THRESHOLD = 10;
 
 const BRANCH_KINDS = new Set([
   ts.SyntaxKind.IfStatement,
@@ -88,6 +88,7 @@ function analyzeFile(
   filePath: string,
   content: string,
   changedRanges?: readonly LineRange[],
+  threshold = DEFAULT_ANALYZER_CONFIG.analyzers.complexity.threshold,
 ): Finding[] {
   const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
   const findings: Finding[] = [];
@@ -95,7 +96,7 @@ function analyzeFile(
   function visit(node: ts.Node): void {
     if (isFunctionLike(node)) {
       const complexity = computeComplexity(node);
-      if (complexity > COMPLEXITY_THRESHOLD) {
+      if (complexity > threshold) {
         const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
         const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
         const funcStart = start.line + 1;
@@ -105,7 +106,7 @@ function analyzeFile(
           findings.push({
             severity: complexity > 20 ? "high" : "medium",
             title: `High cyclomatic complexity in "${name}" (${complexity})`,
-            description: `The function "${name}" has a cyclomatic complexity of ${complexity}, exceeding the threshold of ${COMPLEXITY_THRESHOLD}. High complexity makes the function harder to test and understand. Consider extracting smaller, focused functions.`,
+            description: `The function "${name}" has a cyclomatic complexity of ${complexity}, exceeding the threshold of ${threshold}. High complexity makes the function harder to test and understand. Consider extracting smaller, focused functions.`,
             evidence: content.slice(node.getStart(), node.getStart() + 120).split("\n")[0] ?? "",
             file: filePath,
             lines: { start: funcStart, end: funcStart },
@@ -129,10 +130,19 @@ function isAnalyzable(path: string): boolean {
   return TS_EXTENSIONS.has(ext);
 }
 
+type ComplexityConfig = ResolvedAnalyzerConfig["analyzers"]["complexity"];
+
 export class ComplexityAnalyzer implements CodeAnalyzer {
   readonly id = "complexity" as const;
+  private readonly cfg: ComplexityConfig;
+
+  constructor(config?: ComplexityConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.complexity;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
+
     const findings: Finding[] = [];
 
     for (const file of context.diff.files) {
@@ -143,13 +153,13 @@ export class ComplexityAnalyzer implements CodeAnalyzer {
       if (!content) continue;
 
       if (file.status === "added") {
-        findings.push(...analyzeFile(file.newPath, content));
+        findings.push(...analyzeFile(file.newPath, content, undefined, this.cfg.threshold));
       } else {
         const changedRanges = file.hunks.map((h) => ({
           start: h.newStart,
           end: h.newStart + h.newCount - 1,
         }));
-        findings.push(...analyzeFile(file.newPath, content, changedRanges));
+        findings.push(...analyzeFile(file.newPath, content, changedRanges, this.cfg.threshold));
       }
     }
 

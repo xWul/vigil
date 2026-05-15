@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable analyzer settings** (Phase 8): every static analyzer parameter is now
+  user-configurable per repository. Settings are stored in Electron `userData` as a JSON
+  file keyed by platform/owner/repo (never committed to the repository). Analyzers receive
+  a fully-resolved config at construction time via constructor injection. All eight analyzers
+  support `enabled: true/false`; `ComplexityAnalyzer`, `SmellsAnalyzer`, and `DuplicationAnalyzer`
+  expose numeric thresholds; `SilentRegressionAnalyzer` exposes per-detector toggles;
+  `ChangeClassifierAnalyzer` exposes the intent-mismatch flag. `maxFindingsPerAnalyzer` is
+  also configurable. Two new IPC channels (`settings:getAnalyzerConfig`,
+  `settings:setAnalyzerConfig`) expose the config to the renderer.
+
+- **Analyzer settings overlay**: pressing `,` in the workspace (or clicking the new "settings"
+  button in the bottom strip) opens a scrollable overlay showing all analyzer controls — toggles
+  and numeric inputs grouped by analyzer. "Restore defaults" resets to factory values. "Save"
+  persists the config and closes the overlay. Changes apply on the next re-run.
+
 ### Changed
 
 - **Static analyzer accuracy improvements** — five targeted fixes to the static analysis pipeline:

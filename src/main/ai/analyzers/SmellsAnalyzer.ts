@@ -1,12 +1,10 @@
 import ts from "typescript";
 
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
-
-const LONG_FUNCTION_LINES = 50;
-const MAX_PARAMS = 4;
-const MAX_NESTING = 3;
 
 const TS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"]);
 
@@ -76,10 +74,13 @@ function overlapsAnyRange(
   return ranges.some((r) => funcStart <= r.end && funcEnd >= r.start);
 }
 
+type SmellsConfig = ResolvedAnalyzerConfig["analyzers"]["smells"];
+
 function analyzeFile(
   filePath: string,
   content: string,
   changedRanges?: readonly LineRange[],
+  cfg: SmellsConfig = DEFAULT_ANALYZER_CONFIG.analyzers.smells,
 ): Finding[] {
   const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
   const findings: Finding[] = [];
@@ -99,11 +100,11 @@ function analyzeFile(
         const firstLine =
           content.slice(node.getStart(), node.getStart() + 120).split("\n")[0] ?? "";
 
-        if (lineCount > LONG_FUNCTION_LINES) {
+        if (lineCount > cfg.maxFunctionLines) {
           findings.push({
             severity: "low",
             title: `Long function "${name}" (${lineCount} lines)`,
-            description: `"${name}" spans ${lineCount} lines, exceeding the ${LONG_FUNCTION_LINES}-line guideline. Long functions are harder to read, test, and maintain. Consider splitting it into smaller, focused functions.`,
+            description: `"${name}" spans ${lineCount} lines, exceeding the ${cfg.maxFunctionLines}-line guideline. Long functions are harder to read, test, and maintain. Consider splitting it into smaller, focused functions.`,
             evidence: firstLine,
             file: filePath,
             lines: { start: funcStart, end: funcEnd },
@@ -112,11 +113,11 @@ function analyzeFile(
           });
         }
 
-        if (paramCount > MAX_PARAMS) {
+        if (paramCount > cfg.maxParams) {
           findings.push({
             severity: "low",
             title: `Too many parameters in "${name}" (${paramCount})`,
-            description: `"${name}" has ${paramCount} parameters. Functions with more than ${MAX_PARAMS} parameters are hard to call correctly. Consider grouping related parameters into an options object.`,
+            description: `"${name}" has ${paramCount} parameters. Functions with more than ${cfg.maxParams} parameters are hard to call correctly. Consider grouping related parameters into an options object.`,
             evidence: firstLine,
             file: filePath,
             lines: { start: funcStart, end: funcStart },
@@ -125,7 +126,7 @@ function analyzeFile(
           });
         }
 
-        if (nestingDepth > MAX_NESTING) {
+        if (nestingDepth > cfg.maxNesting) {
           findings.push({
             severity: "low",
             title: `Deep nesting in "${name}" (depth ${nestingDepth})`,
@@ -148,8 +149,15 @@ function analyzeFile(
 
 export class SmellsAnalyzer implements CodeAnalyzer {
   readonly id = "smells" as const;
+  private readonly cfg: SmellsConfig;
+
+  constructor(config?: SmellsConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.smells;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
+
     const findings: Finding[] = [];
 
     for (const file of context.diff.files) {
@@ -160,13 +168,13 @@ export class SmellsAnalyzer implements CodeAnalyzer {
       if (!content) continue;
 
       if (file.status === "added") {
-        findings.push(...analyzeFile(file.newPath, content));
+        findings.push(...analyzeFile(file.newPath, content, undefined, this.cfg));
       } else {
         const changedRanges = file.hunks.map((h) => ({
           start: h.newStart,
           end: h.newStart + h.newCount - 1,
         }));
-        findings.push(...analyzeFile(file.newPath, content, changedRanges));
+        findings.push(...analyzeFile(file.newPath, content, changedRanges, this.cfg));
       }
     }
 

@@ -10,6 +10,8 @@ import type {
   ReviewVerdict,
 } from "../../../shared/model/index.js";
 import type { Finding, FindingPass } from "../../../shared/review.js";
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG, resolveAnalyzerConfig } from "../../../shared/analyzer-config.js";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api.js";
@@ -157,6 +159,7 @@ const WORKSPACE_SHORTCUTS = [
   { keys: ["r"], label: "Re-run review" },
   { keys: ["Esc"], label: "Dismiss / go back" },
   { keys: ["?"], label: "Show this overlay" },
+  { keys: [","], label: "Analyzer settings" },
 ];
 
 function HelpOverlay({ onClose }: { onClose: () => void }) {
@@ -217,6 +220,554 @@ function HelpOverlay({ onClose }: { onClose: () => void }) {
               </span>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AnalyzerSettingsOverlay ───────────────────────────────────────────────────
+
+type SettingsDraft = ResolvedAnalyzerConfig;
+
+function SettingsToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        cursor: "pointer",
+        padding: "6px 0",
+      }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 13, color: t.textDim }}>{label}</span>
+      <div
+        onClick={() => onChange(!checked)}
+        style={{
+          width: 36,
+          height: 20,
+          borderRadius: 10,
+          background: checked ? TOKENS.dark.accent : TOKENS.dark.border,
+          position: "relative",
+          transition: "background 0.15s",
+          flexShrink: 0,
+          cursor: "pointer",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 3,
+            left: checked ? 19 : 3,
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            background: "#fff",
+            transition: "left 0.15s",
+          }}
+        />
+      </div>
+    </label>
+  );
+}
+
+function SettingsNumber({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "6px 0",
+      }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 13, color: t.textDim }}>{label}</span>
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isInteger(n) && n >= min && n <= max) onChange(n);
+        }}
+        style={{
+          width: 64,
+          background: t.bg,
+          border: `0.5px solid ${t.border}`,
+          borderRadius: 6,
+          padding: "4px 8px",
+          fontFamily: MONO,
+          fontSize: 12,
+          color: t.text,
+          textAlign: "right",
+        }}
+      />
+    </div>
+  );
+}
+
+function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const t = TOKENS.dark;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          color: t.textFaint,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          marginBottom: 8,
+          paddingBottom: 6,
+          borderBottom: `0.5px solid ${t.border}`,
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AnalyzerSettingsOverlay({
+  prRef,
+  onClose,
+  onSaved,
+}: {
+  prRef: PullRequest["ref"];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const t = TOKENS.dark;
+  const [draft, setDraft] = useState<SettingsDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.invoke("settings:getAnalyzerConfig", prRef).then((result) => {
+      setDraft(resolveAnalyzerConfig(result.ok ? result.value : {}));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function updateDraft(updater: (d: SettingsDraft) => SettingsDraft) {
+    setDraft((prev) => updater(prev ?? DEFAULT_ANALYZER_CONFIG));
+  }
+
+  function toggleEnabled(analyzer: keyof ResolvedAnalyzerConfig["analyzers"], value: boolean) {
+    updateDraft((d) => ({
+      ...d,
+      analyzers: { ...d.analyzers, [analyzer]: { ...d.analyzers[analyzer], enabled: value } },
+    }));
+  }
+
+  async function handleSave() {
+    if (!draft) return;
+    setSaving(true);
+    const result = await api.invoke("settings:setAnalyzerConfig", prRef, draft);
+    setSaving(false);
+    if (result.ok) {
+      setToast("Settings saved. Re-run the review to apply changes.");
+      setTimeout(() => {
+        setToast(null);
+        onSaved();
+      }, 1500);
+    } else {
+      setToast("Failed to save settings.");
+      setTimeout(() => setToast(null), 3000);
+    }
+  }
+
+  if (!draft) {
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 20,
+          background: "rgba(10,9,8,0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{ fontFamily: MONO, fontSize: 12, color: t.textFaint }}>Loading…</span>
+      </div>
+    );
+  }
+
+  const cfg = draft;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 20,
+        background: "rgba(10,9,8,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 520,
+          maxHeight: "80vh",
+          display: "flex",
+          flexDirection: "column",
+          background: t.bg,
+          border: `0.5px solid ${t.border}`,
+          borderRadius: 12,
+          fontFamily: SANS,
+          color: t.text,
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "20px 24px 16px",
+            borderBottom: `0.5px solid ${t.border}`,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 500 }}>Analyzer settings</span>
+          <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>
+            per-repo · applies on next re-run
+          </span>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+          <SettingsSection title="Complexity">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.complexity.enabled}
+              onChange={(v) => toggleEnabled("complexity", v)}
+            />
+            {cfg.analyzers.complexity.enabled && (
+              <SettingsNumber
+                label="Cyclomatic complexity threshold"
+                value={cfg.analyzers.complexity.threshold}
+                min={3}
+                max={50}
+                onChange={(v) =>
+                  updateDraft((d) => ({
+                    ...d,
+                    analyzers: {
+                      ...d.analyzers,
+                      complexity: { ...d.analyzers.complexity, threshold: v },
+                    },
+                  }))
+                }
+              />
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Code smells">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.smells.enabled}
+              onChange={(v) => toggleEnabled("smells", v)}
+            />
+            {cfg.analyzers.smells.enabled && (
+              <>
+                <SettingsNumber
+                  label="Max function lines"
+                  value={cfg.analyzers.smells.maxFunctionLines}
+                  min={10}
+                  max={500}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        smells: { ...d.analyzers.smells, maxFunctionLines: v },
+                      },
+                    }))
+                  }
+                />
+                <SettingsNumber
+                  label="Max parameters"
+                  value={cfg.analyzers.smells.maxParams}
+                  min={1}
+                  max={20}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        smells: { ...d.analyzers.smells, maxParams: v },
+                      },
+                    }))
+                  }
+                />
+                <SettingsNumber
+                  label="Max nesting depth"
+                  value={cfg.analyzers.smells.maxNesting}
+                  min={1}
+                  max={10}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        smells: { ...d.analyzers.smells, maxNesting: v },
+                      },
+                    }))
+                  }
+                />
+              </>
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Duplication">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.duplication.enabled}
+              onChange={(v) => toggleEnabled("duplication", v)}
+            />
+            {cfg.analyzers.duplication.enabled && (
+              <SettingsNumber
+                label="Min duplicate block lines"
+                value={cfg.analyzers.duplication.minBlockLines}
+                min={3}
+                max={30}
+                onChange={(v) =>
+                  updateDraft((d) => ({
+                    ...d,
+                    analyzers: {
+                      ...d.analyzers,
+                      duplication: { ...d.analyzers.duplication, minBlockLines: v },
+                    },
+                  }))
+                }
+              />
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Regression detection">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.regression.enabled}
+              onChange={(v) => toggleEnabled("regression", v)}
+            />
+            {cfg.analyzers.regression.enabled && (
+              <>
+                <SettingsToggle
+                  label="Condition changes"
+                  checked={cfg.analyzers.regression.detectors.conditionChanges}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, conditionChanges: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Error handling changes"
+                  checked={cfg.analyzers.regression.detectors.errorHandling}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, errorHandling: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Numeric constant changes"
+                  checked={cfg.analyzers.regression.detectors.numericChanges}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, numericChanges: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Async pattern changes"
+                  checked={cfg.analyzers.regression.detectors.asyncPatterns}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, asyncPatterns: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Side-effect additions"
+                  checked={cfg.analyzers.regression.detectors.sideEffects}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, sideEffects: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+              </>
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Other analyzers">
+            <SettingsToggle
+              label="Debug artifacts"
+              checked={cfg.analyzers.debugArtifacts.enabled}
+              onChange={(v) => toggleEnabled("debugArtifacts", v)}
+            />
+            <SettingsToggle
+              label="Type safety"
+              checked={cfg.analyzers.typeSafety.enabled}
+              onChange={(v) => toggleEnabled("typeSafety", v)}
+            />
+            <SettingsToggle
+              label="Change classification"
+              checked={cfg.analyzers.changeClassification.enabled}
+              onChange={(v) => toggleEnabled("changeClassification", v)}
+            />
+            {cfg.analyzers.changeClassification.enabled && (
+              <SettingsToggle
+                label="Intent mismatch warning"
+                checked={cfg.analyzers.changeClassification.intentMismatch}
+                onChange={(v) =>
+                  updateDraft((d) => ({
+                    ...d,
+                    analyzers: {
+                      ...d.analyzers,
+                      changeClassification: {
+                        ...d.analyzers.changeClassification,
+                        intentMismatch: v,
+                      },
+                    },
+                  }))
+                }
+              />
+            )}
+            <SettingsToggle
+              label="Architecture (circular imports)"
+              checked={cfg.analyzers.architecture.enabled}
+              onChange={(v) => toggleEnabled("architecture", v)}
+            />
+          </SettingsSection>
+
+          <SettingsSection title="Limits">
+            <SettingsNumber
+              label="Max findings per analyzer"
+              value={cfg.maxFindingsPerAnalyzer}
+              min={1}
+              max={50}
+              onChange={(v) => updateDraft((d) => ({ ...d, maxFindingsPerAnalyzer: v }))}
+            />
+          </SettingsSection>
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "14px 24px",
+            borderTop: `0.5px solid ${t.border}`,
+            flexShrink: 0,
+          }}
+        >
+          {toast && (
+            <span style={{ fontFamily: MONO, fontSize: 11, color: t.textDim, flex: 1 }}>
+              {toast}
+            </span>
+          )}
+          {!toast && <div style={{ flex: 1 }} />}
+          <button
+            onClick={() => updateDraft(() => DEFAULT_ANALYZER_CONFIG)}
+            style={{
+              background: "transparent",
+              border: 0,
+              padding: "8px 12px",
+              fontFamily: SANS,
+              fontSize: 13,
+              color: t.textFaint,
+              cursor: "pointer",
+            }}
+          >
+            Restore defaults
+          </button>
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving}
+            style={{
+              background: t.accent,
+              border: 0,
+              padding: "8px 18px",
+              borderRadius: 7,
+              fontFamily: SANS,
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#0c1416",
+              cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
         </div>
       </div>
     </div>
@@ -1354,6 +1905,7 @@ function BottomStrip({
   onApprove,
   onRerun,
   onHelp,
+  onSettings,
   submitting,
   submitted,
   reviewDone,
@@ -1364,6 +1916,7 @@ function BottomStrip({
   onApprove: () => void;
   onRerun: () => void;
   onHelp: () => void;
+  onSettings: () => void;
   submitting: boolean;
   submitted: boolean;
   reviewDone: boolean;
@@ -1448,6 +2001,25 @@ function BottomStrip({
         >
           <KbdHint>?</KbdHint>
           <span>shortcuts</span>
+        </button>
+        <button
+          onClick={onSettings}
+          title="Analyzer settings (,)"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "transparent",
+            border: 0,
+            padding: 0,
+            cursor: "pointer",
+            color: TOKENS.dark.textFaint,
+            fontFamily: MONO,
+            fontSize: 11,
+          }}
+        >
+          <KbdHint>,</KbdHint>
+          <span>settings</span>
         </button>
       </div>
       <div style={{ flex: 1 }} />
@@ -1564,6 +2136,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const regressionFindings = useMemo(
     () => findings.filter((f) => f.pass === "regression"),
@@ -1750,9 +2323,17 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         setHelpOpen((v) => !v);
         return;
       }
-      if (helpOpen) return;
+      if (e.key === ",") {
+        setSettingsOpen((v) => !v);
+        return;
+      }
+      if (helpOpen || settingsOpen) return;
       if (e.key === "Escape") {
-        if (verdictState) {
+        if (settingsOpen) {
+          setSettingsOpen(false);
+        } else if (helpOpen) {
+          setHelpOpen(false);
+        } else if (verdictState) {
           setVerdictState(null);
         } else if (challengeState) {
           setChallengeState(null);
@@ -1798,6 +2379,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       onBack,
       activeTab,
       helpOpen,
+      settingsOpen,
       reviewDone,
       handleRerunReview,
     ],
@@ -1971,6 +2553,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         onApprove={() => setVerdictState({ verdict: "approved", body: "" })}
         onRerun={() => void handleRerunReview()}
         onHelp={() => setHelpOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
         submitting={submitting}
         submitted={submitted}
         reviewDone={reviewDone}
@@ -1978,6 +2561,13 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       />
 
       {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+      {settingsOpen && (
+        <AnalyzerSettingsOverlay
+          prRef={pr.ref}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   );
 }

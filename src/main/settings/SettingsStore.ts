@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
+import type { AnalyzerConfig } from "../../shared/analyzer-config.js";
+import type { PRRef } from "../../shared/model/index.js";
 import type { Settings, WritableSettings } from "../../shared/settings.js";
 import type { SecretStore } from "./SecretStore.js";
 
@@ -60,4 +62,29 @@ export class SettingsStore {
   async getApiKey(provider: "anthropic" | "openai"): Promise<string | null> {
     return this.secrets.get(provider === "anthropic" ? ANTHROPIC_KEY : OPENAI_KEY);
   }
+
+  getAnalyzerConfig(ref: PRRef): Promise<AnalyzerConfig> {
+    const key = analyzerConfigKey(ref);
+    const configPath = join(dirname(this.filePath), `${key}.json`);
+    try {
+      return Promise.resolve(JSON.parse(readFileSync(configPath, "utf-8")) as AnalyzerConfig);
+    } catch {
+      return Promise.resolve({});
+    }
+  }
+
+  setAnalyzerConfig(ref: PRRef, config: AnalyzerConfig): Promise<void> {
+    const key = analyzerConfigKey(ref);
+    const configPath = join(dirname(this.filePath), `${key}.json`);
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+    return Promise.resolve();
+  }
+}
+
+function analyzerConfigKey(ref: PRRef): string {
+  if (ref.platform === "github") {
+    return `analyzer-config.github.${ref.owner}.${ref.repo}`;
+  }
+  return `analyzer-config.azure-devops.${ref.org}.${ref.project}.${ref.repo}`;
 }

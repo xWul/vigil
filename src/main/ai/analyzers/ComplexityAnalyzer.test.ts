@@ -202,4 +202,25 @@ const VERSION = "2";`;
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toHaveLength(0);
   });
+
+  it("returns no findings when disabled", async () => {
+    const disabled = new ComplexityAnalyzer({ enabled: false, threshold: 10 });
+    const context = makeContext({
+      "src/complex.ts":
+        "function f() { if(1)if(2)if(3)if(4)if(5)if(6)if(7)if(8)if(9)if(10)if(11){} }",
+    });
+    const result = await disabled.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it("uses custom threshold", async () => {
+    const strict = new ComplexityAnalyzer({ enabled: true, threshold: 2 });
+    const context = makeContext({
+      "src/f.ts": "function f(x: number) { if (x > 0) { if (x > 1) return x; } return 0; }",
+    });
+    const result = await strict.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBeGreaterThan(0);
+  });
 });

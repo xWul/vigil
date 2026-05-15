@@ -524,6 +524,10 @@ function createMockApi(): MockRendererApi {
           return Promise.resolve({ ok: true, value: { pr: MOCK_PR, diff: MOCK_DIFF } });
         case "settings:get":
           return Promise.resolve({ ok: true, value: MOCK_SETTINGS });
+        case "settings:getAnalyzerConfig":
+          return Promise.resolve({ ok: true, value: {} });
+        case "settings:setAnalyzerConfig":
+          return Promise.resolve({ ok: true, value: undefined });
         case "review:run":
           return Promise.resolve({ ok: true, value: MOCK_REVIEW_RESULT });
         case "platform:submitReview":

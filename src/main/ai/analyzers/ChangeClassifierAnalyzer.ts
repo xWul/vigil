@@ -1,3 +1,5 @@
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { FileDiff } from "../../platforms/model/index.js";
@@ -32,10 +34,18 @@ function classifyFile(file: FileDiff): FileLabel {
   return "refactor";
 }
 
+type ChangeClassificationConfig = ResolvedAnalyzerConfig["analyzers"]["changeClassification"];
+
 export class ChangeClassifierAnalyzer implements CodeAnalyzer {
   readonly id = "change-classification" as const;
+  private readonly cfg: ChangeClassificationConfig;
+
+  constructor(config?: ChangeClassificationConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.changeClassification;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
     const counts = { behavior: 0, refactor: 0, test: 0, config: 0 };
     const behaviorFiles: string[] = [];
 
@@ -77,7 +87,11 @@ export class ChangeClassifierAnalyzer implements CodeAnalyzer {
       source: "static",
     });
 
-    if (behaviorFiles.length > 0 && INTENT_KEYWORDS.test(context.pr.title)) {
+    if (
+      this.cfg.intentMismatch &&
+      behaviorFiles.length > 0 &&
+      INTENT_KEYWORDS.test(context.pr.title)
+    ) {
       findings.push({
         severity: "medium",
         title: "Intent mismatch: PR describes a refactor but contains behavior changes",
