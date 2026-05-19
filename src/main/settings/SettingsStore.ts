@@ -80,6 +80,34 @@ export class SettingsStore {
     writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
     return Promise.resolve();
   }
+
+  getSuppressed(ref: PRRef, headSha: string): Promise<readonly string[]> {
+    const filePath = join(dirname(this.filePath), `${suppressionsKey(ref)}.json`);
+    try {
+      const all = JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, string[]>;
+      return Promise.resolve(all[headSha] ?? []);
+    } catch {
+      return Promise.resolve([]);
+    }
+  }
+
+  setSuppressed(ref: PRRef, headSha: string, keys: readonly string[]): Promise<void> {
+    const filePath = join(dirname(this.filePath), `${suppressionsKey(ref)}.json`);
+    let all: Record<string, string[]> = {};
+    try {
+      all = JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, string[]>;
+    } catch {
+      // file doesn't exist yet
+    }
+    if (keys.length === 0) {
+      delete all[headSha];
+    } else {
+      all[headSha] = [...keys];
+    }
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, JSON.stringify(all, null, 2), "utf-8");
+    return Promise.resolve();
+  }
 }
 
 function analyzerConfigKey(ref: PRRef): string {
@@ -87,4 +115,11 @@ function analyzerConfigKey(ref: PRRef): string {
     return `analyzer-config.github.${ref.owner}.${ref.repo}`;
   }
   return `analyzer-config.azure-devops.${ref.org}.${ref.project}.${ref.repo}`;
+}
+
+function suppressionsKey(ref: PRRef): string {
+  if (ref.platform === "github") {
+    return `suppressed-findings.github.${ref.owner}.${ref.repo}`;
+  }
+  return `suppressed-findings.azure-devops.${ref.org}.${ref.project}.${ref.repo}`;
 }

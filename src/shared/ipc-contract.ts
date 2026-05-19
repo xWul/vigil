@@ -53,6 +53,17 @@ export interface IpcContract {
   "settings:getAnalyzerConfig": (ref: PRRef) => Result<AnalyzerConfig, SettingsError>;
   "settings:setAnalyzerConfig": (ref: PRRef, config: AnalyzerConfig) => Result<void, SettingsError>;
 
+  // Findings
+  "findings:getSuppressed": (
+    ref: PRRef,
+    headSha: string,
+  ) => Result<readonly string[], SettingsError>;
+  "findings:setSuppressed": (
+    ref: PRRef,
+    headSha: string,
+    keys: readonly string[],
+  ) => Result<void, SettingsError>;
+
   // App
   "app:copyDiagnostics": () => Result<void, never>;
 }

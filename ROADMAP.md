@@ -392,8 +392,8 @@ Not blockers for v0.1 but natural next investments after release:
       Useful when the user switches away during a long review.
 - [ ] **Azure DevOps full diff hunks**: Phase 2 deferred hunk parsing for AzDO.
       Real AzDO users get file-level diffs only, which limits usefulness.
-- [ ] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
-      it doesn't reappear on re-run. Stored per `(headSha, findingTitle)`.
+- [x] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
+      it doesn't reappear on re-run. Stored per `(headSha, findingKey)`.
 - [ ] **Workspace state persistence**: remember active tab and focused finding
       when returning to a previously-reviewed PR.
 - [ ] **Real architecture analysis**: path-based layer violation detection

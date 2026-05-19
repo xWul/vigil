@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Finding suppression**: findings can now be marked as "won't fix" so they don't
+  clutter re-runs. Press `x` on a focused finding (diff tab) or click the ✕ button
+  on any finding card (overview tab) to suppress it. Suppressed findings disappear from
+  the list; a "N suppressed · clear" link appears in the overview when any are hidden.
+  Suppressions are stored per repo and head SHA in Electron `userData` — they clear
+  automatically when the branch is updated. Two new IPC channels:
+  `findings:getSuppressed` and `findings:setSuppressed`.
+
 - **Configurable analyzer settings** (Phase 8): every static analyzer parameter is now
   user-configurable per repository. Settings are stored in Electron `userData` as a JSON
   file keyed by platform/owner/repo (never committed to the repository). Analyzers receive

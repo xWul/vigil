@@ -528,6 +528,10 @@ function createMockApi(): MockRendererApi {
           return Promise.resolve({ ok: true, value: {} });
         case "settings:setAnalyzerConfig":
           return Promise.resolve({ ok: true, value: undefined });
+        case "findings:getSuppressed":
+          return Promise.resolve({ ok: true, value: [] });
+        case "findings:setSuppressed":
+          return Promise.resolve({ ok: true, value: undefined });
         case "review:run":
           return Promise.resolve({ ok: true, value: MOCK_REVIEW_RESULT });
         case "platform:submitReview":

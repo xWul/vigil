@@ -155,6 +155,7 @@ const WORKSPACE_SHORTCUTS = [
   { keys: ["n", "p"], label: "Next / previous finding" },
   { keys: ["↵"], label: "Expand finding detail" },
   { keys: ["a"], label: "Add finding to review" },
+  { keys: ["x"], label: "Suppress focused finding" },
   { keys: ["m"], label: "Approve PR" },
   { keys: ["r"], label: "Re-run review" },
   { keys: ["Esc"], label: "Dismiss / go back" },
@@ -2267,6 +2268,22 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const [submitted, setSubmitted] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [suppressedKeys, setSuppressedKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!headSha) return;
+    void api.invoke("findings:getSuppressed", pr.ref, headSha).then((result) => {
+      if (result.ok) setSuppressedKeys(new Set(result.value));
+    });
+  }, [headSha, pr.ref]);
+
+  const persistSuppressed = useCallback(
+    (keys: Set<string>) => {
+      if (!headSha) return;
+      void api.invoke("findings:setSuppressed", pr.ref, headSha, [...keys]);
+    },
+    [headSha, pr.ref],
+  );
 
   const regressionFindings = useMemo(
     () => findings.filter((f) => f.pass === "regression"),
@@ -2278,17 +2295,41 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const sortedFindings = useMemo(
     () =>
       findings
-        .filter((f) => f.lines !== null)
+        .filter((f) => f.lines !== null && !suppressedKeys.has(findingKey(f)))
         .sort((a, b) => {
           const fc = a.file.localeCompare(b.file);
           if (fc !== 0) return fc;
           return (a.lines?.start ?? 0) - (b.lines?.start ?? 0);
         }),
-    [findings],
+    [findings, suppressedKeys],
+  );
+
+  const suppressedCount = useMemo(
+    () => findings.filter((f) => f.lines !== null && suppressedKeys.has(findingKey(f))).length,
+    [findings, suppressedKeys],
   );
 
   const focusedFinding =
     focusedFindingIdx !== null ? (sortedFindings[focusedFindingIdx] ?? null) : null;
+
+  const handleSuppress = useCallback(
+    (finding: Finding) => {
+      const key = findingKey(finding);
+      setSuppressedKeys((prev) => {
+        const next = new Set(prev);
+        next.add(key);
+        persistSuppressed(next);
+        return next;
+      });
+      setFocusedFindingIdx(null);
+    },
+    [persistSuppressed],
+  );
+
+  const handleClearSuppressed = useCallback(() => {
+    setSuppressedKeys(new Set());
+    persistSuppressed(new Set());
+  }, [persistSuppressed]);
 
   // When cached review arrives (first load or after invalidation), populate findings.
   useEffect(() => {
@@ -2493,6 +2534,10 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         if (sortedFindings.length === 0) return;
         setFocusedFindingIdx((i) => (i === null ? sortedFindings.length - 1 : Math.max(0, i - 1)));
       }
+      if (e.key === "x" && focusedFinding) {
+        handleSuppress(focusedFinding);
+        return;
+      }
       if (e.key === "m") {
         setVerdictState({ verdict: "approved", body: "" });
       }
@@ -2504,6 +2549,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       diff,
       sortedFindings.length,
       focusedFindingIdx,
+      focusedFinding,
       verdictState,
       challengeState,
       onBack,
@@ -2512,6 +2558,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       settingsOpen,
       reviewDone,
       handleRerunReview,
+      handleSuppress,
     ],
   );
 
@@ -2637,6 +2684,9 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
                 setActiveTab("diff");
               }
             }}
+            onSuppressFinding={handleSuppress}
+            suppressedCount={suppressedCount}
+            onClearSuppressed={handleClearSuppressed}
           />
         </div>
       ) : activeTab === "risks" ? (

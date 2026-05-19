@@ -329,6 +329,9 @@ export function OverviewTab({
   reviewDone,
   reviewCompletedAt,
   onFindingClick,
+  onSuppressFinding,
+  suppressedCount,
+  onClearSuppressed,
 }: {
   pr: PullRequest;
   findings: readonly Finding[];
@@ -337,6 +340,9 @@ export function OverviewTab({
   reviewDone: boolean;
   reviewCompletedAt: Date | null;
   onFindingClick?: (finding: Finding) => void;
+  onSuppressFinding?: (finding: Finding) => void;
+  suppressedCount?: number;
+  onClearSuppressed?: () => void;
 }) {
   const t = TOKENS.dark;
 
@@ -562,9 +568,77 @@ export function OverviewTab({
                         →
                       </div>
                     )}
+                    {onSuppressFinding && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSuppressFinding(f);
+                        }}
+                        title="Suppress finding (x)"
+                        style={{
+                          flexShrink: 0,
+                          alignSelf: "center",
+                          background: "transparent",
+                          border: 0,
+                          padding: "2px 4px",
+                          cursor: "pointer",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          color: t.textFaint,
+                          lineHeight: 1,
+                          opacity: 0,
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "0";
+                        }}
+                        onFocus={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                        }}
+                        onBlur={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "0";
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </button>
                 ))}
               </div>
+              {suppressedCount !== undefined && suppressedCount > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    color: t.textFaint,
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <span>{suppressedCount} suppressed</span>
+                  {onClearSuppressed && (
+                    <button
+                      onClick={onClearSuppressed}
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        padding: 0,
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        color: t.accent,
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+              )}
             </>
           )}
 
