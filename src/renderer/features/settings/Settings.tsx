@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 
 import type { ConnectedAccount } from "../../../shared/auth.js";
 import type { Settings as SettingsData } from "../../../shared/settings.js";
+import type { UpdateStatus } from "../../../shared/ipc-contract.js";
 import { api } from "../../api.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 
@@ -683,11 +684,17 @@ export function Settings({
   const [signingOut, setSigningOut] = useState<Platform | null>(null);
   const [theme, setTheme] = useState("Dark");
   const [diagCopied, setDiagCopied] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   useEffect(() => {
     void api.invoke("settings:get").then((r) => {
       if (r.ok) setSettings(r.value);
     });
+    void api.invoke("app:getVersion").then((r) => {
+      if (r.ok) setAppVersion(r.value);
+    });
+    return api.on("app:updateStatus", setUpdateStatus);
   }, []);
 
   async function handleCopyDiagnostics() {
@@ -966,6 +973,81 @@ export function Settings({
               Copies the application log to your clipboard. Tokens and secrets are redacted
               automatically.
             </span>
+          </div>
+
+          <SectionDivider />
+
+          {/* ── 5. Updates ── */}
+          <SectionHeading
+            title="Updates"
+            subtitle="Vigil checks for updates automatically on launch."
+          />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button
+                onClick={() => void api.invoke("app:checkForUpdate")}
+                disabled={updateStatus?.status === "checking" || updateStatus?.status === "downloading"}
+                style={{
+                  padding: "8px 16px",
+                  background: t.surface,
+                  border: `0.5px solid ${t.border}`,
+                  borderRadius: 7,
+                  fontFamily: SANS,
+                  fontSize: 13,
+                  color: t.textDim,
+                  cursor: updateStatus?.status === "checking" || updateStatus?.status === "downloading" ? "default" : "pointer",
+                  opacity: updateStatus?.status === "checking" || updateStatus?.status === "downloading" ? 0.5 : 1,
+                  transition: "opacity .15s",
+                }}
+              >
+                Check for updates
+              </button>
+
+              {updateStatus?.status === "ready" && (
+                <button
+                  onClick={() => void api.invoke("app:installUpdate")}
+                  style={{
+                    padding: "8px 16px",
+                    background: t.accent,
+                    border: 0,
+                    borderRadius: 7,
+                    fontFamily: SANS,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: t.bg,
+                    cursor: "pointer",
+                  }}
+                >
+                  Restart to install
+                </button>
+              )}
+            </div>
+
+            <div
+              style={{
+                fontFamily: SANS,
+                fontSize: 12,
+                color:
+                  updateStatus?.status === "error"
+                    ? t.red
+                    : updateStatus?.status === "ready" || updateStatus?.status === "available"
+                      ? t.accent
+                      : t.textFaint,
+                lineHeight: 1.5,
+              }}
+            >
+              {appVersion && (
+                <span style={{ fontFamily: MONO, marginRight: 8 }}>v{appVersion}</span>
+              )}
+              {updateStatus === null && "—"}
+              {updateStatus?.status === "checking" && "Checking for updates…"}
+              {updateStatus?.status === "up-to-date" && "You're on the latest version."}
+              {updateStatus?.status === "available" && `v${updateStatus.version} is available — downloading…`}
+              {updateStatus?.status === "downloading" && `Downloading… ${updateStatus.progress}%`}
+              {updateStatus?.status === "ready" && `v${updateStatus.version} downloaded and ready to install.`}
+              {updateStatus?.status === "error" && `Update error: ${updateStatus.message}`}
+            </div>
           </div>
         </div>
       </div>

@@ -9,6 +9,8 @@ import { RepoCache } from "./git/RepoCache.js";
 import { KeychainSecretStore } from "./settings/SecretStore.js";
 import { SettingsStore } from "./settings/SettingsStore.js";
 import { registerHandlers } from "./ipc/index.js";
+import { setupAutoUpdater } from "./updater.js";
+import type { Updater } from "./updater.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -70,12 +72,22 @@ void app.whenReady().then(() => {
   }
 
   const mainWindow = createWindow();
-  registerHandlers(mainWindow, tokenStore, settingsStore, logger, reviewCache, repoCache);
+
+  let updater: Updater | null = null;
+  if (app.isPackaged) {
+    updater = setupAutoUpdater(
+      (status) => mainWindow.webContents.send("app:updateStatus", status),
+      logger,
+    );
+    setTimeout(() => updater?.checkForUpdates(), 5_000);
+  }
+
+  registerHandlers(mainWindow, tokenStore, settingsStore, logger, reviewCache, repoCache, updater);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const win = createWindow();
-      registerHandlers(win, tokenStore, settingsStore, logger, reviewCache, repoCache);
+      registerHandlers(win, tokenStore, settingsStore, logger, reviewCache, repoCache, null);
     }
   });
 });

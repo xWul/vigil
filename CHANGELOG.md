@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auto-update**: Vigil now checks for updates automatically on launch (5 s after startup,
+  packaged builds only). Updates are downloaded silently in the background; the Settings
+  screen shows current version, download progress, and a "Restart to install" button when
+  a new version is ready. Uses `electron-updater` against GitHub Releases
+  (`xWul/vigil`). GitHub publish config added to `electron-builder`.
+
+
 
 - **System notification on review complete**: Vigil fires a macOS notification when a
   review finishes while the window is out of focus. The notification shows the PR title

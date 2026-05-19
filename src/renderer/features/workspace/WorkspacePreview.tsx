@@ -538,6 +538,11 @@ function createMockApi(): MockRendererApi {
           return new Promise((resolve) =>
             setTimeout(() => resolve({ ok: true, value: undefined }), 700),
           );
+        case "app:getVersion":
+          return Promise.resolve({ ok: true, value: "0.0.0" });
+        case "app:checkForUpdate":
+        case "app:installUpdate":
+          return Promise.resolve({ ok: true, value: undefined });
         case "review:challenge": {
           // Simulate a streaming response with realistic text
           const chunks = [

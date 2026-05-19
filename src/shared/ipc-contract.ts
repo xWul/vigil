@@ -66,7 +66,20 @@ export interface IpcContract {
 
   // App
   "app:copyDiagnostics": () => Result<void, never>;
+  "app:getVersion": () => Result<string, never>;
+  "app:checkForUpdate": () => Result<void, never>;
+  "app:installUpdate": () => Result<void, never>;
 }
+
+// ── Update status ────────────────────────────────────────────────────────────
+
+export type UpdateStatus =
+  | { readonly status: "checking" }
+  | { readonly status: "available"; readonly version: string }
+  | { readonly status: "downloading"; readonly progress: number }
+  | { readonly status: "ready"; readonly version: string }
+  | { readonly status: "up-to-date" }
+  | { readonly status: "error"; readonly message: string };
 
 // ── Push events (main → renderer, one-way) ───────────────────────────────────
 
@@ -84,4 +97,5 @@ export interface IpcEvents {
     readonly status: "cloning" | "fetching" | "ready" | "error";
     readonly error?: string;
   };
+  "app:updateStatus": UpdateStatus;
 }
