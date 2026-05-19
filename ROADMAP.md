@@ -292,7 +292,11 @@ _Phase 5 complete 2026-05-14._
       loading replaced with `useQuery` hooks; stale-while-revalidate and
       60 s background refetch built in; `useEffect`/`loadKey`/`mounted`
       boilerplate eliminated
-- [ ] Optional: tree-sitter integration for symbol-aware context (deferred)
+- [x] Symbol-aware cross-file context: unchanged import files are compressed to
+      exported signatures (function signatures, class public API, interfaces, types)
+      using the TypeScript compiler API — no tree-sitter dependency needed.
+      Implementation: `extractExportedSymbols` in `src/main/ai/extractSymbols.ts`,
+      applied in `buildReviewContext.ts` cross-file import loop.
 
 **Exit criteria:** Reviewing a 500-line PR in a 50k-line codebase
 surfaces at least one finding that requires cross-file context — and

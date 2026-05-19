@@ -5,6 +5,7 @@ import type { FileDiff } from "../platforms/model/index.js";
 import type { PlatformProvider, PRRef } from "../platforms/PlatformProvider.js";
 import type { ReviewContext, ReviewError } from "./CodeAnalyzer.js";
 import type { RepoCache } from "../git/RepoCache.js";
+import { extractExportedSymbols } from "./extractSymbols.js";
 
 export const DEFAULT_TOKEN_BUDGET = 160_000;
 // Cross-file import context is capped at 20 % of the total budget so it
@@ -138,9 +139,10 @@ export async function buildReviewContext(
       if (crossFileTokens >= crossFileCap || usedTokens >= tokenBudget) break;
       const result = await repoCache.readFile(ref, pr.headSha, importPath);
       if (!result.ok) continue;
-      const t = estimateTokens(result.value);
+      const symbolSummary = extractExportedSymbols(result.value, importPath);
+      const t = estimateTokens(symbolSummary);
       if (crossFileTokens + t <= crossFileCap && usedTokens + t <= tokenBudget) {
-        files.set(importPath, result.value);
+        files.set(importPath, symbolSummary);
         usedTokens += t;
         crossFileTokens += t;
       }

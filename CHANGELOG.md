@@ -56,6 +56,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uses the same `AnalyzerConfig` JSON schema as the exported snippet from the settings overlay.
   Invalid JSON in `.vigilrc` is silently ignored.
 
+# <<<<<<< HEAD
+
+- **Symbol-aware cross-file context**: unchanged files pulled in as cross-file import context
+  are now compressed to their exported symbol signatures (function signatures, class public API,
+  interfaces, type aliases) using the TypeScript compiler API — implementation bodies are
+  stripped. This makes better use of the cross-file token budget: more imported modules can be
+  included within the same cap, giving the AI broader type context without extra cost.
+
+### Changed
+
+- **Static analyzer accuracy improvements** — five targeted fixes to the static analysis pipeline:
+  - `ComplexityAnalyzer` no longer inflates the outer function's cyclomatic complexity score
+    with branches that belong to nested inner functions (arrow functions, closures). Each
+    function is now measured independently.
+  - `ComplexityAnalyzer` and `SmellsAnalyzer` now scope findings to functions that overlap
+    the changed diff hunks. Unrelated pre-existing smells in modified files no longer appear.
+  - `SilentRegressionAnalyzer` "catch block removed" finding now reports `medium` severity
+    when the removed catch lines are accompanied by replacement code (likely a refactor that
+    delegates to a helper), reserving `high` for pure catch deletions with no replacement.
+  - `DuplicationAnalyzer` no longer flags files that share common `import`/`export` declarations
+    as duplicated code. Module-level structural lines are filtered before block extraction.
+  - `ChangeClassifierAnalyzer` now classifies deleted source files as `refactor` rather than
+    `behavior`. Deleting code removes behavior — it does not introduce it — and the previous
+    classification caused false-positive intent-mismatch findings on cleanup PRs.
+
+### Added
+
+> > > > > > > origin/main
+
 - **First-run onboarding nudge**: the Review Queue now shows a persistent amber banner below
   the header when no AI provider is configured (`aiProvider` is null or the selected
   provider has no key). The banner links directly to Settings. Disappears automatically once
