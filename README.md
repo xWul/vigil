@@ -13,9 +13,42 @@ where the bottleneck is review, not authorship.
 
 ## Status
 
-**Working, pre-release.** The core review loop is complete and functional.
-Auth, PR queue, diff view, static analysis, AI passes, and review submission
-all work end-to-end. Packaging and distribution are the next milestone.
+**v0.1.0 — first public release.** macOS only. The core review loop is
+complete: auth, queue, diff view, eight static analysis passes, three AI
+review passes, and review submission all work end-to-end.
+
+## Install
+
+Download the latest `.dmg` from [Releases](https://github.com/xWul/vigil/releases),
+open it, and drag Vigil to your Applications folder.
+
+**Requirements:**
+
+- macOS 13 Ventura or later
+- git ≥ 2.22 (check with `git --version`; ships on all recent Macs)
+- An Anthropic or OpenAI API key for AI passes (optional — static analysis
+  works without one)
+
+## First run
+
+1. **Connect an account** — open Settings (⌘,) and sign in with GitHub or
+   Azure DevOps. Vigil uses OAuth; no password is stored.
+2. **Add an AI key** (optional) — Settings → AI Provider → paste an Anthropic
+   or OpenAI key. Vigil stores it in the macOS keychain.
+3. **Open a PR** — the Review Queue lists open PRs assigned to or involving
+   you. Double-click any row to open the workspace.
+
+Once a PR is open:
+
+- **Static analysis** runs immediately — no AI key needed. Eight passes cover
+  complexity, duplication, code smells, debug artifacts, type safety, change
+  classification, silent regressions, and circular imports.
+- **AI passes** stream in if a key is configured: correctness, security, and
+  consistency, followed by a 1–5 risk score summary.
+- Navigate findings with `j` / `k`, jump between files with `n` / `p`, press
+  `m` to approve, `?` for the full shortcut list.
+- Submit your review (approve / request changes / comment) from the verdict
+  buttons in the bottom strip.
 
 ## What Vigil does
 
@@ -28,14 +61,18 @@ all work end-to-end. Packaging and distribution are the next milestone.
   classification, silent regressions, and circular dependency detection
 - **AI review** — three LLM passes (correctness, security, consistency) plus
   a summary with a 1–5 risk score; streamed to the UI as findings arrive
+- **Semantic tab** — behavioral regression findings mapped to before/after
+  code blocks with plain-English risk notes
 - **Architecture tab** — detects circular import dependencies among files
   touched by the PR; no configuration required
-- **ChallengeThread** — per-finding AI conversation scoped to the relevant
-  diff hunk; stream responses inline
+- **Challenge thread** — per-finding AI conversation scoped to the relevant
+  diff hunk; responses stream inline
 - **Review submission** — approve, request changes, or comment with queued
   inline comments; submits as a single platform review
 - **Local repo cache** — blobless partial git clones for faster file fetches
   and cross-file context for the consistency pass
+- **Configurable analyzers** — tune every threshold and toggle per repository
+  via the settings overlay (`,`) or a `.vigilrc` file in the repo root
 
 ## Principles
 
@@ -46,7 +83,7 @@ all work end-to-end. Packaging and distribution are the next milestone.
 - **Local-first.** Tokens in your OS keychain. No backend. BYOK for AI.
 - **Keyboard-first.** Every action reachable without a mouse.
 
-## Getting started
+## Build from source
 
 ### Prerequisites
 
@@ -54,35 +91,17 @@ all work end-to-end. Packaging and distribution are the next milestone.
 - **pnpm** — `npm install -g pnpm`
 - **git ≥ 2.22** — required by the local repo cache (blobless clones)
 
-### Install dependencies
+### Install and run
 
 ```bash
 pnpm install
+pnpm dev        # development mode
+pnpm dev:mock   # mock mode — no GitHub account needed
 ```
 
-### Run in development mode
-
-```bash
-pnpm dev
-```
-
-The app opens. From here:
-
-1. **Connect an account** — Settings → sign in with GitHub or Azure DevOps
-2. **Configure an AI provider** — Settings → paste an Anthropic or OpenAI API
-   key (optional; static analysis works without one)
-3. **Open a PR** — the queue lists open PRs assigned to or authored by you;
-   double-click any row to open the workspace
-
-### Mock mode (no GitHub account needed)
-
-```bash
-pnpm dev:mock
-```
-
-Runs the app against a mock API that covers the full auth → queue → workspace
-flow with realistic data. All workspace tabs are populated. Useful for UI
-development and exploration.
+**Mock mode** runs the app against a fully mocked API covering the complete
+auth → queue → workspace flow with realistic data. All workspace tabs are
+populated. Useful for exploring Vigil without connecting a real account.
 
 ### Other commands
 
@@ -91,8 +110,7 @@ pnpm test          # run all tests
 pnpm typecheck     # TypeScript strict check
 pnpm lint          # ESLint
 pnpm check         # typecheck + lint + format + tests in one shot
-pnpm lint:fix      # auto-fix lint issues
-pnpm format        # Prettier
+pnpm dist          # build distributable (requires code signing for macOS)
 ```
 
 ## Project layout
@@ -129,7 +147,7 @@ docs/specs/             per-feature specifications
 - [`CONTEXT.md`](./CONTEXT.md) — domain glossary
 - [`ROADMAP.md`](./ROADMAP.md) — phased development plan and current status
 - [`CHANGELOG.md`](./CHANGELOG.md) — what's changed
-- [`docs/adr/`](./docs/adr/) — architectural decision records (11 ADRs)
+- [`docs/adr/`](./docs/adr/) — architectural decision records (12 ADRs)
 - [`docs/specs/`](./docs/specs/) — per-feature specifications
 
 ## License

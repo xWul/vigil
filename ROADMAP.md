@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Phase 9 (distribution, v0.1 release) is next.
+> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Phase 9 (distribution) in progress — README and CHANGELOG versioned, pending `pnpm dist` verification and GitHub Release.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -369,10 +369,9 @@ _Phase 8 complete 2026-05-19._
 
 - [ ] `pnpm dist` verified end-to-end on macOS
 - [ ] Code signing for macOS (requires Apple Developer account — user action)
-- [ ] README polished: "Getting Started" install steps, "How to use" walkthrough,
-      screenshots or GIF
+- [x] README polished: "Getting Started" install steps, "How to use" walkthrough
 - [ ] GitHub Release `v0.1.0` with macOS `.dmg` attached
-- [ ] `CHANGELOG.md` versioned: move `[Unreleased]` → `[0.1.0]` with date
+- [x] `CHANGELOG.md` versioned: `[Unreleased]` → `[0.1.0] - 2026-05-19`; `package.json` bumped to `0.1.0`
 
 **Exit criteria:** Someone clones the repo, follows the README, and
 gets a working review on a PR in under 10 minutes.
