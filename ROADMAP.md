@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read) complete. Phase 9 (distribution, v0.1 release) is next.
+> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Phase 9 (distribution, v0.1 release) is next.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -388,8 +388,10 @@ Not blockers for v0.1 but natural next investments after release:
       in `.vigilrc` override per-repo `userData` config, which overrides built-in
       defaults. Invalid JSON is silently ignored. Uses the same `AnalyzerConfig`
       JSON schema as the "Copy .vigilrc" export. See ADR-0012.
-- [ ] **Auto-update** (`electron-updater`): without this, users on v0.1 are
-      stranded. Integrate with GitHub Releases. High priority post-v0.1.
+- [x] **Auto-update** (`electron-updater`): checks for updates 5 s after launch
+      (packaged builds only), downloads silently, installs on quit. Settings screen
+      shows version, progress, and a "Restart to install" button. GitHub publish
+      config set to `xWul/vigil`. Requires code signing on macOS to work end-to-end.
 - [x] **System notification on review complete**: Electron `Notification` API.
       Fires when review finishes while window is out of focus.
 - [ ] **Azure DevOps full diff hunks**: Phase 2 deferred hunk parsing for AzDO.
@@ -398,15 +400,16 @@ Not blockers for v0.1 but natural next investments after release:
       it doesn't reappear on re-run. Stored per `(headSha, findingKey)`.
 - [x] **Workspace state persistence**: active tab remembered per PR via
       `localStorage`; restored when returning to a previously-reviewed PR.
-- [ ] **Real architecture analysis**: path-based layer violation detection
-      (renderer importing main, circular deps). Re-introduce the Architecture
-      tab backed by real data.
+- [ ] **Real architecture analysis**: layer violation detection requires knowing
+      a project's architecture up front — too project-specific to do generically
+      without a complex config surface. Circular dependency detection (already
+      shipping) covers the universally-useful case. Deferred indefinitely.
 - [ ] **PR comment thread view**: show existing review comments from other
       reviewers in the workspace. Read-only is enough for v0.2.
 
 ---
 
-## Phase 10 — Tell the world
+## Phase 11 — Tell the world
 
 **Goal:** Treat shipping as part of the project. Portfolio value comes
 from people seeing the work.
