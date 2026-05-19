@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { ArchitectureAnalyzer, detectCycles, findImportLine } from "./ArchitectureAnalyzer.js";
+import {
+  ArchitectureAnalyzer,
+  classifyLayer,
+  detectCycles,
+  detectLayerViolations,
+  findImportLine,
+} from "./ArchitectureAnalyzer.js";
 import type { ReviewContext } from "../CodeAnalyzer.js";
 import type { Diff, PullRequest } from "../../../shared/model/index.js";
 
@@ -124,6 +130,176 @@ describe("findImportLine", () => {
       ["src/b.ts", "export const foo = 1;"],
     ]);
     expect(findImportLine("src/a.ts", "src/b.ts", files)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifyLayer
+// ---------------------------------------------------------------------------
+
+describe("classifyLayer", () => {
+  it("classifies main process files", () => {
+    expect(classifyLayer("src/main/ipc/index.ts")).toBe("main");
+    expect(classifyLayer("src/main/ai/AnthropicProvider.ts")).toBe("main");
+  });
+
+  it("classifies renderer files", () => {
+    expect(classifyLayer("src/renderer/features/workspace/WorkspaceScreen.tsx")).toBe("renderer");
+  });
+
+  it("classifies shared files", () => {
+    expect(classifyLayer("src/shared/result.ts")).toBe("shared");
+  });
+
+  it("classifies preload files", () => {
+    expect(classifyLayer("src/preload/index.ts")).toBe("preload");
+  });
+
+  it("returns other for unclassified paths", () => {
+    expect(classifyLayer("scripts/build.ts")).toBe("other");
+    expect(classifyLayer("README.md")).toBe("other");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectLayerViolations
+// ---------------------------------------------------------------------------
+
+describe("detectLayerViolations", () => {
+  it("returns empty when there are no cross-layer imports", () => {
+    const changed = new Set(["src/renderer/App.tsx"]);
+    const files = new Map([
+      [
+        "src/renderer/App.tsx",
+        'import { Result } from "../../shared/result.js";\nimport { Foo } from "./Foo.js";\n',
+      ],
+    ]);
+    expect(detectLayerViolations(changed, files)).toHaveLength(0);
+  });
+
+  it("flags renderer importing from main", () => {
+    // src/renderer/App.tsx is 1 level deep; ../main/ resolves to src/main/
+    const changed = new Set(["src/renderer/App.tsx"]);
+    const files = new Map([
+      [
+        "src/renderer/App.tsx",
+        'import { AnthropicProvider } from "../main/ai/AnthropicProvider.js";\n',
+      ],
+    ]);
+    const findings = detectLayerViolations(changed, files);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.title).toBe("Layer violation: renderer imports from main");
+    expect(findings[0]!.severity).toBe("high");
+    expect(findings[0]!.lines).toEqual({ start: 1, end: 1 });
+  });
+
+  it("flags main importing from renderer", () => {
+    // src/main/ipc/index.ts is 2 levels deep; ../../renderer/ resolves to src/renderer/
+    const changed = new Set(["src/main/ipc/index.ts"]);
+    const files = new Map([
+      [
+        "src/main/ipc/index.ts",
+        'import { WorkspaceScreen } from "../../renderer/features/workspace/WorkspaceScreen.js";\n',
+      ],
+    ]);
+    const findings = detectLayerViolations(changed, files);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.title).toBe("Layer violation: main imports from renderer");
+    expect(findings[0]!.severity).toBe("high");
+  });
+
+  it("flags shared importing from main", () => {
+    // src/shared/util.ts is 1 level deep; ../main/ resolves to src/main/
+    const changed = new Set(["src/shared/util.ts"]);
+    const files = new Map([
+      ["src/shared/util.ts", 'import { logger } from "../main/logger.js";\n'],
+    ]);
+    const findings = detectLayerViolations(changed, files);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("high");
+  });
+
+  it("flags shared importing from renderer", () => {
+    const changed = new Set(["src/shared/util.ts"]);
+    const files = new Map([
+      ["src/shared/util.ts", 'import { Button } from "../renderer/components/Button.js";\n'],
+    ]);
+    expect(detectLayerViolations(changed, files)).toHaveLength(1);
+  });
+
+  it("reports the correct line number for the violation", () => {
+    const changed = new Set(["src/renderer/App.tsx"]);
+    const files = new Map([
+      [
+        "src/renderer/App.tsx",
+        'import { ok } from "../shared/result.js";\nimport { Provider } from "../main/ai/AnthropicProvider.js";\n',
+      ],
+    ]);
+    const findings = detectLayerViolations(changed, files);
+    expect(findings[0]!.lines).toEqual({ start: 2, end: 2 });
+  });
+
+  it("includes the import statement in evidence", () => {
+    const changed = new Set(["src/renderer/App.tsx"]);
+    const files = new Map([
+      [
+        "src/renderer/App.tsx",
+        'import { AnthropicProvider } from "../main/ai/AnthropicProvider.js";\n',
+      ],
+    ]);
+    const [finding] = detectLayerViolations(changed, files);
+    expect(finding!.evidence).toContain("AnthropicProvider");
+    expect(finding!.evidence).toContain("renderer → main");
+  });
+
+  it("ignores unchanged files", () => {
+    // main/ipc/index.ts has a violation, but it's not in changedPaths
+    const changed = new Set(["src/renderer/App.tsx"]);
+    const files = new Map([
+      ["src/renderer/App.tsx", 'import { ok } from "../../shared/result.js";\n'],
+      [
+        "src/main/ipc/index.ts",
+        'import { WorkspaceScreen } from "../../renderer/WorkspaceScreen.js";\n',
+      ],
+    ]);
+    expect(detectLayerViolations(changed, files)).toHaveLength(0);
+  });
+
+  it("does not flag preload importing from shared", () => {
+    const changed = new Set(["src/preload/index.ts"]);
+    const files = new Map([
+      ["src/preload/index.ts", 'import { IpcContract } from "../shared/ipc-contract.js";\n'],
+    ]);
+    expect(detectLayerViolations(changed, files)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ArchitectureAnalyzer (integration — layer violations)
+// ---------------------------------------------------------------------------
+
+describe("ArchitectureAnalyzer — layer violations", () => {
+  const analyzer = new ArchitectureAnalyzer();
+
+  it("emits a layer violation finding via analyze()", async () => {
+    const ctx = makeContext(["src/renderer/App.tsx"], {
+      "src/renderer/App.tsx":
+        'import { AnthropicProvider } from "../main/ai/AnthropicProvider.js";\n',
+    });
+    const result = await analyzer.analyze(ctx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.some((f) => f.title.startsWith("Layer violation"))).toBe(true);
+  });
+
+  it("returns no violation findings when disabled", async () => {
+    const disabled = new ArchitectureAnalyzer({ enabled: false });
+    const ctx = makeContext(["src/renderer/App.tsx"], {
+      "src/renderer/App.tsx":
+        'import { AnthropicProvider } from "../../main/ai/AnthropicProvider.js";\n',
+    });
+    const result = await disabled.analyze(ctx);
+    expect(result.ok && result.value).toHaveLength(0);
   });
 });
 

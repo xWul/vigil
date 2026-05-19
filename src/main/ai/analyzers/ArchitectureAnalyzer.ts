@@ -116,6 +116,100 @@ export function findImportLine(
 }
 
 // ---------------------------------------------------------------------------
+// Layer violation detection
+// ---------------------------------------------------------------------------
+
+type Layer = "main" | "renderer" | "shared" | "preload" | "other";
+
+const LAYER_ALLOWED: Record<Layer, ReadonlySet<Layer>> = {
+  main: new Set(["main", "shared"]),
+  renderer: new Set(["renderer", "shared"]),
+  shared: new Set(["shared"]),
+  preload: new Set(["preload", "shared"]),
+  other: new Set(["main", "renderer", "shared", "preload", "other"]),
+};
+
+export function classifyLayer(filePath: string): Layer {
+  if (filePath.startsWith("src/main/")) return "main";
+  if (filePath.startsWith("src/renderer/")) return "renderer";
+  if (filePath.startsWith("src/shared/")) return "shared";
+  if (filePath.startsWith("src/preload/")) return "preload";
+  return "other";
+}
+
+function layerViolationSeverity(from: Layer, to: Layer): Finding["severity"] {
+  // renderer↔main crosses the Electron process boundary — hard crash in production
+  if (
+    (from === "renderer" && to === "main") ||
+    (from === "main" && to === "renderer") ||
+    from === "shared"
+  ) {
+    return "high";
+  }
+  return "medium";
+}
+
+function layerViolationDescription(from: Layer, to: Layer, fromFile: string): string {
+  const name = shortName(fromFile);
+  if (from === "renderer" && to === "main") {
+    return `${name} imports main-process code from the renderer. The renderer is sandboxed — this import will crash at runtime in production Electron builds where processes are isolated.`;
+  }
+  if (from === "main" && to === "renderer") {
+    return `${name} imports renderer code from the main process. Main and renderer run in separate processes; this import cannot work at runtime.`;
+  }
+  if (from === "shared") {
+    return `${name} is a shared module but imports from the ${to} process. Shared code must be process-agnostic to remain usable in both main and renderer.`;
+  }
+  return `${name} (${from} layer) imports from the ${to} layer, violating the module layering rules.`;
+}
+
+// Uses a local regex instance to avoid lastIndex conflicts with the module-level RELATIVE_IMPORT_RE.
+const LAYER_IMPORT_RE = /from\s+['"](\.[^'"]+)['"]/g;
+
+export function detectLayerViolations(
+  changedPaths: ReadonlySet<string>,
+  files: ReadonlyMap<string, string>,
+): Finding[] {
+  const findings: Finding[] = [];
+
+  for (const filePath of changedPaths) {
+    const content = files.get(filePath);
+    if (!content || !TS_JS.test(filePath)) continue;
+
+    const fromLayer = classifyLayer(filePath);
+    if (fromLayer === "other") continue;
+
+    const allowed = LAYER_ALLOWED[fromLayer];
+    const lines = content.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      LAYER_IMPORT_RE.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = LAYER_IMPORT_RE.exec(line)) !== null) {
+        const importSpec = match[1]!;
+        const resolved = resolveRelativeImport(filePath, importSpec);
+        const toLayer = classifyLayer(resolved);
+        if (toLayer === "other" || allowed.has(toLayer)) continue;
+
+        findings.push({
+          severity: layerViolationSeverity(fromLayer, toLayer),
+          title: `Layer violation: ${fromLayer} imports from ${toLayer}`,
+          description: layerViolationDescription(fromLayer, toLayer, filePath),
+          evidence: `${line.trim()}\n${fromLayer} → ${toLayer}`,
+          file: filePath,
+          lines: { start: i + 1, end: i + 1 },
+          pass: "architecture",
+          source: "static",
+        });
+      }
+    }
+  }
+
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Finding construction
 // ---------------------------------------------------------------------------
 
@@ -162,7 +256,7 @@ export class ArchitectureAnalyzer implements CodeAnalyzer {
     // Keep only cycles that touch at least one changed file
     const relevantCycles = cycles.filter((cycle) => cycle.some((file) => changedPaths.has(file)));
 
-    const findings: Finding[] = [];
+    const findings: Finding[] = [...detectLayerViolations(changedPaths, context.files)];
 
     for (const cycle of relevantCycles) {
       const chain = cycle.join("\n");
