@@ -2226,6 +2226,26 @@ function BottomStrip({
   );
 }
 
+// ── Workspace state persistence helpers ──────────────────────────────────────
+
+const TAB_IDS: ReadonlySet<string> = new Set([
+  "overview",
+  "diff",
+  "semantic",
+  "risks",
+  "arch",
+  "convo",
+]);
+
+function isTabId(value: string | null): value is TabId {
+  return value !== null && TAB_IDS.has(value);
+}
+
+function workspaceTabKey(ref: PullRequest["ref"]): string {
+  if (ref.platform === "github") return `vigil:tab:github:${ref.owner}:${ref.repo}:${ref.number}`;
+  return `vigil:tab:azure-devops:${ref.org}:${ref.project}:${ref.repo}:${ref.id}`;
+}
+
 // ── WorkspaceScreen ───────────────────────────────────────────────────────────
 
 export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
@@ -2252,7 +2272,18 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const [passes, setPasses] = useState<PassMap>({});
   const [reviewDone, setReviewDone] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const tabStorageKey = workspaceTabKey(pr.ref);
+  const [activeTab, _setActiveTab] = useState<TabId>(() => {
+    const saved = localStorage.getItem(tabStorageKey);
+    return isTabId(saved) ? saved : "overview";
+  });
+  const setActiveTab = useCallback(
+    (tab: TabId) => {
+      localStorage.setItem(tabStorageKey, tab);
+      _setActiveTab(tab);
+    },
+    [tabStorageKey],
+  );
   const [reviewCompletedAt, setReviewCompletedAt] = useState<Date | null>(null);
 
   const [activeFileIdx, setActiveFileIdx] = useState(0);
@@ -2559,6 +2590,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       reviewDone,
       handleRerunReview,
       handleSuppress,
+      setActiveTab,
     ],
   );
 

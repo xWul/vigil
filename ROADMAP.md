@@ -388,14 +388,14 @@ Not blockers for v0.1 but natural next investments after release:
       See ADR-0012.
 - [ ] **Auto-update** (`electron-updater`): without this, users on v0.1 are
       stranded. Integrate with GitHub Releases. High priority post-v0.1.
-- [ ] **System notification on review complete**: Electron `Notification` API.
-      Useful when the user switches away during a long review.
+- [x] **System notification on review complete**: Electron `Notification` API.
+      Fires when review finishes while window is out of focus.
 - [ ] **Azure DevOps full diff hunks**: Phase 2 deferred hunk parsing for AzDO.
       Real AzDO users get file-level diffs only, which limits usefulness.
 - [x] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
       it doesn't reappear on re-run. Stored per `(headSha, findingKey)`.
-- [ ] **Workspace state persistence**: remember active tab and focused finding
-      when returning to a previously-reviewed PR.
+- [x] **Workspace state persistence**: active tab remembered per PR via
+      `localStorage`; restored when returning to a previously-reviewed PR.
 - [ ] **Real architecture analysis**: path-based layer violation detection
       (renderer importing main, circular deps). Re-introduce the Architecture
       tab backed by real data.

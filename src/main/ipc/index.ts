@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { app, clipboard, dialog, shell } from "electron";
+import { app, clipboard, dialog, shell, Notification } from "electron";
 import type { BrowserWindow } from "electron";
 
 import { err, ok } from "../../shared/result.js";
@@ -284,6 +284,17 @@ export function registerHandlers(
 
     for (const finding of result.value.findings) {
       emit("review:finding", { reviewId, finding });
+    }
+
+    if (!mainWindow.isFocused() && Notification.isSupported()) {
+      const count = result.value.findings.filter(
+        (f) => f.severity === "critical" || f.severity === "high" || f.severity === "medium",
+      ).length;
+      const body =
+        count > 0
+          ? `${count} finding${count !== 1 ? "s" : ""} worth reviewing`
+          : "No significant findings";
+      new Notification({ title: context.pr.title, body, silent: true }).show();
     }
 
     return result;

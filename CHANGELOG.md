@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **System notification on review complete**: Vigil fires a macOS notification when a
+  review finishes while the window is out of focus. The notification shows the PR title
+  and a count of medium/high/critical findings (or "No significant findings"). Uses
+  `Notification.isSupported()` so it degrades silently on unsupported platforms.
+
+- **Workspace tab persistence**: the active tab (Overview, Diff, Semantic, etc.) is
+  remembered per PR across sessions using `localStorage`. Returning to a PR you were
+  already reviewing opens the same tab you left on.
+
 - **Finding suppression**: findings can now be marked as "won't fix" so they don't
   clutter re-runs. Press `x` on a focused finding (diff tab) or click the ✕ button
   on any finding card (overview tab) to suppress it. Suppressed findings disappear from
