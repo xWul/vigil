@@ -230,6 +230,108 @@ function HelpOverlay({ onClose }: { onClose: () => void }) {
 
 type SettingsDraft = ResolvedAnalyzerConfig;
 
+function toMinimalConfig(cfg: ResolvedAnalyzerConfig): string {
+  const d = DEFAULT_ANALYZER_CONFIG;
+  const c = cfg.analyzers;
+  const dc = d.analyzers;
+
+  function diff<T>(val: T, def: T): T | undefined {
+    return val !== def ? val : undefined;
+  }
+
+  const det = c.regression.detectors;
+  const ddet = dc.regression.detectors;
+  const detectors = {
+    ...(det.conditionChanges !== ddet.conditionChanges && {
+      conditionChanges: det.conditionChanges,
+    }),
+    ...(det.errorHandling !== ddet.errorHandling && { errorHandling: det.errorHandling }),
+    ...(det.numericChanges !== ddet.numericChanges && { numericChanges: det.numericChanges }),
+    ...(det.asyncPatterns !== ddet.asyncPatterns && { asyncPatterns: det.asyncPatterns }),
+    ...(det.sideEffects !== ddet.sideEffects && { sideEffects: det.sideEffects }),
+  };
+
+  const analyzers = {
+    ...((c.complexity.enabled !== dc.complexity.enabled ||
+      c.complexity.threshold !== dc.complexity.threshold) && {
+      complexity: {
+        ...(diff(c.complexity.enabled, dc.complexity.enabled) !== undefined && {
+          enabled: c.complexity.enabled,
+        }),
+        ...(diff(c.complexity.threshold, dc.complexity.threshold) !== undefined && {
+          threshold: c.complexity.threshold,
+        }),
+      },
+    }),
+    ...((c.smells.enabled !== dc.smells.enabled ||
+      c.smells.maxFunctionLines !== dc.smells.maxFunctionLines ||
+      c.smells.maxParams !== dc.smells.maxParams ||
+      c.smells.maxNesting !== dc.smells.maxNesting) && {
+      smells: {
+        ...(diff(c.smells.enabled, dc.smells.enabled) !== undefined && {
+          enabled: c.smells.enabled,
+        }),
+        ...(diff(c.smells.maxFunctionLines, dc.smells.maxFunctionLines) !== undefined && {
+          maxFunctionLines: c.smells.maxFunctionLines,
+        }),
+        ...(diff(c.smells.maxParams, dc.smells.maxParams) !== undefined && {
+          maxParams: c.smells.maxParams,
+        }),
+        ...(diff(c.smells.maxNesting, dc.smells.maxNesting) !== undefined && {
+          maxNesting: c.smells.maxNesting,
+        }),
+      },
+    }),
+    ...((c.duplication.enabled !== dc.duplication.enabled ||
+      c.duplication.minBlockLines !== dc.duplication.minBlockLines) && {
+      duplication: {
+        ...(diff(c.duplication.enabled, dc.duplication.enabled) !== undefined && {
+          enabled: c.duplication.enabled,
+        }),
+        ...(diff(c.duplication.minBlockLines, dc.duplication.minBlockLines) !== undefined && {
+          minBlockLines: c.duplication.minBlockLines,
+        }),
+      },
+    }),
+    ...((c.regression.enabled !== dc.regression.enabled || Object.keys(detectors).length > 0) && {
+      regression: {
+        ...(diff(c.regression.enabled, dc.regression.enabled) !== undefined && {
+          enabled: c.regression.enabled,
+        }),
+        ...(Object.keys(detectors).length > 0 && { detectors }),
+      },
+    }),
+    ...(c.debugArtifacts.enabled !== dc.debugArtifacts.enabled && {
+      debugArtifacts: { enabled: c.debugArtifacts.enabled },
+    }),
+    ...(c.typeSafety.enabled !== dc.typeSafety.enabled && {
+      typeSafety: { enabled: c.typeSafety.enabled },
+    }),
+    ...((c.changeClassification.enabled !== dc.changeClassification.enabled ||
+      c.changeClassification.intentMismatch !== dc.changeClassification.intentMismatch) && {
+      changeClassification: {
+        ...(diff(c.changeClassification.enabled, dc.changeClassification.enabled) !== undefined && {
+          enabled: c.changeClassification.enabled,
+        }),
+        ...(diff(c.changeClassification.intentMismatch, dc.changeClassification.intentMismatch) !==
+          undefined && { intentMismatch: c.changeClassification.intentMismatch }),
+      },
+    }),
+    ...(c.architecture.enabled !== dc.architecture.enabled && {
+      architecture: { enabled: c.architecture.enabled },
+    }),
+  };
+
+  const out = {
+    ...(Object.keys(analyzers).length > 0 && { analyzers }),
+    ...(cfg.maxFindingsPerAnalyzer !== d.maxFindingsPerAnalyzer && {
+      maxFindingsPerAnalyzer: cfg.maxFindingsPerAnalyzer,
+    }),
+  };
+
+  return JSON.stringify(out, null, 2);
+}
+
 function SettingsToggle({
   label,
   checked,
@@ -383,6 +485,19 @@ function AnalyzerSettingsOverlay({
       ...d,
       analyzers: { ...d.analyzers, [analyzer]: { ...d.analyzers[analyzer], enabled: value } },
     }));
+  }
+
+  function handleExport() {
+    if (!draft) return;
+    const json = toMinimalConfig(draft);
+    void navigator.clipboard.writeText(json).then(() => {
+      setToast(
+        json === "{}"
+          ? "All settings are at defaults — nothing to export."
+          : "Copied .vigilrc to clipboard.",
+      );
+      setTimeout(() => setToast(null), 3000);
+    });
   }
 
   async function handleSave() {
@@ -749,6 +864,21 @@ function AnalyzerSettingsOverlay({
             }}
           >
             Restore defaults
+          </button>
+          <button
+            onClick={handleExport}
+            style={{
+              background: "transparent",
+              border: `0.5px solid ${t.border}`,
+              padding: "8px 12px",
+              borderRadius: 7,
+              fontFamily: SANS,
+              fontSize: 13,
+              color: t.textDim,
+              cursor: "pointer",
+            }}
+          >
+            Copy .vigilrc
           </button>
           <button
             onClick={() => void handleSave()}

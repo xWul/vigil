@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-15. Phase 7 complete (OAuth registration is a user action, not code). Phase 8 (configurable analyzer settings) planned and specced. Phase 9 (distribution) next after that.
+> **Status:** Living document. Last updated 2026-05-18. Phases 0–8 complete. Phase 9 (distribution, v0.1 release) is next.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -337,24 +337,23 @@ it as `.vigilrc` for committing to their repository.
 
 Spec: `docs/specs/analyzer-config.md` — ADR-0012
 
-- [ ] `src/shared/analyzer-config.ts`: `AnalyzerConfig` type (all fields optional),
+- [x] `src/shared/analyzer-config.ts`: `AnalyzerConfig` type (all fields optional),
       `ResolvedAnalyzerConfig` (all fields required), `resolveAnalyzerConfig()` helper
-- [ ] `settings:getAnalyzerConfig` and `settings:setAnalyzerConfig` IPC channels
-      added to `src/shared/ipc-contract.ts`; main-side handlers read/write
-      `electron-store` keyed by `{platform}/{owner}/{repo}`
-- [ ] All eight analyzer constructors accept their config slice; `enabled: false`
+- [x] `settings:getAnalyzerConfig` and `settings:setAnalyzerConfig` IPC channels
+      added to `src/shared/ipc-contract.ts`; main-side handlers read/write JSON
+      files in `userData` keyed by `{platform}.{owner}.{repo}`
+- [x] All eight analyzer constructors accept their config slice; `enabled: false`
       returns `ok([])` immediately
-- [ ] `runReview.ts`: `MAX_FINDINGS_PER_ANALYZER` reads from `config.maxFindingsPerAnalyzer`
-- [ ] `src/main/ipc/index.ts`: reads config before constructing analyzers; passes
+- [x] `runReview.ts`: `maxFindingsPerAnalyzer` reads from `RunReviewOptions`
+- [x] `src/main/ipc/index.ts`: reads config before constructing analyzers; passes
       slices to each constructor
-- [ ] Workspace bottom strip: `⚙` icon button (keyboard shortcut `,`) opens the
+- [x] Workspace bottom strip: `,` keyboard shortcut and "settings" button opens the
       Analyzer Settings overlay
-- [ ] Analyzer Settings overlay: grouped sections (Static passes / Diff passes /
-      Pipeline), enable toggles, threshold number inputs, per-detector sub-toggles,
-      Save button, Restore defaults button
-- [ ] "Export as .vigilrc" button: copies minimal (non-default-only) JSON to clipboard
-- [ ] "Analyzer settings saved — re-run to apply" toast on save
-- [ ] Tests: `resolveAnalyzerConfig` unit tests; per-analyzer disabled/threshold tests
+- [x] Analyzer Settings overlay: grouped sections with enable toggles, threshold
+      number inputs, per-detector sub-toggles, Save button, Restore defaults button
+- [x] "Export as .vigilrc" button: copies minimal (non-default-only) JSON to clipboard
+- [x] Toast on save: "Settings saved. Re-run the review to apply changes."
+- [x] Tests: `resolveAnalyzerConfig` unit tests; per-analyzer disabled/threshold tests
 
 **Exit criteria:** A user can disable the Smells analyzer, raise the complexity
 threshold to 15, re-run the review, and see the changes reflected. Exporting

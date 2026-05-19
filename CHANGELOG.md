@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Analyzer settings overlay**: pressing `,` in the workspace (or clicking the new "settings"
   button in the bottom strip) opens a scrollable overlay showing all analyzer controls — toggles
-  and numeric inputs grouped by analyzer. "Restore defaults" resets to factory values. "Save"
+  and numeric inputs grouped by analyzer. "Restore defaults" resets to factory values. "Copy
+  .vigilrc" copies a minimal JSON snippet (only non-default values) to the clipboard. "Save"
   persists the config and closes the overlay. Changes apply on the next re-run.
 
 ### Changed
