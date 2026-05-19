@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   .vigilrc" copies a minimal JSON snippet (only non-default values) to the clipboard. "Save"
   persists the config and closes the overlay. Changes apply on the next re-run.
 
+- **`.vigilrc` auto-read from repository**: Vigil now reads a `.vigilrc` file from the
+  repository root (at the PR's head SHA) if one exists. Settings in `.vigilrc` override the
+  per-repo settings stored in `userData`, which in turn override built-in defaults. The file
+  uses the same `AnalyzerConfig` JSON schema as the exported snippet from the settings overlay.
+  Invalid JSON in `.vigilrc` is silently ignored.
+
 ### Changed
 
 - **Static analyzer accuracy improvements** — five targeted fixes to the static analysis pipeline:

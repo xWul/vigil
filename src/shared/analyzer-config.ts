@@ -88,6 +88,57 @@ export const DEFAULT_ANALYZER_CONFIG: ResolvedAnalyzerConfig = {
   maxFindingsPerAnalyzer: 10,
 };
 
+export function mergeAnalyzerConfigs(base: AnalyzerConfig, override: AnalyzerConfig): AnalyzerConfig {
+  const ba = base.analyzers ?? {};
+  const oa = override.analyzers ?? {};
+  return {
+    ...(override.maxFindingsPerAnalyzer !== undefined
+      ? { maxFindingsPerAnalyzer: override.maxFindingsPerAnalyzer }
+      : base.maxFindingsPerAnalyzer !== undefined
+        ? { maxFindingsPerAnalyzer: base.maxFindingsPerAnalyzer }
+        : {}),
+    analyzers: {
+      ...(ba.complexity !== undefined || oa.complexity !== undefined
+        ? { complexity: { ...ba.complexity, ...oa.complexity } }
+        : {}),
+      ...(ba.smells !== undefined || oa.smells !== undefined
+        ? { smells: { ...ba.smells, ...oa.smells } }
+        : {}),
+      ...(ba.duplication !== undefined || oa.duplication !== undefined
+        ? { duplication: { ...ba.duplication, ...oa.duplication } }
+        : {}),
+      ...(ba.regression !== undefined || oa.regression !== undefined
+        ? {
+            regression: {
+              ...ba.regression,
+              ...oa.regression,
+              ...(ba.regression?.detectors !== undefined || oa.regression?.detectors !== undefined
+                ? {
+                    detectors: {
+                      ...ba.regression?.detectors,
+                      ...oa.regression?.detectors,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(ba.debugArtifacts !== undefined || oa.debugArtifacts !== undefined
+        ? { debugArtifacts: { ...ba.debugArtifacts, ...oa.debugArtifacts } }
+        : {}),
+      ...(ba.typeSafety !== undefined || oa.typeSafety !== undefined
+        ? { typeSafety: { ...ba.typeSafety, ...oa.typeSafety } }
+        : {}),
+      ...(ba.changeClassification !== undefined || oa.changeClassification !== undefined
+        ? { changeClassification: { ...ba.changeClassification, ...oa.changeClassification } }
+        : {}),
+      ...(ba.architecture !== undefined || oa.architecture !== undefined
+        ? { architecture: { ...ba.architecture, ...oa.architecture } }
+        : {}),
+    },
+  };
+}
+
 export function resolveAnalyzerConfig(partial: AnalyzerConfig = {}): ResolvedAnalyzerConfig {
   const d = DEFAULT_ANALYZER_CONFIG;
   const a = partial.analyzers ?? {};

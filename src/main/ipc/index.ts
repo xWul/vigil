@@ -8,7 +8,8 @@ import { err, ok } from "../../shared/result.js";
 import type { ConnectedAccount } from "../../shared/auth.js";
 import type { IpcEvents } from "../../shared/ipc-contract.js";
 import type { PullRequest } from "../../shared/model/index.js";
-import { resolveAnalyzerConfig } from "../../shared/analyzer-config.js";
+import { mergeAnalyzerConfigs, resolveAnalyzerConfig } from "../../shared/analyzer-config.js";
+import type { AnalyzerConfig } from "../../shared/analyzer-config.js";
 import { createAzureDevOpsAuthProvider } from "../auth/AzureDevOpsAuthProvider.js";
 import { createGitHubAuthProvider } from "../auth/GitHubAuthProvider.js";
 import { createPATAuthProvider } from "../auth/PATAuthProvider.js";
@@ -247,7 +248,18 @@ export function registerHandlers(
       settings.model ??
       (settings.aiProvider === "anthropic" ? "claude-sonnet-4-6" : "gpt-4.1-mini");
 
-    const analyzerConfig = resolveAnalyzerConfig(await settingsStore.getAnalyzerConfig(ref));
+    const userDataConfig = await settingsStore.getAnalyzerConfig(ref);
+    const vigilrcResult = await repoCache.readFile(ref, context.pr.headSha, ".vigilrc");
+    const vigilrcConfig: AnalyzerConfig = vigilrcResult.ok
+      ? (() => {
+          try {
+            return JSON.parse(vigilrcResult.value) as AnalyzerConfig;
+          } catch {
+            return {};
+          }
+        })()
+      : {};
+    const analyzerConfig = resolveAnalyzerConfig(mergeAnalyzerConfigs(userDataConfig, vigilrcConfig));
 
     const analyzers = [
       new ComplexityAnalyzer(analyzerConfig.analyzers.complexity),
