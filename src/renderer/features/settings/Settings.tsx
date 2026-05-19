@@ -987,7 +987,9 @@ export function Settings({
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <button
                 onClick={() => void api.invoke("app:checkForUpdate")}
-                disabled={updateStatus?.status === "checking" || updateStatus?.status === "downloading"}
+                disabled={
+                  updateStatus?.status === "checking" || updateStatus?.status === "downloading"
+                }
                 style={{
                   padding: "8px 16px",
                   background: t.surface,
@@ -996,8 +998,14 @@ export function Settings({
                   fontFamily: SANS,
                   fontSize: 13,
                   color: t.textDim,
-                  cursor: updateStatus?.status === "checking" || updateStatus?.status === "downloading" ? "default" : "pointer",
-                  opacity: updateStatus?.status === "checking" || updateStatus?.status === "downloading" ? 0.5 : 1,
+                  cursor:
+                    updateStatus?.status === "checking" || updateStatus?.status === "downloading"
+                      ? "default"
+                      : "pointer",
+                  opacity:
+                    updateStatus?.status === "checking" || updateStatus?.status === "downloading"
+                      ? 0.5
+                      : 1,
                   transition: "opacity .15s",
                 }}
               >
@@ -1043,9 +1051,11 @@ export function Settings({
               {updateStatus === null && "—"}
               {updateStatus?.status === "checking" && "Checking for updates…"}
               {updateStatus?.status === "up-to-date" && "You're on the latest version."}
-              {updateStatus?.status === "available" && `v${updateStatus.version} is available — downloading…`}
+              {updateStatus?.status === "available" &&
+                `v${updateStatus.version} is available — downloading…`}
               {updateStatus?.status === "downloading" && `Downloading… ${updateStatus.progress}%`}
-              {updateStatus?.status === "ready" && `v${updateStatus.version} downloaded and ready to install.`}
+              {updateStatus?.status === "ready" &&
+                `v${updateStatus.version} downloaded and ready to install.`}
               {updateStatus?.status === "error" && `Update error: ${updateStatus.message}`}
             </div>
           </div>

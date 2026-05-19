@@ -261,7 +261,9 @@ export function registerHandlers(
           }
         })()
       : {};
-    const analyzerConfig = resolveAnalyzerConfig(mergeAnalyzerConfigs(userDataConfig, vigilrcConfig));
+    const analyzerConfig = resolveAnalyzerConfig(
+      mergeAnalyzerConfigs(userDataConfig, vigilrcConfig),
+    );
 
     const analyzers = [
       new ComplexityAnalyzer(analyzerConfig.analyzers.complexity),

@@ -88,7 +88,10 @@ export const DEFAULT_ANALYZER_CONFIG: ResolvedAnalyzerConfig = {
   maxFindingsPerAnalyzer: 10,
 };
 
-export function mergeAnalyzerConfigs(base: AnalyzerConfig, override: AnalyzerConfig): AnalyzerConfig {
+export function mergeAnalyzerConfigs(
+  base: AnalyzerConfig,
+  override: AnalyzerConfig,
+): AnalyzerConfig {
   const ba = base.analyzers ?? {};
   const oa = override.analyzers ?? {};
   return {

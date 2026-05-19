@@ -10,10 +10,7 @@ export interface Updater {
   installUpdate(): void;
 }
 
-export function setupAutoUpdater(
-  onStatus: (s: UpdateStatus) => void,
-  logger: Logger,
-): Updater {
+export function setupAutoUpdater(onStatus: (s: UpdateStatus) => void, logger: Logger): Updater {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = null; // use our own logger
