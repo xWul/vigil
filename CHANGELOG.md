@@ -15,8 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a new version is ready. Uses `electron-updater` against GitHub Releases
   (`xWul/vigil`). GitHub publish config added to `electron-builder`.
 
-
-
 - **System notification on review complete**: Vigil fires a macOS notification when a
   review finishes while the window is out of focus. The notification shows the PR title
   and a count of medium/high/critical findings (or "No significant findings"). Uses
@@ -55,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-repo settings stored in `userData`, which in turn override built-in defaults. The file
   uses the same `AnalyzerConfig` JSON schema as the exported snippet from the settings overlay.
   Invalid JSON in `.vigilrc` is silently ignored.
+
+- **Symbol-aware cross-file context**: unchanged files pulled in as cross-file import context
+  are now compressed to their exported symbol signatures (function signatures, class public API,
+  interfaces, type aliases) using the TypeScript compiler API — implementation bodies are
+  stripped. This makes better use of the cross-file token budget: more imported modules can be
+  included within the same cap, giving the AI broader type context without extra cost.
 
 ### Changed
 
