@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-18. Phases 0–8 complete. Phase 9 (distribution, v0.1 release) is next.
+> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read) complete. Phase 9 (distribution, v0.1 release) is next.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -359,6 +359,8 @@ Spec: `docs/specs/analyzer-config.md` — ADR-0012
 threshold to 15, re-run the review, and see the changes reflected. Exporting
 `.vigilrc` produces valid, minimal JSON matching the schema.
 
+_Phase 8 complete 2026-05-19._
+
 ---
 
 ## Phase 9 — Distribution (v0.1 release)
@@ -381,11 +383,11 @@ gets a working review on a PR in under 10 minutes.
 
 Not blockers for v0.1 but natural next investments after release:
 
-- [ ] **Auto-read `.vigilrc` from repo**: at review start, fetch `.vigilrc` from
-      the repo root via `PlatformProvider.getFileContent` (one extra API call);
-      merge with `userData` config (repo file wins); fall back silently on 404
-      or parse error. Enables team-shared analysis conventions without manual import.
-      See ADR-0012.
+- [x] **Auto-read `.vigilrc` from repo**: at review start, Vigil reads `.vigilrc`
+      from the repo root via `RepoCache.readFile` at the PR's head SHA. Settings
+      in `.vigilrc` override per-repo `userData` config, which overrides built-in
+      defaults. Invalid JSON is silently ignored. Uses the same `AnalyzerConfig`
+      JSON schema as the "Copy .vigilrc" export. See ADR-0012.
 - [ ] **Auto-update** (`electron-updater`): without this, users on v0.1 are
       stranded. Integrate with GitHub Releases. High priority post-v0.1.
 - [x] **System notification on review complete**: Electron `Notification` API.
