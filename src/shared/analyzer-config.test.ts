@@ -86,7 +86,10 @@ describe("mergeAnalyzerConfigs", () => {
   });
 
   it("override maxFindingsPerAnalyzer wins", () => {
-    const merged = mergeAnalyzerConfigs({ maxFindingsPerAnalyzer: 5 }, { maxFindingsPerAnalyzer: 3 });
+    const merged = mergeAnalyzerConfigs(
+      { maxFindingsPerAnalyzer: 5 },
+      { maxFindingsPerAnalyzer: 3 },
+    );
     expect(merged.maxFindingsPerAnalyzer).toBe(3);
   });
 
