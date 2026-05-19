@@ -116,77 +116,6 @@ export function findImportLine(
 }
 
 // ---------------------------------------------------------------------------
-// Layer violation detection (configurable)
-// ---------------------------------------------------------------------------
-
-type LayersConfig = ResolvedAnalyzerConfig["analyzers"]["architecture"]["layers"];
-type RulesConfig = ResolvedAnalyzerConfig["analyzers"]["architecture"]["rules"];
-
-function matchLayer(filePath: string, layers: LayersConfig): string | null {
-  for (const [name, prefixes] of Object.entries(layers)) {
-    for (const prefix of prefixes) {
-      if (filePath.startsWith(prefix)) return name;
-    }
-  }
-  return null;
-}
-
-// Local regex instance to avoid lastIndex conflicts with the module-level RELATIVE_IMPORT_RE.
-const LAYER_IMPORT_RE = /from\s+['"](\.[^'"]+)['"]/g;
-
-export function detectLayerViolations(
-  changedPaths: ReadonlySet<string>,
-  files: ReadonlyMap<string, string>,
-  layers: LayersConfig,
-  rules: RulesConfig,
-): Finding[] {
-  if (Object.keys(layers).length === 0 || rules.length === 0) return [];
-
-  const denyMap = new Map<string, Set<string>>();
-  for (const rule of rules) {
-    denyMap.set(rule.from, new Set(rule.deny));
-  }
-
-  const findings: Finding[] = [];
-
-  for (const filePath of changedPaths) {
-    const content = files.get(filePath);
-    if (!content || !TS_JS.test(filePath)) continue;
-
-    const fromLayer = matchLayer(filePath, layers);
-    if (!fromLayer) continue;
-
-    const denied = denyMap.get(fromLayer);
-    if (!denied || denied.size === 0) continue;
-
-    const lines = content.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]!;
-      LAYER_IMPORT_RE.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = LAYER_IMPORT_RE.exec(line)) !== null) {
-        const resolved = resolveRelativeImport(filePath, match[1]!);
-        const toLayer = matchLayer(resolved, layers);
-        if (!toLayer || !denied.has(toLayer)) continue;
-
-        findings.push({
-          severity: "high",
-          title: `Layer violation: ${fromLayer} imports from ${toLayer}`,
-          description: `${shortName(filePath)} (${fromLayer} layer) imports from the ${toLayer} layer, violating the configured architecture rules.`,
-          evidence: `${line.trim()}\n${fromLayer} → ${toLayer}`,
-          file: filePath,
-          lines: { start: i + 1, end: i + 1 },
-          pass: "architecture",
-          source: "static",
-        });
-      }
-    }
-  }
-
-  return findings;
-}
-
-// ---------------------------------------------------------------------------
 // Finding construction
 // ---------------------------------------------------------------------------
 
@@ -233,9 +162,7 @@ export class ArchitectureAnalyzer implements CodeAnalyzer {
     // Keep only cycles that touch at least one changed file
     const relevantCycles = cycles.filter((cycle) => cycle.some((file) => changedPaths.has(file)));
 
-    const findings: Finding[] = [
-      ...detectLayerViolations(changedPaths, context.files, this.cfg.layers, this.cfg.rules),
-    ];
+    const findings: Finding[] = [];
 
     for (const cycle of relevantCycles) {
       const chain = cycle.join("\n");

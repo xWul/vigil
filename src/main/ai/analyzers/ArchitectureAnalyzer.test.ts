@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  ArchitectureAnalyzer,
-  detectCycles,
-  detectLayerViolations,
-  findImportLine,
-} from "./ArchitectureAnalyzer.js";
+import { ArchitectureAnalyzer, detectCycles, findImportLine } from "./ArchitectureAnalyzer.js";
 import type { ReviewContext } from "../CodeAnalyzer.js";
 import type { Diff, PullRequest } from "../../../shared/model/index.js";
 
@@ -44,20 +39,6 @@ function makeContext(changedPaths: string[], fileContents: Record<string, string
     tokenBudget: 160_000,
   };
 }
-
-// Layer/rule config that mirrors the Electron architecture — used across multiple test suites.
-const ELECTRON_LAYERS = {
-  main: ["src/main/"],
-  renderer: ["src/renderer/"],
-  shared: ["src/shared/"],
-  preload: ["src/preload/"],
-};
-const ELECTRON_RULES = [
-  { from: "renderer", deny: ["main", "preload"] },
-  { from: "main", deny: ["renderer", "preload"] },
-  { from: "shared", deny: ["main", "renderer", "preload"] },
-  { from: "preload", deny: ["main", "renderer"] },
-];
 
 // ---------------------------------------------------------------------------
 // detectCycles
@@ -147,178 +128,7 @@ describe("findImportLine", () => {
 });
 
 // ---------------------------------------------------------------------------
-// detectLayerViolations
-// ---------------------------------------------------------------------------
-
-describe("detectLayerViolations", () => {
-  it("returns empty when no layers are configured", () => {
-    const changed = new Set(["src/renderer/App.tsx"]);
-    const files = new Map([
-      ["src/renderer/App.tsx", 'import { Foo } from "../main/Foo.js";\n'],
-    ]);
-    expect(detectLayerViolations(changed, files, {}, [])).toHaveLength(0);
-  });
-
-  it("returns empty when there are no cross-layer imports", () => {
-    const changed = new Set(["src/renderer/App.tsx"]);
-    const files = new Map([
-      [
-        "src/renderer/App.tsx",
-        'import { Result } from "../shared/result.js";\nimport { Foo } from "./Foo.js";\n',
-      ],
-    ]);
-    expect(
-      detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES),
-    ).toHaveLength(0);
-  });
-
-  it("flags renderer importing from main", () => {
-    // src/renderer/App.tsx → ../main/ resolves to src/main/
-    const changed = new Set(["src/renderer/App.tsx"]);
-    const files = new Map([
-      [
-        "src/renderer/App.tsx",
-        'import { AnthropicProvider } from "../main/ai/AnthropicProvider.js";\n',
-      ],
-    ]);
-    const findings = detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES);
-    expect(findings).toHaveLength(1);
-    expect(findings[0]!.title).toBe("Layer violation: renderer imports from main");
-    expect(findings[0]!.severity).toBe("high");
-    expect(findings[0]!.lines).toEqual({ start: 1, end: 1 });
-  });
-
-  it("flags main importing from renderer", () => {
-    // src/main/ipc/index.ts → ../../renderer/ resolves to src/renderer/
-    const changed = new Set(["src/main/ipc/index.ts"]);
-    const files = new Map([
-      [
-        "src/main/ipc/index.ts",
-        'import { WorkspaceScreen } from "../../renderer/features/workspace/WorkspaceScreen.js";\n',
-      ],
-    ]);
-    const findings = detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES);
-    expect(findings).toHaveLength(1);
-    expect(findings[0]!.title).toBe("Layer violation: main imports from renderer");
-    expect(findings[0]!.severity).toBe("high");
-  });
-
-  it("flags shared importing from main", () => {
-    const changed = new Set(["src/shared/util.ts"]);
-    const files = new Map([
-      ["src/shared/util.ts", 'import { logger } from "../main/logger.js";\n'],
-    ]);
-    const findings = detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES);
-    expect(findings).toHaveLength(1);
-    expect(findings[0]!.severity).toBe("high");
-  });
-
-  it("reports the correct line number for the violation", () => {
-    const changed = new Set(["src/renderer/App.tsx"]);
-    const files = new Map([
-      [
-        "src/renderer/App.tsx",
-        'import { ok } from "../shared/result.js";\nimport { Provider } from "../main/ai/Provider.js";\n',
-      ],
-    ]);
-    const findings = detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES);
-    expect(findings[0]!.lines).toEqual({ start: 2, end: 2 });
-  });
-
-  it("includes the import statement and layer direction in evidence", () => {
-    const changed = new Set(["src/renderer/App.tsx"]);
-    const files = new Map([
-      [
-        "src/renderer/App.tsx",
-        'import { AnthropicProvider } from "../main/ai/AnthropicProvider.js";\n',
-      ],
-    ]);
-    const [finding] = detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES);
-    expect(finding!.evidence).toContain("AnthropicProvider");
-    expect(finding!.evidence).toContain("renderer → main");
-  });
-
-  it("ignores unchanged files", () => {
-    const changed = new Set(["src/renderer/App.tsx"]);
-    const files = new Map([
-      ["src/renderer/App.tsx", 'import { ok } from "../shared/result.js";\n'],
-      ["src/main/ipc/index.ts", 'import { WorkspaceScreen } from "../../renderer/WS.js";\n'],
-    ]);
-    expect(
-      detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES),
-    ).toHaveLength(0);
-  });
-
-  it("does not flag imports allowed by the rules", () => {
-    const changed = new Set(["src/preload/index.ts"]);
-    const files = new Map([
-      ["src/preload/index.ts", 'import { IpcContract } from "../shared/ipc-contract.js";\n'],
-    ]);
-    expect(
-      detectLayerViolations(changed, files, ELECTRON_LAYERS, ELECTRON_RULES),
-    ).toHaveLength(0);
-  });
-
-  it("respects arbitrary user-defined layers and rules", () => {
-    const layers = { ui: ["src/components/"], core: ["src/core/"] };
-    const rules = [{ from: "core", deny: ["ui"] }];
-    const changed = new Set(["src/core/service.ts"]);
-    const files = new Map([
-      ["src/core/service.ts", 'import { Button } from "../components/Button.js";\n'],
-    ]);
-    const findings = detectLayerViolations(changed, files, layers, rules);
-    expect(findings).toHaveLength(1);
-    expect(findings[0]!.title).toBe("Layer violation: core imports from ui");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ArchitectureAnalyzer — layer violations (integration)
-// ---------------------------------------------------------------------------
-
-describe("ArchitectureAnalyzer — layer violations", () => {
-  it("emits layer violation findings when layers are configured", async () => {
-    const analyzer = new ArchitectureAnalyzer({
-      enabled: true,
-      layers: ELECTRON_LAYERS,
-      rules: ELECTRON_RULES,
-    });
-    const ctx = makeContext(["src/renderer/App.tsx"], {
-      "src/renderer/App.tsx": 'import { AnthropicProvider } from "../main/ai/Provider.js";\n',
-    });
-    const result = await analyzer.analyze(ctx);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.some((f) => f.title.startsWith("Layer violation"))).toBe(true);
-  });
-
-  it("emits no layer findings when no layers are configured (default)", async () => {
-    const analyzer = new ArchitectureAnalyzer();
-    const ctx = makeContext(["src/renderer/App.tsx"], {
-      "src/renderer/App.tsx": 'import { AnthropicProvider } from "../main/ai/Provider.js";\n',
-    });
-    const result = await analyzer.analyze(ctx);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.every((f) => !f.title.startsWith("Layer violation"))).toBe(true);
-  });
-
-  it("returns empty when disabled", async () => {
-    const disabled = new ArchitectureAnalyzer({
-      enabled: false,
-      layers: ELECTRON_LAYERS,
-      rules: ELECTRON_RULES,
-    });
-    const ctx = makeContext(["src/renderer/App.tsx"], {
-      "src/renderer/App.tsx": 'import { AnthropicProvider } from "../main/ai/Provider.js";\n',
-    });
-    const result = await disabled.analyze(ctx);
-    expect(result.ok && result.value).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ArchitectureAnalyzer — circular imports
+// ArchitectureAnalyzer
 // ---------------------------------------------------------------------------
 
 describe("ArchitectureAnalyzer", () => {
@@ -356,6 +166,7 @@ describe("ArchitectureAnalyzer", () => {
   });
 
   it("does not report cycles involving only unchanged files", async () => {
+    // Only src/c.ts is changed; the cycle is between a.ts and b.ts (unchanged)
     const ctx = makeContext(["src/c.ts"], {
       "src/a.ts": 'import { b } from "./b.js";\n',
       "src/b.ts": 'import { a } from "./a.js";\n',
