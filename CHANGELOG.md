@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Architecture layer violation detection**: `ArchitectureAnalyzer` now detects imports
-  that cross Electron process boundaries in addition to circular dependencies. Violations
-  are reported as `high` severity findings — renderer importing main process code, main
-  importing renderer code, and shared modules importing from either process. Preload
-  boundary violations are `medium`. The finding evidence shows the exact import statement
-  and the violated layer direction (e.g. `renderer → main`). 16 new tests.
+- **Configurable layer violation detection**: `ArchitectureAnalyzer` now supports
+  user-defined architectural layers and deny rules via `.vigilrc`. Define layers as path
+  prefixes (`"main": ["src/main/"]`) and rules as deny lists (`{ "from": "core", "deny": ["ui"] }`).
+  Violations are reported as `high` severity findings with the exact import statement and
+  layer direction in evidence. By default no layers are configured, so there are no false
+  positives on arbitrary projects. Example Electron config included in the spec.
 
 - **System notification on review complete**: Vigil fires a macOS notification when a
   review finishes while the window is out of focus. The notification shows the PR title

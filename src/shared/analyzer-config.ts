@@ -31,7 +31,11 @@ export interface AnalyzerConfig {
       readonly enabled?: boolean;
       readonly intentMismatch?: boolean;
     };
-    readonly architecture?: { readonly enabled?: boolean };
+    readonly architecture?: {
+      readonly enabled?: boolean;
+      readonly layers?: Record<string, readonly string[]>;
+      readonly rules?: readonly { readonly from: string; readonly deny: readonly string[] }[];
+    };
   };
   readonly maxFindingsPerAnalyzer?: number;
 }
@@ -60,7 +64,11 @@ export interface ResolvedAnalyzerConfig {
     readonly debugArtifacts: { readonly enabled: boolean };
     readonly typeSafety: { readonly enabled: boolean };
     readonly changeClassification: { readonly enabled: boolean; readonly intentMismatch: boolean };
-    readonly architecture: { readonly enabled: boolean };
+    readonly architecture: {
+      readonly enabled: boolean;
+      readonly layers: Record<string, readonly string[]>;
+      readonly rules: readonly { readonly from: string; readonly deny: readonly string[] }[];
+    };
   };
   readonly maxFindingsPerAnalyzer: number;
 }
@@ -83,7 +91,7 @@ export const DEFAULT_ANALYZER_CONFIG: ResolvedAnalyzerConfig = {
     debugArtifacts: { enabled: true },
     typeSafety: { enabled: true },
     changeClassification: { enabled: true, intentMismatch: true },
-    architecture: { enabled: true },
+    architecture: { enabled: true, layers: {}, rules: [] },
   },
   maxFindingsPerAnalyzer: 10,
 };
@@ -190,6 +198,8 @@ export function resolveAnalyzerConfig(partial: AnalyzerConfig = {}): ResolvedAna
       },
       architecture: {
         enabled: a.architecture?.enabled ?? d.analyzers.architecture.enabled,
+        layers: a.architecture?.layers ?? d.analyzers.architecture.layers,
+        rules: a.architecture?.rules ?? d.analyzers.architecture.rules,
       },
     },
     maxFindingsPerAnalyzer: partial.maxFindingsPerAnalyzer ?? d.maxFindingsPerAnalyzer,
