@@ -136,4 +136,12 @@ describe("TypeSafetyAnalyzer", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toHaveLength(0);
   });
+
+  it("returns no findings when disabled", async () => {
+    const disabled = new TypeSafetyAnalyzer({ enabled: false });
+    const context = makeContext([makeFile("src/foo.ts", [makeLine("const x = val as any;")])]);
+    const result = await disabled.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
 });

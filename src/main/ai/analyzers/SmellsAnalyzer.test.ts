@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { ReviewContext } from "../CodeAnalyzer.js";
 import { SmellsAnalyzer } from "./SmellsAnalyzer.js";
 
-function makeContext(files: Record<string, string>): ReviewContext {
+function makeContext(
+  files: Record<string, string>,
+  status: "added" | "modified" = "added",
+  hunks: { newStart: number; newCount: number }[] = [],
+): ReviewContext {
   return {
     pr: {
       ref: { platform: "github", owner: "a", repo: "b", number: 1 },
@@ -20,10 +24,10 @@ function makeContext(files: Record<string, string>): ReviewContext {
     },
     diff: {
       files: Object.keys(files).map((path) => ({
-        status: "modified" as const,
+        status,
         oldPath: null,
         newPath: path,
-        hunks: [],
+        hunks: hunks.map((h) => ({ ...h, oldStart: h.newStart, oldCount: h.newCount, lines: [] })),
       })),
     },
     files: new Map(Object.entries(files)),
@@ -75,6 +79,42 @@ describe("SmellsAnalyzer", () => {
     if (result.ok) {
       const longFinding = result.value.find((f) => f.title.includes("Long function"));
       expect(longFinding).toBeDefined();
+    }
+  });
+
+  it("ignores smelly functions outside changed hunks", async () => {
+    // Fat function at lines 1-10; hunk only covers line 12 (unrelated)
+    const content = `function create(
+  name: string, age: number, email: string, role: string, active: boolean,
+) {
+  return { name, age, email, role, active };
+}
+
+// unrelated
+const X = 1;`;
+    const context = makeContext({ "src/f.ts": content }, "modified", [
+      { newStart: 8, newCount: 1 },
+    ]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it("reports smelly functions that overlap a changed hunk", async () => {
+    const content = `function create(
+  name: string, age: number, email: string, role: string, active: boolean,
+) {
+  return { name, age, email, role, active };
+}`;
+    // Hunk covers line 3, which is inside the function
+    const context = makeContext({ "src/f.ts": content }, "modified", [
+      { newStart: 3, newCount: 2 },
+    ]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const paramFinding = result.value.find((f) => f.title.includes("parameters"));
+      expect(paramFinding).toBeDefined();
     }
   });
 

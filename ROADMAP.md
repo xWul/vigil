@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-14. Phase 7 complete (OAuth registration is a user action, not code). Phase 8 next.
+> **Status:** Living document. Last updated 2026-05-18. Phases 0–8 complete. Phase 9 (distribution, v0.1 release) is next.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -329,7 +329,39 @@ an AI key, and complete a real review without needing to read the source code.
 
 ---
 
-## Phase 8 — Distribution (v0.1 release)
+## Phase 8 — Configurable Analyzer Settings
+
+**Goal:** Every static analysis parameter is tunable per repository through a
+workspace UI panel. Config is stored in `userData` per-repo; teams can export
+it as `.vigilrc` for committing to their repository.
+
+Spec: `docs/specs/analyzer-config.md` — ADR-0012
+
+- [x] `src/shared/analyzer-config.ts`: `AnalyzerConfig` type (all fields optional),
+      `ResolvedAnalyzerConfig` (all fields required), `resolveAnalyzerConfig()` helper
+- [x] `settings:getAnalyzerConfig` and `settings:setAnalyzerConfig` IPC channels
+      added to `src/shared/ipc-contract.ts`; main-side handlers read/write JSON
+      files in `userData` keyed by `{platform}.{owner}.{repo}`
+- [x] All eight analyzer constructors accept their config slice; `enabled: false`
+      returns `ok([])` immediately
+- [x] `runReview.ts`: `maxFindingsPerAnalyzer` reads from `RunReviewOptions`
+- [x] `src/main/ipc/index.ts`: reads config before constructing analyzers; passes
+      slices to each constructor
+- [x] Workspace bottom strip: `,` keyboard shortcut and "settings" button opens the
+      Analyzer Settings overlay
+- [x] Analyzer Settings overlay: grouped sections with enable toggles, threshold
+      number inputs, per-detector sub-toggles, Save button, Restore defaults button
+- [x] "Export as .vigilrc" button: copies minimal (non-default-only) JSON to clipboard
+- [x] Toast on save: "Settings saved. Re-run the review to apply changes."
+- [x] Tests: `resolveAnalyzerConfig` unit tests; per-analyzer disabled/threshold tests
+
+**Exit criteria:** A user can disable the Smells analyzer, raise the complexity
+threshold to 15, re-run the review, and see the changes reflected. Exporting
+`.vigilrc` produces valid, minimal JSON matching the schema.
+
+---
+
+## Phase 9 — Distribution (v0.1 release)
 
 **Goal:** Someone other than the author can install and use Vigil.
 
@@ -345,20 +377,25 @@ gets a working review on a PR in under 10 minutes.
 
 ---
 
-## Phase 9 — Post-v0.1 improvements (backlog)
+## Phase 10 — Post-v0.1 improvements (backlog)
 
 Not blockers for v0.1 but natural next investments after release:
 
+- [ ] **Auto-read `.vigilrc` from repo**: at review start, fetch `.vigilrc` from
+      the repo root via `PlatformProvider.getFileContent` (one extra API call);
+      merge with `userData` config (repo file wins); fall back silently on 404
+      or parse error. Enables team-shared analysis conventions without manual import.
+      See ADR-0012.
 - [ ] **Auto-update** (`electron-updater`): without this, users on v0.1 are
       stranded. Integrate with GitHub Releases. High priority post-v0.1.
-- [ ] **System notification on review complete**: Electron `Notification` API.
-      Useful when the user switches away during a long review.
+- [x] **System notification on review complete**: Electron `Notification` API.
+      Fires when review finishes while window is out of focus.
 - [ ] **Azure DevOps full diff hunks**: Phase 2 deferred hunk parsing for AzDO.
       Real AzDO users get file-level diffs only, which limits usefulness.
-- [ ] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
-      it doesn't reappear on re-run. Stored per `(headSha, findingTitle)`.
-- [ ] **Workspace state persistence**: remember active tab and focused finding
-      when returning to a previously-reviewed PR.
+- [x] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
+      it doesn't reappear on re-run. Stored per `(headSha, findingKey)`.
+- [x] **Workspace state persistence**: active tab remembered per PR via
+      `localStorage`; restored when returning to a previously-reviewed PR.
 - [ ] **Real architecture analysis**: path-based layer violation detection
       (renderer importing main, circular deps). Re-introduce the Architecture
       tab backed by real data.

@@ -1,3 +1,5 @@
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { DiffLine, FileDiff, Hunk } from "../../platforms/model/index.js";
@@ -236,11 +238,13 @@ function detectErrorHandlingChanges(file: FileDiff): Finding[] {
     // Pattern A: catch block removed
     if (removedHasCatch && !addedHasCatch) {
       const catchLine = removedLines.find((l) => CATCH_RE.test(l.content))!;
+      const isLikelyRefactor = addedLines.length > 0;
       findings.push({
-        severity: "high",
+        severity: isLikelyRefactor ? "medium" : "high",
         title: "Catch block removed",
-        description:
-          "A catch block was removed. Errors that were previously handled will now propagate to callers. Check all call sites.",
+        description: isLikelyRefactor
+          ? "A catch block was removed alongside new code. Verify that the replacement code still handles errors from this scope — it may have been refactored into a helper, or accidentally dropped."
+          : "A catch block was removed. Errors that were previously handled will now propagate to callers. Check all call sites.",
         evidence: `- ${catchLine.content.trim()}`,
         file: file.newPath,
         lines: null,
@@ -478,25 +482,35 @@ function detectSideEffectIntroductions(file: FileDiff): Finding[] {
 // SilentRegressionAnalyzer
 // ---------------------------------------------------------------------------
 
-const DETECTORS = [
-  detectConditionChanges,
-  detectErrorHandlingChanges,
-  detectNumericChanges,
-  detectAsyncPatternChanges,
-  detectSideEffectIntroductions,
-];
+type RegressionConfig = ResolvedAnalyzerConfig["analyzers"]["regression"];
 
 export class SilentRegressionAnalyzer implements CodeAnalyzer {
   readonly id = "regression" as const;
+  private readonly cfg: RegressionConfig;
+
+  constructor(config?: RegressionConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.regression;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
+
+    const d = this.cfg.detectors;
+    type Detector = typeof detectConditionChanges;
+    const detectors: Detector[] = [];
+    if (d.conditionChanges) detectors.push(detectConditionChanges);
+    if (d.errorHandling) detectors.push(detectErrorHandlingChanges);
+    if (d.numericChanges) detectors.push(detectNumericChanges);
+    if (d.asyncPatterns) detectors.push(detectAsyncPatternChanges);
+    if (d.sideEffects) detectors.push(detectSideEffectIntroductions);
+
     const findings: Finding[] = [];
 
     for (const file of context.diff.files) {
       if (file.status === "deleted") continue;
       if (!TS_JS.test(file.newPath)) continue;
 
-      for (const detect of DETECTORS) {
+      for (const detect of detectors) {
         try {
           findings.push(...detect(file));
         } catch {

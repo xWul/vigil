@@ -67,6 +67,24 @@ describe("DuplicationAnalyzer", () => {
     }
   });
 
+  it("does not flag files that share common import statements", async () => {
+    const imports = `
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../api.js";
+import type { Finding } from "../../../shared/review.js";
+import { Button } from "../components/Button.js";
+import { Panel } from "../components/Panel.js";
+    `.trim();
+    const context = makeContext({
+      "src/a.ts": imports + "\nexport function A() { return useState(null); }",
+      "src/b.ts": imports + "\nexport function B() { return useQuery({ queryKey: [] }); }",
+    });
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
   it("skips deleted files", async () => {
     const context: ReviewContext = {
       ...makeContext({}),

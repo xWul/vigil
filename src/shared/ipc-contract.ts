@@ -1,5 +1,6 @@
 import type { Result } from "./result.js";
 import type { AuthError, ConnectedAccount } from "./auth.js";
+import type { AnalyzerConfig } from "./analyzer-config.js";
 import type { Settings, SettingsError, WritableSettings } from "./settings.js";
 import type { FindingPass, ReviewError, ReviewResult, Finding } from "./review.js";
 import type {
@@ -49,6 +50,19 @@ export interface IpcContract {
     key: string,
   ) => Result<void, SettingsError>;
   "settings:deleteApiKey": (provider: "anthropic" | "openai") => Result<void, SettingsError>;
+  "settings:getAnalyzerConfig": (ref: PRRef) => Result<AnalyzerConfig, SettingsError>;
+  "settings:setAnalyzerConfig": (ref: PRRef, config: AnalyzerConfig) => Result<void, SettingsError>;
+
+  // Findings
+  "findings:getSuppressed": (
+    ref: PRRef,
+    headSha: string,
+  ) => Result<readonly string[], SettingsError>;
+  "findings:setSuppressed": (
+    ref: PRRef,
+    headSha: string,
+    keys: readonly string[],
+  ) => Result<void, SettingsError>;
 
   // App
   "app:copyDiagnostics": () => Result<void, never>;

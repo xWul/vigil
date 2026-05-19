@@ -9,6 +9,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **System notification on review complete**: Vigil fires a macOS notification when a
+  review finishes while the window is out of focus. The notification shows the PR title
+  and a count of medium/high/critical findings (or "No significant findings"). Uses
+  `Notification.isSupported()` so it degrades silently on unsupported platforms.
+
+- **Workspace tab persistence**: the active tab (Overview, Diff, Semantic, etc.) is
+  remembered per PR across sessions using `localStorage`. Returning to a PR you were
+  already reviewing opens the same tab you left on.
+
+- **Finding suppression**: findings can now be marked as "won't fix" so they don't
+  clutter re-runs. Press `x` on a focused finding (diff tab) or click the ✕ button
+  on any finding card (overview tab) to suppress it. Suppressed findings disappear from
+  the list; a "N suppressed · clear" link appears in the overview when any are hidden.
+  Suppressions are stored per repo and head SHA in Electron `userData` — they clear
+  automatically when the branch is updated. Two new IPC channels:
+  `findings:getSuppressed` and `findings:setSuppressed`.
+
+- **Configurable analyzer settings** (Phase 8): every static analyzer parameter is now
+  user-configurable per repository. Settings are stored in Electron `userData` as a JSON
+  file keyed by platform/owner/repo (never committed to the repository). Analyzers receive
+  a fully-resolved config at construction time via constructor injection. All eight analyzers
+  support `enabled: true/false`; `ComplexityAnalyzer`, `SmellsAnalyzer`, and `DuplicationAnalyzer`
+  expose numeric thresholds; `SilentRegressionAnalyzer` exposes per-detector toggles;
+  `ChangeClassifierAnalyzer` exposes the intent-mismatch flag. `maxFindingsPerAnalyzer` is
+  also configurable. Two new IPC channels (`settings:getAnalyzerConfig`,
+  `settings:setAnalyzerConfig`) expose the config to the renderer.
+
+- **Analyzer settings overlay**: pressing `,` in the workspace (or clicking the new "settings"
+  button in the bottom strip) opens a scrollable overlay showing all analyzer controls — toggles
+  and numeric inputs grouped by analyzer. "Restore defaults" resets to factory values. "Copy
+  .vigilrc" copies a minimal JSON snippet (only non-default values) to the clipboard. "Save"
+  persists the config and closes the overlay. Changes apply on the next re-run.
+
+- **`.vigilrc` auto-read from repository**: Vigil now reads a `.vigilrc` file from the
+  repository root (at the PR's head SHA) if one exists. Settings in `.vigilrc` override the
+  per-repo settings stored in `userData`, which in turn override built-in defaults. The file
+  uses the same `AnalyzerConfig` JSON schema as the exported snippet from the settings overlay.
+  Invalid JSON in `.vigilrc` is silently ignored.
+
+### Changed
+
+- **Static analyzer accuracy improvements** — five targeted fixes to the static analysis pipeline:
+  - `ComplexityAnalyzer` no longer inflates the outer function's cyclomatic complexity score
+    with branches that belong to nested inner functions (arrow functions, closures). Each
+    function is now measured independently.
+  - `ComplexityAnalyzer` and `SmellsAnalyzer` now scope findings to functions that overlap
+    the changed diff hunks. Unrelated pre-existing smells in modified files no longer appear.
+  - `SilentRegressionAnalyzer` "catch block removed" finding now reports `medium` severity
+    when the removed catch lines are accompanied by replacement code (likely a refactor that
+    delegates to a helper), reserving `high` for pure catch deletions with no replacement.
+  - `DuplicationAnalyzer` no longer flags files that share common `import`/`export` declarations
+    as duplicated code. Module-level structural lines are filtered before block extraction.
+  - `ChangeClassifierAnalyzer` now classifies deleted source files as `refactor` rather than
+    `behavior`. Deleting code removes behavior — it does not introduce it — and the previous
+    classification caused false-positive intent-mismatch findings on cleanup PRs.
+
+### Added
+
 - **First-run onboarding nudge**: the Review Queue now shows a persistent amber banner below
   the header when no AI provider is configured (`aiProvider` is null or the selected
   provider has no key). The banner links directly to Settings. Disappears automatically once

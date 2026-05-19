@@ -135,13 +135,29 @@ describe("ChangeClassifierAnalyzer", () => {
     }
   });
 
-  it("classifies a deleted non-test non-config file as behavior", async () => {
+  it("classifies a deleted non-test non-config file as refactor", async () => {
+    // Deletions remove behavior rather than add it — classifying them as "behavior"
+    // produced false-positive intent-mismatch findings on cleanup PRs.
     const context = makeContext([makeFile("src/module.ts", [], "deleted")]);
     const result = await analyzer.analyze(context);
     expect(result.ok).toBe(true);
     if (result.ok) {
       const summary = result.value.find((f) => f.title.startsWith("Change breakdown"));
-      expect(summary?.title).toContain("behavior");
+      expect(summary?.title).toContain("refactor-only");
+      expect(summary?.title).not.toContain("behavior");
+    }
+  });
+
+  it("does not emit intent mismatch when a refactor PR only deletes source files", async () => {
+    const context = makeContext(
+      [makeFile("src/old-auth.ts", [], "deleted")],
+      "refactor: remove old auth module",
+    );
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const mismatch = result.value.find((f) => f.title.includes("Intent mismatch"));
+      expect(mismatch).toBeUndefined();
     }
   });
 

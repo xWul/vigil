@@ -183,6 +183,26 @@ describe("detectErrorHandlingChanges", () => {
     }
   });
 
+  it("reports medium severity when catch block removed alongside new replacement code", async () => {
+    // Refactor: try/catch inlined → delegated to handleError(). The catch is gone but
+    // there is added code, so it's likely a refactor, not a pure deletion.
+    const ctx = makeContext([
+      makeFile("src/foo.ts", [
+        removed("  } catch (e) {"),
+        removed("    return null;"),
+        removed("  }"),
+        added("  return handleError(e);"),
+      ]),
+    ]);
+    const result = await analyzer.analyze(ctx);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const f = result.value.find((x) => x.title === "Catch block removed");
+      expect(f).toBeDefined();
+      expect(f?.severity).toBe("medium");
+    }
+  });
+
   it("does not flag a catch block that was rewritten (still present in added lines)", async () => {
     const ctx = makeContext([
       makeFile("src/foo.ts", [
