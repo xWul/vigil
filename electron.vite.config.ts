@@ -1,10 +1,25 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { cpSync } from "node:fs";
 import { resolve } from "node:path";
+import type { Plugin } from "vite";
+
+function copyMainPrompts(): Plugin {
+  return {
+    name: "copy-main-prompts",
+    apply: "build",
+    closeBundle() {
+      cpSync(resolve("src/main/ai/prompts"), resolve("out/main/prompts"), {
+        recursive: true,
+      });
+    },
+  };
+}
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ include: ["typescript"] }), copyMainPrompts()],
     resolve: {
       alias: {
         "@main": resolve("src/main"),
@@ -28,7 +43,7 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [react()],
+    plugins: [tailwindcss(), react()],
     resolve: {
       alias: {
         "@renderer": resolve("src/renderer"),

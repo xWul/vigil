@@ -1,6 +1,6 @@
 # Architecture — Vigil
 
-> **Status:** Living document. Last updated 2026-05-11.
+> **Status:** Living document. Last updated 2026-05-19.
 > **Audience:** Engineers (including future-me and AI coding assistants) working on Vigil.
 > **Companion docs:** [`CLAUDE.md`](./CLAUDE.md) for AI coding assistant instructions, [`docs/adr/`](./docs/adr/) for individual decisions, [`docs/specs/`](./docs/specs/) for per-feature specifications.
 
@@ -218,15 +218,15 @@ behaviour expectations.
 ```typescript
 interface PlatformProvider {
   readonly id: "github" | "azure-devops";
-  listOpenPullRequests(scope: PRScope): Promise<PullRequest[]>;
-  getPullRequest(ref: PRRef): Promise<PullRequest>;
-  getDiff(ref: PRRef): Promise<Diff>;
-  postComment(ref: PRRef, comment: NewComment): Promise<Comment>;
-  submitReview(ref: PRRef, review: NewReview): Promise<void>;
+  listOpenPullRequests(session: AuthSession): Promise<Result<readonly PullRequest[], PlatformError>>;
+  getPullRequest(session: AuthSession, ref: PRRef): Promise<Result<PullRequest, PlatformError>>;
+  getDiff(session: AuthSession, ref: PRRef): Promise<Result<Diff, PlatformError>>;
+  postComment(session: AuthSession, ref: PRRef, comment: NewComment): Promise<Result<Comment, PlatformError>>;
+  submitReview(session: AuthSession, ref: PRRef, review: NewReview): Promise<Result<void, PlatformError>>;
 }
 ```
 
-Each provider translates between the platform's API and our internal normalized model. The rest of the application never sees a GitHub-specific or Azure-specific shape.
+Each provider translates between the platform's API and our internal normalized model. The rest of the application never sees a GitHub-specific or Azure-specific shape. Session is passed per-call (not at construction) so the provider is stateless with respect to credentials. See ADR-0002 and `docs/specs/pr-fetch-and-normalize.md`.
 
 ### 6.4 `AIProvider`
 
@@ -367,7 +367,13 @@ pnpm typecheck
 
 ### Auto-update
 
-Out of scope for v1. For an open-source portfolio project, GitHub Releases is sufficient; users download new versions manually. If the project grows, electron-updater is the standard choice.
+Vigil uses `electron-updater` backed by GitHub Releases (`xWul/vigil`). The updater
+is initialised in `src/main/updater.ts` and only activates in packaged builds
+(`app.isPackaged`). It checks for updates 5 s after startup, downloads silently, and
+installs on next quit. The renderer receives progress via the `app:updateStatus` push
+channel and can trigger a manual check (`app:checkForUpdate`) or immediate install
+(`app:installUpdate`). Code signing is required for macOS gatekeeper approval of
+auto-updates; see [`docs/build-and-release.md`](./docs/build-and-release.md) (TBD).
 
 ---
 

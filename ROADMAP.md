@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-11. Phase 1 in progress.
+> **Status:** Living document. Last updated 2026-05-20. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Azure DevOps full diff hunks implemented. Phase 9 (distribution) in progress — README and CHANGELOG versioned, pending `pnpm dist` verification and GitHub Release.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -28,7 +28,7 @@ not the destination.
 - [x] CI: GitHub Actions running typecheck + lint + tests on push
 - [ ] First ADRs written:
   - [x] ADR-0001: Electron over Tauri
-  - [ ] ADR-0002: Platform Provider abstraction
+  - [x] ADR-0002: Platform Provider abstraction
   - [x] ADR-0003: PKCE for desktop OAuth
   - [x] ADR-0004: OS keychain for token storage
   - [x] ADR-0005: Result type for error handling
@@ -97,30 +97,31 @@ structured log entries to the console. All 86 existing tests pass with
 **Goal:** Given an authenticated session, fetch a PR from GitHub or
 Azure DevOps and normalize it into the internal model.
 
-- [ ] Spec: `docs/specs/pr-fetch-and-normalize.md`
-- [ ] Internal model types: `PullRequest`, `Diff`, `Hunk`, `Comment`,
-      `Author`, `Repository`
-- [ ] `PlatformProvider` interface
-- [ ] `GitHubProvider`:
-  - [ ] `listOpenPullRequests`
-  - [ ] `getPullRequest` (with diff)
-  - [ ] `getDiff` (unified diff + per-file structured form)
-  - [ ] `postComment` (commit comment + PR comment paths)
-  - [ ] `submitReview` (approve / request changes / comment)
-- [ ] `AzureDevOpsProvider`:
-  - [ ] Same surface, translating from Azure DevOps iterations and
-        per-file changes into the unified `Diff` model
-  - [ ] Org discovery flow (`/_apis/accounts`) for the first sign-in
-- [ ] URL parser: given a PR URL from either platform, return a
-      `PRRef` that the right provider can fetch
-- [ ] Tests: contract tests both providers must pass; recorded HTTP
-      fixtures for stability
-- [ ] Logging: every outbound API call logged at `info` (method, URL
-      without auth params, status code, latency); rate-limit headers
-      logged at `warn`
+- [x] Spec: `docs/specs/pr-fetch-and-normalize.md`
+- [x] ADR-0002: Platform Provider abstraction
+- [x] Internal model types: `PRRef`, `PullRequest`, `Diff`, `FileDiff`,
+      `Hunk`, `DiffLine`, `Comment`, `Author`, `PlatformError`,
+      `NewComment`, `NewReview` (`src/main/platforms/model/`)
+- [x] `PlatformProvider` interface
+- [x] `GitHubProvider` (via `@octokit/rest`):
+  - [x] `listOpenPullRequests` (assignment-scoped via search API)
+  - [x] `getPullRequest`
+  - [x] `getDiff` (unified diff parsed into structured `FileDiff[]`)
+  - [x] `postComment` (PR-level and inline)
+  - [x] `submitReview` (approve / request changes / comment)
+- [x] `AzureDevOpsProvider` (raw `fetch`):
+  - [x] `listOpenPullRequests`
+  - [x] `getPullRequest`
+  - [x] `getDiff` (file list from iterations/changes; full line-level hunks via `diff` package)
+  - [x] `postComment`
+  - [x] `submitReview`
+  - [x] `discoverOrgs` standalone utility
+- [x] URL parser: handles GitHub, dev.azure.com, and legacy visualstudio.com URLs
+- [x] Tests: MSW-backed, contract tests run against both providers (47 new tests)
+- [x] Logging: sign-in/refresh events logged per Phase 1.5 pattern
 
-**Exit criteria:** A CLI command — `your-tool fetch <pr-url>` — accepts
-a URL from either platform and prints the normalized PR as JSON.
+**Exit criteria:** `pnpm fetch-pr <pr-url>` accepts a URL from either
+platform and prints the normalized PR and diff as JSON.
 
 ---
 
@@ -129,37 +130,44 @@ a URL from either platform and prints the normalized PR as JSON.
 **Goal:** Given a normalized PR, produce structured review findings
 using an LLM. CLI-only at this stage.
 
-- [ ] Spec: `docs/specs/ai-review-pipeline.md`
-- [ ] `AIProvider` interface (`complete` and `stream`)
-- [ ] `AnthropicProvider` using `@anthropic-ai/sdk`
-- [ ] `OpenAIProvider` using `openai` package
-- [ ] BYOK key storage in keychain (per provider)
-- [ ] Context builder:
-  - [ ] Includes diff
-  - [ ] Includes full content of changed files (truncated to budget)
-  - [ ] Includes neighbouring code for changed regions
-  - [ ] Token-budget aware; chunks by file when over budget
-- [ ] Prompts as versioned files in `src/main/ai/prompts/`:
-  - [ ] `correctness.md`
-  - [ ] `security.md`
-  - [ ] `consistency.md`
-  - [ ] `summary.md`
-- [ ] Review engine orchestrating the multi-pass pipeline
-- [ ] `ReviewResult` model: findings (with file + line range + severity + evidence), summary, risk score
-- [ ] Prompt-injection defense: untrusted-content delimiters, explicit
-      instruction in system prompts
-- [ ] Tests: golden tests against a small corpus of sample PRs (real
-      ones, anonymized if needed)
-- [ ] Logging: AI calls logged at `info` (model, estimated input token
-      count, latency); streaming errors and prompt-injection warnings
-      logged at `warn`; full prompt/completion only at `debug` with
-      explicit user opt-in (may contain sensitive diff content)
+- [x] Spec: `docs/specs/ai-review-pipeline.md`
+- [x] ADR-0007: Hybrid review pipeline (static analysis + optional AI)
+- [x] ADR-0008: AIProvider streaming via AsyncIterable
+- [x] `AIProvider` interface (`stream` returning `AsyncIterable<string>`)
+- [x] `AnthropicProvider` using `@anthropic-ai/sdk`
+- [x] `OpenAIProvider` using `openai` package
+- [x] BYOK: API keys read from env vars for Phase 3 (`ANTHROPIC_API_KEY`,
+      `OPENAI_API_KEY`); durable keychain storage deferred to Phase 4
+- [x] `CodeAnalyzer` interface and three implementations:
+  - [x] `ComplexityAnalyzer` (cyclomatic complexity via TS compiler API)
+  - [x] `DuplicationAnalyzer` (line-hash copy-paste detection)
+  - [x] `SmellsAnalyzer` (long functions, deep nesting, long param lists)
+- [x] Context builder (`buildReviewContext`):
+  - [x] Fetches PR metadata + diff
+  - [x] Fetches full file content at HEAD per changed file
+  - [x] Token-budget aware; drops whole files when over budget (most-changed first)
+- [x] `getFileContent` added to `PlatformProvider`; `headSha` added to `PullRequest`
+- [x] Prompts as versioned files in `src/main/ai/prompts/`:
+  - [x] `correctness.md`
+  - [x] `security.md`
+  - [x] `consistency.md`
+  - [x] `summary.md`
+- [x] Review engine (`runReview`): static passes in parallel, AI passes
+      sequential; summary pass receives prior findings only
+- [x] `ReviewResult` model: `Finding[]` (severity, title, description,
+      evidence, file, lines, pass, source), summary, riskScore
+- [x] Prompt-injection defense: XML tag delimiters, explicit system
+      prompt instruction
+- [x] `collectStream` helper for buffering `AsyncIterable<string>`
+- [ ] Tests: golden tests gated behind `VIGIL_RUN_GOLDEN_TESTS=1`;
+      3 fixtures (security bug, logic bug, clean trivial)
+- [x] Logging: AI calls at `info` (model, latency); parse errors at
+      `warn`; full prompt/completion at `debug` opt-in only
 
-**Exit criteria:** `your-tool review <pr-url>` produces a useful
-review on a real PR in under 60 seconds for typical sizes.
-Try it on at least 5 real PRs from different repos. If the findings
-aren't better than CodeRabbit / Greptile, iterate on prompts before
-moving on. This is the wedge.
+**Exit criteria:** `pnpm review <pr-url>` produces a useful review on
+a real PR in under 60 seconds for typical sizes. Try on at least 5
+real PRs from different repos. If AI findings aren't meaningfully
+better than noise, iterate on prompts before moving on. This is the wedge.
 
 ---
 
@@ -167,31 +175,41 @@ moving on. This is the wedge.
 
 **Goal:** Wrap everything built so far in a desktop app with a real UI.
 
-- [ ] ADR: IPC contract pattern
-- [ ] Spec: `docs/specs/ipc-contract.md`
-- [ ] Electron main + renderer scaffolded with electron-vite
-- [ ] Typed IPC contract (`src/shared/ipc-contract.ts`)
-- [ ] Main process exposes auth, platform, and AI capabilities via IPC
-- [ ] Renderer API client (`src/renderer/api.ts`) mirroring the contract
-- [ ] React Router or similar for navigation
-- [ ] State management (Zustand recommended for simplicity)
-- [ ] Auth screen: pick provider, run sign-in flow
-- [ ] Settings screen: AI provider, API key entry, default org
-- [ ] Smoke test: end-to-end Playwright test that builds the app and
-      runs a fake auth flow
-- [ ] Logging transport (`src/main/logger.ts`) backed by `electron-log`:
-  - [ ] File transport to `app.getPath('logs')/vigil.log`
-  - [ ] Rotating at 5 MB (keeps one archive)
-  - [ ] Default level: `error`; overridable via `VIGIL_LOG_LEVEL`
-  - [ ] Redaction: fields matching `token|secret|key|password|pat`
-        replaced with `[redacted]` before any transport sees the message
-  - [ ] Inject into all providers at app startup (replaces `ConsoleLogger`)
-- [ ] Logging: IPC handler calls logged at `debug`; IPC errors logged
-      at `error`; Settings screen exposes the log level toggle and
-      an "Open log file" button
+- [x] ADR-0009: IPC contract pattern (`docs/adr/0009-typed-ipc-contract.md`)
+- [x] Spec: `docs/specs/ipc-contract.md`
+- [x] Electron main + renderer scaffolded with electron-vite
+- [x] Typed IPC contract (`src/shared/ipc-contract.ts`) with all 14 channels
+- [x] Main process exposes auth, platform, review, and settings via IPC
+      (`src/main/ipc/handlers.ts` + `src/main/ipc/index.ts`)
+- [x] Preload bridge (`src/preload/index.ts`) — typed `invoke` + `on`
+      via `contextBridge`
+- [x] Renderer API client (`src/renderer/api.ts`) mirroring the contract
+- [x] `SecretStore` interface + `KeychainSecretStore` + `FileSecretStore`
+- [x] `SettingsStore` (reads settings.json + checks SecretStore for key presence)
+- [x] Tailwind v4 (`@tailwindcss/vite`) with `@theme inline` bridging `--v-*`
+      design tokens to Tailwind utilities; Geist fonts
+- [x] Feature-slice renderer layout (`features/`, `shared/`)
+- [x] Review Queue screen: search, sort, keyboard nav (j/k/? /), risk dots,
+      PR list with cached review summaries, help overlay, footer
+      (`src/renderer/features/review-queue/`)
+- [x] Auth screen: pick provider, run sign-in flow
+- [x] Settings screen: AI provider, API key entry, sign-out per account
+- [x] Navigation (lightweight route state in App — checking → auth → queue ↔ settings)
+- [ ] Smoke test: end-to-end Playwright test
+- [x] Logging transport (`src/main/logger.ts`): `FileLogger` writes to
+      `app.getPath('logs')/vigil.log`, rotates at 5 MB (keeps one archive),
+      defaults to `error` level (overridable via `VIGIL_LOG_LEVEL`), redacts
+      fields matching `token|secret|key|password|pat`. Replaces `ConsoleLogger`
+      in the main process.
+- [x] Extended static analyzers: `DebugArtifactsAnalyzer`, `TypeSafetyAnalyzer`,
+      `ChangeClassifierAnalyzer`, `SilentRegressionAnalyzer` — all diff-aware,
+      no AI key required. Spec: `docs/specs/static-analyzers-extended.md` and
+      `docs/specs/silent-regression-detector.md`.
 
 **Exit criteria:** A real desktop app launches. Users can sign in.
 Settings persist. No business logic in the renderer.
+
+_Phase 4 complete 2026-05-13._
 
 ---
 
@@ -200,25 +218,58 @@ Settings persist. No business logic in the renderer.
 **Goal:** The two screens that define the product.
 
 - [ ] Spec: `docs/specs/review-queue.md`
-- [ ] Spec: `docs/specs/review-workspace.md`
-- [ ] Review Queue:
-  - [ ] List of pending PRs across connected platforms
-  - [ ] Per-PR metadata: title, author, age, risk indicator, summary
-  - [ ] Sort/filter (by risk, age, platform)
-  - [ ] Keyboard navigation
-- [ ] Review Workspace:
-  - [ ] Diff view (syntax-highlighted, hunk-collapsible)
-  - [ ] Inline AI findings attached to relevant lines
-  - [ ] Finding detail panel: severity, evidence, "challenge this"
-  - [ ] AI conversation thread for the PR (streaming responses)
-  - [ ] Review actions (approve, request changes, comment)
-  - [ ] Keyboard-first navigation between hunks and findings
-- [ ] Streaming UI: review runs incrementally; findings appear as
-      passes complete
+- [x] Spec: `docs/specs/review-workspace.md`
+- [x] Review Queue (shipped in Phase 4, extended here):
+  - [x] List of pending PRs across connected platforms
+  - [x] Per-PR metadata: title, author, age, risk dot from cached review, summary
+  - [x] Sort by risk / age / blocking
+  - [x] Search across title, repo, author, review summary
+  - [x] Keyboard navigation (j/k/↑↓, /, ?, Esc, r)
+  - [x] Loading / error / empty states
+  - [x] Dark + light theme via design token system
+  - [x] Auto-refresh every 60 s (silent — rows stay visible); manual refresh button + `r` shortcut
+  - [x] Double-click row to open Review Workspace
+  - [x] GitHub query broadened to `involves:@me` (authored + assigned + review-requested + mentioned)
+- [x] Review Workspace (`src/renderer/features/workspace/WorkspaceScreen.tsx`):
+  - [x] Unified diff view (hunk headers, old/new line numbers, +/- highlighting)
+  - [x] `FindingDot` gutter markers on lines with findings (click to select)
+  - [x] Scrollable findings list panel sorted by severity (right column default view)
+  - [x] Finding detail panel: severity badge, pass label, title, description, evidence, "Add to review"
+  - [x] Review actions: verdict buttons (Approve / Request Changes / Comment), body textarea,
+        queued inline comments, submit via `platform:submitReview`
+  - [x] Keyboard navigation: j/k through findings, Enter to open detail, Escape to return/back, a to add
+  - [x] Pass progress strip: ⟳ per pass while running, ✓ N when complete
+  - [x] Auto-run on first open; cache-first on return visits
+  - [x] ChallengeThread: per-finding AI conversation — streaming IPC wired, inline "Ask Vigil"
+        button per finding, dedicated Conversation tab, streaming cursor animation
+  - [x] 5-lens tab bar (Tab key cycles): Overview, Diff, Semantic, Silent risks,
+        Conversation — with finding counts and `reviewed X ago` timestamp
+  - [x] Overview tab: pulse metrics strip, top-findings list, analysis passes badge list,
+        activity timeline rail
+  - [x] Silent risks tab: regression findings table with evidence cells, severity counts,
+        detector legend rail
+  - [x] Semantic tab: wired to live regression findings — numbered BEHAVIOR change cards with
+        before/after code blocks parsed from finding evidence, explanation, and risk level;
+        empty state when no regressions detected; Architecture tab moved to real circular
+        dependency detection (see Phase 7)
+  - [x] Hunk-level collapse / expand
+  - [x] Filter non-reviewable files from analysis: binary files (images,
+        fonts, icons), generated lockfiles (`package-lock.json`,
+        `pnpm-lock.yaml`, `yarn.lock`), docs (`.md`, `.mdx`), and
+        minified/compiled output. Extends the existing `*.test.*` filter.
+- [x] Review result cache (`ReviewCache`): JSON in `userData/reviews/` keyed by `headSha`,
+      7-day TTL. Revisiting a PR loads instantly.
+- [x] Test files excluded from analysis (`*.test.*`, `*.spec.*` filtered before all passes)
+- [x] Streaming UI: `review:pass` start/complete events emitted per pass;
+      PassStrip transitions in real time
+- [x] Developer preview mode (`pnpm dev:mock`): full mock API covering auth → queue → workspace;
+      all 6 workspace tabs populated with realistic content; no GitHub connection required
 
 **Exit criteria:** The app feels like a review tool, not a generic
 IDE with diffs bolted on. A reviewer can complete a real review
 faster than in the GitHub web UI for a non-trivial PR.
+
+_Phase 5 complete 2026-05-14._
 
 ---
 
@@ -226,42 +277,142 @@ faster than in the GitHub web UI for a non-trivial PR.
 
 **Goal:** Use full repo context to make findings smarter.
 
-- [ ] ADR: local repo cache strategy
-- [ ] Spec: `docs/specs/repo-cache.md`
-- [ ] Repo clone-on-demand into a managed cache directory
-- [ ] `git fetch` on PR open if the cache is stale
-- [ ] Eviction policy (LRU, size cap)
-- [ ] Consistency pass uses cache for "find similar code" prompts
-- [ ] Optional: tree-sitter integration for symbol-aware context
+- [x] ADR-0010: local repo cache strategy (simple-git, blobless clones)
+- [x] Spec: `docs/specs/repo-cache.md`
+- [x] Repo clone-on-demand into a managed cache directory
+      (`userData/repos/{platform}/{owner}/{repo}/`)
+- [x] `git fetch` on PR open if the cache is stale (15-min threshold)
+- [x] Eviction policy (30-day age + 2 GB LRU size cap)
+- [x] `git:cacheStatus` IPC push event; renderer can show clone progress
+- [x] Consistency pass enriched with cross-file imports: relative imports
+      from changed files are fetched from the cache and added to context
+      so the AI can compare against established patterns in un-changed files
+- [x] ADR-0011: TanStack Query for IPC-backed data fetching
+- [x] TanStack Query adopted: `ReviewQueue` and `WorkspaceScreen` data
+      loading replaced with `useQuery` hooks; stale-while-revalidate and
+      60 s background refetch built in; `useEffect`/`loadKey`/`mounted`
+      boilerplate eliminated
+- [x] Symbol-aware cross-file context: unchanged import files are compressed to
+      exported signatures (function signatures, class public API, interfaces, types)
+      using the TypeScript compiler API — no tree-sitter dependency needed.
+      Implementation: `extractExportedSymbols` in `src/main/ai/extractSymbols.ts`,
+      applied in `buildReviewContext.ts` cross-file import loop.
 
 **Exit criteria:** Reviewing a 500-line PR in a 50k-line codebase
 surfaces at least one finding that requires cross-file context — and
 the AI's evidence references the relevant file by name.
 
+_Phase 6 complete 2026-05-14._
+
 ---
 
-## Phase 7 — Polish, packaging, distribution
+## Phase 7 — UX completeness
 
-**Goal:** A v0.1 release that someone other than you can install and use.
+**Goal:** The app is honest, complete, and navigable by a new user.
 
-- [ ] App icons, splash screen, dock/tray
-- [ ] `electron-builder` configured for macOS / Windows / Linux
-- [ ] Code signing (macOS at minimum if you have an Apple Developer account)
-- [ ] First-run onboarding flow
-- [ ] "Copy diagnostics" button: reads the log file produced by the
-      Phase 1.5 logger, applies the same redaction rules, and copies
-      the result to the clipboard for pasting into a GitHub issue
-- [ ] README polished: screenshots, install instructions, how-to
-- [ ] Demo video or animated GIF
-- [ ] First GitHub Release: `v0.1.0` with installers
-- [ ] Tagged version in `CHANGELOG.md`
+- [x] **Semantic tab wired to real findings**: live regression findings replace
+      hardcoded demo data
+- [x] **Architecture tab — real circular dependency detection**: `ArchitectureAnalyzer`
+      builds an import graph, runs DFS cycle detection, and reports cycles touching changed
+      files. Replaces the previous hardcoded demo data.
+- [x] **First-run onboarding nudge**: Review Queue shows a persistent amber banner
+      when no AI provider/key is configured, with a direct link to Settings.
+      Disappears automatically once a key is saved.
+- [x] **"Copy diagnostics" button**: reads `app.getPath('logs')/vigil.log`,
+      applies redaction (`token|secret|key|password|pat`), copies to clipboard.
+      Entry point: Settings screen Diagnostics section.
+- [ ] **OAuth app registration**: both `GitHubAuthProvider.ts` and
+      `AzureDevOpsAuthProvider.ts` still have `// TODO: replace with real client ID`.
+      Must be done before any public release. (User action, not code change.)
+- [x] **Workspace help overlay**: `?` key toggles a centered overlay listing
+      all workspace shortcuts (Tab, j/k, n/p, m, r, Esc, ?). Bottom strip
+      `?` hint is now a clickable button.
+
+**Exit criteria:** A first-time user can install, connect an account, configure
+an AI key, and complete a real review without needing to read the source code.
+
+---
+
+## Phase 8 — Configurable Analyzer Settings
+
+**Goal:** Every static analysis parameter is tunable per repository through a
+workspace UI panel. Config is stored in `userData` per-repo; teams can export
+it as `.vigilrc` for committing to their repository.
+
+Spec: `docs/specs/analyzer-config.md` — ADR-0012
+
+- [x] `src/shared/analyzer-config.ts`: `AnalyzerConfig` type (all fields optional),
+      `ResolvedAnalyzerConfig` (all fields required), `resolveAnalyzerConfig()` helper
+- [x] `settings:getAnalyzerConfig` and `settings:setAnalyzerConfig` IPC channels
+      added to `src/shared/ipc-contract.ts`; main-side handlers read/write JSON
+      files in `userData` keyed by `{platform}.{owner}.{repo}`
+- [x] All eight analyzer constructors accept their config slice; `enabled: false`
+      returns `ok([])` immediately
+- [x] `runReview.ts`: `maxFindingsPerAnalyzer` reads from `RunReviewOptions`
+- [x] `src/main/ipc/index.ts`: reads config before constructing analyzers; passes
+      slices to each constructor
+- [x] Workspace bottom strip: `,` keyboard shortcut and "settings" button opens the
+      Analyzer Settings overlay
+- [x] Analyzer Settings overlay: grouped sections with enable toggles, threshold
+      number inputs, per-detector sub-toggles, Save button, Restore defaults button
+- [x] "Export as .vigilrc" button: copies minimal (non-default-only) JSON to clipboard
+- [x] Toast on save: "Settings saved. Re-run the review to apply changes."
+- [x] Tests: `resolveAnalyzerConfig` unit tests; per-analyzer disabled/threshold tests
+
+**Exit criteria:** A user can disable the Smells analyzer, raise the complexity
+threshold to 15, re-run the review, and see the changes reflected. Exporting
+`.vigilrc` produces valid, minimal JSON matching the schema.
+
+_Phase 8 complete 2026-05-19._
+
+---
+
+## Phase 9 — Distribution (v0.1 release)
+
+**Goal:** Someone other than the author can install and use Vigil.
+
+- [ ] `pnpm dist` verified end-to-end on macOS
+- [ ] Code signing for macOS (requires Apple Developer account — user action)
+- [x] README polished: "Getting Started" install steps, "How to use" walkthrough
+- [ ] GitHub Release `v0.1.0` with macOS `.dmg` attached
+- [x] `CHANGELOG.md` versioned: `[Unreleased]` → `[0.1.0] - 2026-05-19`; `package.json` bumped to `0.1.0`
 
 **Exit criteria:** Someone clones the repo, follows the README, and
 gets a working review on a PR in under 10 minutes.
 
 ---
 
-## Phase 8 — Tell the world
+## Phase 10 — Post-v0.1 improvements (backlog)
+
+Not blockers for v0.1 but natural next investments after release:
+
+- [x] **Auto-read `.vigilrc` from repo**: at review start, Vigil reads `.vigilrc`
+      from the repo root via `RepoCache.readFile` at the PR's head SHA. Settings
+      in `.vigilrc` override per-repo `userData` config, which overrides built-in
+      defaults. Invalid JSON is silently ignored. Uses the same `AnalyzerConfig`
+      JSON schema as the "Copy .vigilrc" export. See ADR-0012.
+- [x] **Auto-update** (`electron-updater`): checks for updates 5 s after launch
+      (packaged builds only), downloads silently, installs on quit. Settings screen
+      shows version, progress, and a "Restart to install" button. GitHub publish
+      config set to `xWul/vigil`. Requires code signing on macOS to work end-to-end.
+- [x] **System notification on review complete**: Electron `Notification` API.
+      Fires when review finishes while window is out of focus.
+- [ ] **Azure DevOps full diff hunks**: Phase 2 deferred hunk parsing for AzDO.
+      Real AzDO users get file-level diffs only, which limits usefulness.
+- [x] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
+      it doesn't reappear on re-run. Stored per `(headSha, findingKey)`.
+- [x] **Workspace state persistence**: active tab remembered per PR via
+      `localStorage`; restored when returning to a previously-reviewed PR.
+- [ ] **Real architecture analysis**: layer violation detection requires knowing
+      a project's architecture up front — too project-specific to do generically
+      without a complex config surface. Circular dependency detection (already
+      shipping) covers the universally-useful case. Deferred indefinitely.
+- [ ] **PR comment thread view**: show existing review comments from other
+      reviewers in the workspace. Read-only is enough for v0.2.
+
+---
+
+## Phase 11 — Tell the world
 
 **Goal:** Treat shipping as part of the project. Portfolio value comes
 from people seeing the work.
