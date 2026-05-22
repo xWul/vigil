@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Phase 9 (distribution) in progress — README and CHANGELOG versioned, pending `pnpm dist` verification and GitHub Release.
+> **Status:** Living document. Last updated 2026-05-20. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Azure DevOps full diff hunks implemented. Phase 9 (distribution) in progress — README and CHANGELOG versioned, pending `pnpm dist` verification and GitHub Release.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -112,7 +112,7 @@ Azure DevOps and normalize it into the internal model.
 - [x] `AzureDevOpsProvider` (raw `fetch`):
   - [x] `listOpenPullRequests`
   - [x] `getPullRequest`
-  - [x] `getDiff` (file list from iterations/changes; hunks deferred to Phase 3)
+  - [x] `getDiff` (file list from iterations/changes; full line-level hunks via `diff` package)
   - [x] `postComment`
   - [x] `submitReview`
   - [x] `discoverOrgs` standalone utility

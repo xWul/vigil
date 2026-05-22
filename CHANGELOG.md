@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Azure DevOps diff hunks**: the AI review pipeline now receives full line-level diff data
+  for Azure DevOps pull requests. Previously, `getDiff` returned file names and statuses
+  only (hunks were empty), so the LLM and static analyzers had no changed-line context.
+  Both file versions are now fetched at their respective merge commits and diffed locally
+  using the `diff` package.
+
 ## [0.1.0] - 2026-05-19
 
 ### Added
