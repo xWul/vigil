@@ -56,6 +56,9 @@ const ADO_CHANGES = {
   ],
 };
 
+const AUTH_TS_BASE = "export function old(): void {}";
+const AUTH_TS_HEAD = "export function new_(): void {}";
+
 const ADO_THREAD = {
   id: 10,
   comments: [
@@ -107,6 +110,20 @@ const server = setupServer(
     "https://dev.azure.com/acmecorp/backend/_apis/git/repositories/api/pullrequests/1337/reviewers/user-guid-123",
     () => {
       return HttpResponse.json({ vote: 0 });
+    },
+  ),
+  // File content requests for getDiff hunk generation
+  http.get(
+    "https://dev.azure.com/acmecorp/backend/_apis/git/repositories/api/items",
+    ({ request }) => {
+      const url = new URL(request.url);
+      const path = url.searchParams.get("path");
+      const version = url.searchParams.get("versionDescriptor.version");
+      if (path === "/src/auth.ts" && version === "def456") return HttpResponse.text(AUTH_TS_BASE);
+      if (path === "/src/auth.ts" && version === "abc123") return HttpResponse.text(AUTH_TS_HEAD);
+      if (path === "/src/new-file.ts" && version === "abc123")
+        return HttpResponse.text("export const x = 1;");
+      return new HttpResponse(null, { status: 404 });
     },
   ),
   // 404 for missing PR used in contract test
@@ -219,6 +236,27 @@ describe("AzureDevOpsProvider", () => {
       expect(result.value.files[0]!.status).toBe("modified");
       expect(result.value.files[0]!.newPath).toBe("/src/auth.ts");
       expect(result.value.files[1]!.status).toBe("added");
+    });
+
+    it("populates hunks with line-level diff for modified files", async () => {
+      const result = await new AzureDevOpsProvider("acmecorp").getDiff(FAKE_SESSION, VALID_REF);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const authFile = result.value.files[0]!;
+      expect(authFile.hunks.length).toBeGreaterThan(0);
+      const lines = authFile.hunks[0]!.lines;
+      expect(lines.some((l) => l.kind === "removed")).toBe(true);
+      expect(lines.some((l) => l.kind === "added")).toBe(true);
+    });
+
+    it("populates hunks for added files using empty old content", async () => {
+      const result = await new AzureDevOpsProvider("acmecorp").getDiff(FAKE_SESSION, VALID_REF);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const newFile = result.value.files[1]!;
+      expect(newFile.hunks.length).toBeGreaterThan(0);
+      const allAdded = newFile.hunks[0]!.lines.every((l) => l.kind === "added");
+      expect(allAdded).toBe(true);
     });
   });
 

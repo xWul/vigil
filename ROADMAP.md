@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-19. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Phase 9 (distribution, v0.1 release) is next.
+> **Status:** Living document. Last updated 2026-05-20. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Azure DevOps full diff hunks implemented. Phase 9 (distribution) in progress — README and CHANGELOG versioned, pending `pnpm dist` verification and GitHub Release.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -112,7 +112,7 @@ Azure DevOps and normalize it into the internal model.
 - [x] `AzureDevOpsProvider` (raw `fetch`):
   - [x] `listOpenPullRequests`
   - [x] `getPullRequest`
-  - [x] `getDiff` (file list from iterations/changes; hunks deferred to Phase 3)
+  - [x] `getDiff` (file list from iterations/changes; full line-level hunks via `diff` package)
   - [x] `postComment`
   - [x] `submitReview`
   - [x] `discoverOrgs` standalone utility
@@ -292,7 +292,11 @@ _Phase 5 complete 2026-05-14._
       loading replaced with `useQuery` hooks; stale-while-revalidate and
       60 s background refetch built in; `useEffect`/`loadKey`/`mounted`
       boilerplate eliminated
-- [ ] Optional: tree-sitter integration for symbol-aware context (deferred)
+- [x] Symbol-aware cross-file context: unchanged import files are compressed to
+      exported signatures (function signatures, class public API, interfaces, types)
+      using the TypeScript compiler API — no tree-sitter dependency needed.
+      Implementation: `extractExportedSymbols` in `src/main/ai/extractSymbols.ts`,
+      applied in `buildReviewContext.ts` cross-file import loop.
 
 **Exit criteria:** Reviewing a 500-line PR in a 50k-line codebase
 surfaces at least one finding that requires cross-file context — and
@@ -369,10 +373,9 @@ _Phase 8 complete 2026-05-19._
 
 - [ ] `pnpm dist` verified end-to-end on macOS
 - [ ] Code signing for macOS (requires Apple Developer account — user action)
-- [ ] README polished: "Getting Started" install steps, "How to use" walkthrough,
-      screenshots or GIF
+- [x] README polished: "Getting Started" install steps, "How to use" walkthrough
 - [ ] GitHub Release `v0.1.0` with macOS `.dmg` attached
-- [ ] `CHANGELOG.md` versioned: move `[Unreleased]` → `[0.1.0]` with date
+- [x] `CHANGELOG.md` versioned: `[Unreleased]` → `[0.1.0] - 2026-05-19`; `package.json` bumped to `0.1.0`
 
 **Exit criteria:** Someone clones the repo, follows the README, and
 gets a working review on a PR in under 10 minutes.

@@ -22,6 +22,9 @@ importers:
       "@tanstack/react-query":
         specifier: ^5.100.10
         version: 5.100.10(react@19.2.6)
+      diff:
+        specifier: ^9.0.0
+        version: 9.0.0
       electron-updater:
         specifier: ^6.8.3
         version: 6.8.3
@@ -3467,6 +3470,13 @@ packages:
       {
         integrity: sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g==,
       }
+
+  diff@9.0.0:
+    resolution:
+      {
+        integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==,
+      }
+    engines: { node: ">=0.3.1" }
 
   dir-compare@4.2.0:
     resolution:
@@ -9849,6 +9859,8 @@ snapshots:
 
   detect-node@2.1.0:
     optional: true
+
+  diff@9.0.0: {}
 
   dir-compare@4.2.0:
     dependencies:
