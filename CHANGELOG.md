@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Windows release builds**: a GitHub Actions `release.yml` workflow now builds macOS
+  (`.dmg`) and Windows (`.exe`) artifacts in parallel on every `v*` tag push and publishes
+  them to the GitHub Release automatically.
+
 ### Fixed
 
 - **Azure DevOps diff hunks**: the AI review pipeline now receives full line-level diff data
