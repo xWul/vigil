@@ -78,7 +78,7 @@ describe("SilentRegressionAnalyzer", () => {
     if (result.ok) expect(result.value).toHaveLength(0);
   });
 
-  it("skips non-TS/JS files", async () => {
+  it("skips non-code files (markdown)", async () => {
     const ctx = makeContext([makeFile("README.md", [added("if (attempt >= retries) {")])]);
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
@@ -159,6 +159,21 @@ describe("detectConditionChanges", () => {
       expect(result.value.filter((f) => f.title.includes(">="))).toHaveLength(0);
     }
   });
+
+  it("flags a condition operator change in a Python file", async () => {
+    const ctx = makeContext([
+      makeFile("src/service.py", [
+        removed("  if attempt >= retries:"),
+        added("  if attempt > retries:"),
+      ]),
+    ]);
+    const result = await analyzer.analyze(ctx);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const f = result.value.find((x) => x.pass === "regression" && x.title.includes(">="));
+      expect(f).toBeDefined();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -177,7 +192,7 @@ describe("detectErrorHandlingChanges", () => {
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const f = result.value.find((x) => x.title === "Catch block removed");
+      const f = result.value.find((x) => x.title === "Error handler removed");
       expect(f).toBeDefined();
       expect(f?.severity).toBe("high");
     }
@@ -197,7 +212,7 @@ describe("detectErrorHandlingChanges", () => {
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const f = result.value.find((x) => x.title === "Catch block removed");
+      const f = result.value.find((x) => x.title === "Error handler removed");
       expect(f).toBeDefined();
       expect(f?.severity).toBe("medium");
     }
@@ -217,7 +232,23 @@ describe("detectErrorHandlingChanges", () => {
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.find((x) => x.title === "Catch block removed")).toBeUndefined();
+      expect(result.value.find((x) => x.title === "Error handler removed")).toBeUndefined();
+    }
+  });
+
+  it("flags a removed Python except block", async () => {
+    const ctx = makeContext([
+      makeFile("src/service.py", [
+        removed("  except ValueError as e:"),
+        removed("    return None"),
+      ]),
+    ]);
+    const result = await analyzer.analyze(ctx);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const f = result.value.find((x) => x.title === "Error handler removed");
+      expect(f).toBeDefined();
+      expect(f?.severity).toBe("high");
     }
   });
 
@@ -233,7 +264,7 @@ describe("detectErrorHandlingChanges", () => {
     const result = await analyzer.analyze(ctx);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const f = result.value.find((x) => x.title.includes("throws"));
+      const f = result.value.find((x) => x.title.includes("throws/raises"));
       expect(f).toBeDefined();
       expect(f?.severity).toBe("high");
     }

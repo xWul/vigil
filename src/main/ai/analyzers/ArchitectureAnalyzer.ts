@@ -4,8 +4,9 @@ import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
 import { resolveRelativeImport } from "../buildReviewContext.js";
+import { getHeuristics, resolvePythonImport } from "../heuristics.js";
+import { detectLanguage } from "../language.js";
 
-const TS_JS = /\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
 const RELATIVE_IMPORT_RE = /from\s+['"](\.[^'"]+)['"]/g;
 
 // ---------------------------------------------------------------------------
@@ -20,15 +21,25 @@ function buildImportGraph(files: ReadonlyMap<string, string>): Map<string, Set<s
   }
 
   for (const [filePath, content] of files) {
-    if (!TS_JS.test(filePath)) continue;
-    RELATIVE_IMPORT_RE.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = RELATIVE_IMPORT_RE.exec(content)) !== null) {
-      const resolved = resolveRelativeImport(filePath, match[1]!);
-      if (files.has(resolved)) {
-        graph.get(filePath)!.add(resolved);
+    const lang = detectLanguage(filePath);
+
+    if (lang === "typescript") {
+      RELATIVE_IMPORT_RE.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = RELATIVE_IMPORT_RE.exec(content)) !== null) {
+        const resolved = resolveRelativeImport(filePath, match[1]!);
+        if (files.has(resolved)) graph.get(filePath)!.add(resolved);
+      }
+    } else if (lang === "python") {
+      const h = getHeuristics("python")!;
+      const re = new RegExp(h.relativeImport!.source, "g");
+      let match: RegExpExecArray | null;
+      while ((match = re.exec(content)) !== null) {
+        const resolved = resolvePythonImport(filePath, match[1]!, match[2] ?? "");
+        if (resolved && files.has(resolved)) graph.get(filePath)!.add(resolved);
       }
     }
+    // Other languages: relativeImport is null — no file-relative import resolution
   }
 
   return graph;
@@ -149,7 +160,12 @@ export class ArchitectureAnalyzer implements CodeAnalyzer {
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
     if (!this.cfg.enabled) return Promise.resolve(ok([]));
     const changedPaths = new Set(
-      context.diff.files.filter((f) => TS_JS.test(f.newPath)).map((f) => f.newPath),
+      context.diff.files
+        .filter((f) => {
+          const lang = detectLanguage(f.newPath);
+          return lang === "typescript" || lang === "python";
+        })
+        .map((f) => f.newPath),
     );
 
     if (changedPaths.size === 0) {

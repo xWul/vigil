@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-language static analysis**: complexity, code smells, regression, and debug-artifact
+  analysis now cover Java, Python, C#, Go, and Ruby in addition to TypeScript/JavaScript.
+  Python PRs also receive cross-file context enrichment (imported modules resolved and
+  summarised) on par with TypeScript. Java and Python symbol extraction reduces token cost
+  for cross-file context.
+
 - **Windows release builds**: a GitHub Actions `release.yml` workflow now builds macOS
   (`.dmg`) and Windows (`.exe`) artifacts in parallel on every `v*` tag push and publishes
   them to the GitHub Release automatically.

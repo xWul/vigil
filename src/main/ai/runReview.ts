@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { err, ok } from "../../shared/result.js";
 import type { Result } from "../../shared/result.js";
+import { isTestFile } from "./language.js";
 import { NoopLogger } from "../../shared/logger.js";
 import type { Logger } from "../../shared/logger.js";
 import type { Diff, FileDiff } from "../platforms/model/index.js";
@@ -24,9 +25,6 @@ function loadPrompt(name: string): string {
   return readFileSync(join(PROMPTS_DIR, `${name}.md`), "utf-8");
 }
 
-// Test files — no logic to audit
-const TEST_RE = /\.(test|spec)\.[jt]sx?$/;
-
 // Binary and media assets — no text content worth reviewing
 const BINARY_RE =
   /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff?|avif|woff2?|ttf|otf|eot|mp[34]|wav|ogg|pdf|zip|tar|gz|br|exe|dll|so|dylib)$/i;
@@ -39,7 +37,10 @@ const LOCK_FILENAMES = new Set([
   "Gemfile.lock",
   "Cargo.lock",
   "poetry.lock",
+  "Pipfile.lock",
   "composer.lock",
+  "go.sum",
+  "packages.lock.json",
 ]);
 
 // Documentation — prose, not code
@@ -51,7 +52,7 @@ const GENERATED_RE = /\.(min\.(js|css)|[jt]s\.map|css\.map)$/;
 export function isNonReviewable(filePath: string): boolean {
   const filename = filePath.split("/").at(-1) ?? filePath;
   return (
-    TEST_RE.test(filePath) ||
+    isTestFile(filePath) ||
     BINARY_RE.test(filePath) ||
     LOCK_FILENAMES.has(filename) ||
     DOC_RE.test(filePath) ||

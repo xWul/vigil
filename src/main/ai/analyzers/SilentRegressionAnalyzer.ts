@@ -5,8 +5,6 @@ import type { Result } from "../../../shared/result.js";
 import type { DiffLine, FileDiff, Hunk } from "../../platforms/model/index.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
 
-const TS_JS = /\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/;
-
 // ---------------------------------------------------------------------------
 // Paired hunk analysis helper
 // ---------------------------------------------------------------------------
@@ -62,7 +60,8 @@ function firstNewLine(lines: readonly DiffLine[]): number | null {
 // Detector 1: Condition operator changes
 // ---------------------------------------------------------------------------
 
-const CONDITIONAL_MARKER = /\bif\s*\(|}\s*else\s+if\s*\(|\bwhile\s*\(|\bfor\s*\(| \? .+ : /;
+const CONDITIONAL_MARKER =
+  /\bif\s*\(|}\s*else\s+if\s*\(|\bwhile\s*\(|\bfor\s*\(| \? .+ : |\bif\s+\w|\belif\s+\w|\bwhile\s+\w/;
 const OPERATORS_RE = /[><!]=?=?|&&|\|\|/g;
 
 const RISKY_PAIRS: ReadonlyMap<string, { to: string; description: string }[]> = new Map([
@@ -221,9 +220,10 @@ function detectConditionChanges(file: FileDiff): Finding[] {
 // Detector 2: Error handling removal or change
 // ---------------------------------------------------------------------------
 
-const CATCH_RE = /\bcatch\s*\(/;
-const FALLBACK_RETURN_RE = /\breturn\s+(null|undefined|false|\[\]|\{\})\s*;?/;
-const THROW_RE = /\bthrow\b/;
+// matches catch( in Java/C#/JS/TS and except in Python
+const CATCH_OR_EXCEPT_RE = /\bcatch\s*\(|\bexcept\b/;
+const FALLBACK_RETURN_RE = /\breturn\s+(null|undefined|None|false|\[\]|\{\})\s*;?/;
+const THROW_OR_RAISE_RE = /\b(?:throw|raise)\b/;
 
 function detectErrorHandlingChanges(file: FileDiff): Finding[] {
   const findings: Finding[] = [];
@@ -232,19 +232,19 @@ function detectErrorHandlingChanges(file: FileDiff): Finding[] {
     const removedLines = hunk.lines.filter((l) => l.kind === "removed");
     const addedLines = hunk.lines.filter((l) => l.kind === "added");
 
-    const removedHasCatch = removedLines.some((l) => CATCH_RE.test(l.content));
-    const addedHasCatch = addedLines.some((l) => CATCH_RE.test(l.content));
+    const removedHasCatch = removedLines.some((l) => CATCH_OR_EXCEPT_RE.test(l.content));
+    const addedHasCatch = addedLines.some((l) => CATCH_OR_EXCEPT_RE.test(l.content));
 
-    // Pattern A: catch block removed
+    // Pattern A: error handler removed
     if (removedHasCatch && !addedHasCatch) {
-      const catchLine = removedLines.find((l) => CATCH_RE.test(l.content))!;
+      const catchLine = removedLines.find((l) => CATCH_OR_EXCEPT_RE.test(l.content))!;
       const isLikelyRefactor = addedLines.length > 0;
       findings.push({
         severity: isLikelyRefactor ? "medium" : "high",
-        title: "Catch block removed",
+        title: "Error handler removed",
         description: isLikelyRefactor
-          ? "A catch block was removed alongside new code. Verify that the replacement code still handles errors from this scope — it may have been refactored into a helper, or accidentally dropped."
-          : "A catch block was removed. Errors that were previously handled will now propagate to callers. Check all call sites.",
+          ? "An error handler was removed alongside new code. Verify that the replacement code still handles errors from this scope — it may have been refactored into a helper, or accidentally dropped."
+          : "An error handler was removed. Errors that were previously handled will now propagate to callers. Check all call sites.",
         evidence: `- ${catchLine.content.trim()}`,
         file: file.newPath,
         lines: null,
@@ -255,21 +255,23 @@ function detectErrorHandlingChanges(file: FileDiff): Finding[] {
     }
 
     // Pattern B: return fallback → throw in catch context
-    const catchIdx = hunk.lines.findIndex((l) => CATCH_RE.test(l.content));
+    const catchIdx = hunk.lines.findIndex((l) => CATCH_OR_EXCEPT_RE.test(l.content));
     if (catchIdx === -1) continue;
 
     const windowLines = hunk.lines.slice(catchIdx, catchIdx + 8);
     const fallbackLine = windowLines.find(
       (l) => l.kind === "removed" && FALLBACK_RETURN_RE.test(l.content),
     );
-    const throwLine = windowLines.find((l) => l.kind === "added" && THROW_RE.test(l.content));
+    const throwLine = windowLines.find(
+      (l) => l.kind === "added" && THROW_OR_RAISE_RE.test(l.content),
+    );
 
     if (fallbackLine && throwLine) {
       findings.push({
         severity: "high",
-        title: "Error handling changed: now throws instead of returning fallback",
+        title: "Error handling changed: now throws/raises instead of returning fallback",
         description:
-          "A catch block that previously returned a safe fallback value now throws. Callers that do not handle this error will crash.",
+          "An error handler that previously returned a safe fallback value now throws or raises. Callers that do not handle this error will crash.",
         evidence: diffEvidence([fallbackLine], [throwLine]),
         file: file.newPath,
         lines: (() => {
@@ -508,7 +510,6 @@ export class SilentRegressionAnalyzer implements CodeAnalyzer {
 
     for (const file of context.diff.files) {
       if (file.status === "deleted") continue;
-      if (!TS_JS.test(file.newPath)) continue;
 
       for (const detect of detectors) {
         try {

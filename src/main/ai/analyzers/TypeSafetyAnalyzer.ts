@@ -3,6 +3,7 @@ import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
+import { detectLanguage } from "../language.js";
 
 interface Pattern {
   regex: RegExp;
@@ -65,6 +66,7 @@ export class TypeSafetyAnalyzer implements CodeAnalyzer {
     const findings: Finding[] = [];
 
     for (const file of context.diff.files) {
+      if (detectLanguage(file.newPath) !== "typescript") continue;
       for (const hunk of file.hunks) {
         for (const line of hunk.lines) {
           if (line.kind !== "added") continue;

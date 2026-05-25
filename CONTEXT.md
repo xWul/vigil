@@ -109,6 +109,16 @@ filtered server-side and never appear in the queue.
 
 ---
 
+## Language
+
+The programming language of a source file — Java, Python, C#, Go, Ruby,
+TypeScript, or similar — inferred from the file's extension. Determines
+which analysis capabilities apply to a file in the review pipeline.
+Distinct from _platform_ (GitHub / Azure DevOps) and _AI provider_
+(Anthropic / OpenAI).
+
+---
+
 ## Diff
 
 The structured, normalized representation of all file changes in a PR.

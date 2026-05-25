@@ -1,19 +1,24 @@
 import ts from "typescript";
 
-const TS_JS_RE = /\.[jt]sx?$/;
+import { detectLanguage } from "./language.js";
 
 /**
- * Extract the public API surface of a TypeScript/JavaScript file: exported
- * declarations with their signatures but without implementation bodies.
+ * Extract the public API surface of a source file: declarations with their
+ * signatures but without implementation bodies.
  *
  * Used for cross-file import context so the AI sees type information without
  * paying the token cost of full implementations.
  *
- * Falls back to full content for non-TS/JS files, parse failures, or files
- * that export nothing.
+ * TypeScript/JavaScript: uses the TypeScript compiler AST for precise extraction.
+ * Python: regex-based extraction of public function/class signatures.
+ * Java: regex-based extraction of public/protected declarations.
+ * Other languages: returns full content unchanged.
  */
 export function extractExportedSymbols(content: string, filePath: string): string {
-  if (!TS_JS_RE.test(filePath)) return content;
+  const lang = detectLanguage(filePath);
+  if (lang === "python") return extractPythonSymbols(content, filePath);
+  if (lang === "java") return extractJavaSymbols(content, filePath);
+  if (lang !== "typescript") return content;
 
   let sourceFile: ts.SourceFile;
   try {
@@ -121,4 +126,72 @@ function variableSignature(content: string, stmt: ts.VariableStatement): string 
   }
 
   return content.slice(stmt.getStart(), stmt.getEnd());
+}
+
+// ---------------------------------------------------------------------------
+// Python symbol extraction
+// ---------------------------------------------------------------------------
+
+function extractPythonSymbols(content: string, filePath: string): string {
+  const lines = content.split("\n");
+  const result: string[] = [`# [symbol summary: ${filePath}]`];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("@")) {
+      result.push(trimmed);
+      continue;
+    }
+
+    if (/^class\s+/.test(trimmed)) {
+      result.push(trimmed);
+      continue;
+    }
+
+    const defMatch = /^[ \t]*(?:async\s+)?def\s+(\w+)\s*\(/.exec(line);
+    if (defMatch) {
+      const name = defMatch[1]!;
+      // include public functions/methods and dunder methods; skip single-underscore private
+      if (!name.startsWith("_") || (name.startsWith("__") && name.endsWith("__"))) {
+        result.push(trimmed.endsWith(":") ? trimmed : `${trimmed}...`);
+      }
+    }
+  }
+
+  return result.length > 1 ? result.join("\n") : content;
+}
+
+// ---------------------------------------------------------------------------
+// Java symbol extraction
+// ---------------------------------------------------------------------------
+
+function extractJavaSymbols(content: string, filePath: string): string {
+  const lines = content.split("\n");
+  const result: string[] = [`// [symbol summary: ${filePath}]`];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+
+    // Class / interface / enum / record declarations
+    if (
+      /^(?:public|protected)(?:\s+\w+)*\s+(?:class|interface|enum|record|@interface)\s+\w+/.test(
+        trimmed,
+      )
+    ) {
+      result.push(trimmed.replace(/\s*\{.*$/, " {"));
+      continue;
+    }
+
+    // Method / constructor declarations — strip body, keep signature
+    if (
+      /^(?:public|protected)\s+/.test(trimmed) &&
+      /\w+\s*\([^)]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{/.test(trimmed)
+    ) {
+      result.push(trimmed.replace(/\s*\{.*$/, ";"));
+    }
+  }
+
+  return result.length > 1 ? result.join("\n") : content;
 }
