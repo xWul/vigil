@@ -215,6 +215,10 @@ generic FetchError.
 
 ## Pull request and branch conventions
 
+- **Never commit directly to `main`.** Every change — no matter how
+  small — goes on a dedicated branch first.
+- Each new piece of work (new conversation context, feature, fix,
+  refactor) gets its own branch. Create it before writing any code.
 - Branch names: `feat/short-description`, `fix/short-description`,
   `refactor/short-description`. Lowercase, hyphenated.
 - One topic per branch. Don't mix refactoring and feature work.

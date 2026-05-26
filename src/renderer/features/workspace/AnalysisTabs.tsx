@@ -281,15 +281,7 @@ export function AnalysisProgressBar({
 export function OverviewSkeleton() {
   const t = TOKENS.dark;
 
-  function Block({
-    w,
-    h,
-    delay = 0,
-  }: {
-    w: string | number;
-    h: number;
-    delay?: number;
-  }) {
+  function Block({ w, h, delay = 0 }: { w: string | number; h: number; delay?: number }) {
     return (
       <div
         style={{
