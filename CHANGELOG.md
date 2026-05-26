@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **PR comment threads**: existing review threads from GitHub and Azure DevOps now appear
+  inline in the diff, anchored to their source line. Threads are collapsible, show all
+  comments with relative timestamps, and accept immediate replies. Findings can be queued
+  as pending inline comments; freeform line comments are also supported. All pending
+  comments submit alongside the review verdict. Press `v` to show resolved threads,
+  `R` to refresh from the platform.
+
 - **Analysis loader**: opening a PR now shows shimmer placeholders in the Overview tab
   while the diff loads, and a thin progress bar under the tab strip throughout the
   analysis pipeline. The bar is indeterminate until the first pass fires, then tracks

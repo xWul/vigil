@@ -8,6 +8,7 @@ import type {
   NewReview,
   PullRequest,
   ReviewVerdict,
+  Thread,
 } from "../../../shared/model/index.js";
 import type { Finding, FindingPass } from "../../../shared/review.js";
 import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
@@ -20,6 +21,7 @@ import {
   useSettings,
   useCachedReview,
   useInvalidateReview,
+  useThreads,
   queryKeys,
 } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
@@ -38,6 +40,10 @@ import {
 
 type PassPhase = { phase: "running" } | { phase: "done"; count: number };
 type PassMap = Partial<Record<FindingPass, PassPhase>>;
+
+type QueuedComment =
+  | { kind: "from-finding"; findingTitle: string; body: string; path: string; line: number }
+  | { kind: "freeform"; body: string; path: string; line: number };
 
 interface ConvoMessage {
   role: "user" | "assistant";
@@ -1206,12 +1212,14 @@ function InlineFindingRow({
   expanded,
   onToggle,
   onAskVigil,
+  onQueueComment,
   hasAI,
 }: {
   finding: Finding;
   expanded: boolean;
   onToggle: () => void;
   onAskVigil: () => void;
+  onQueueComment: () => void;
   hasAI: boolean;
 }) {
   const t = TOKENS.dark;
@@ -1328,6 +1336,25 @@ function InlineFindingRow({
                     Ask Vigil about this
                   </button>
                 )}
+                {finding.lines !== null && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onQueueComment();
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      color: t.textDim,
+                      fontFamily: SANS,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Queue as comment
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1363,6 +1390,339 @@ function InlineFindingRow({
       </div>
     </div>
   );
+}
+
+function InlineThread({
+  thread,
+  expanded,
+  onToggle,
+  onReply,
+}: {
+  thread: Thread;
+  expanded: boolean;
+  onToggle: () => void;
+  onReply: (body: string) => Promise<void>;
+}) {
+  const t = TOKENS.dark;
+  const [replyBody, setReplyBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmitReply() {
+    const body = replyBody.trim();
+    if (!body || submitting) return;
+    setSubmitting(true);
+    await onReply(body);
+    setReplyBody("");
+    setSubmitting(false);
+  }
+
+  const rootComment = thread.comments[0];
+  if (!rootComment) return null;
+
+  return (
+    <div
+      style={{
+        padding: "8px 18px 8px 100px",
+        borderTop: `0.5px solid ${t.border}`,
+        borderBottom: expanded ? `0.5px solid ${t.border}` : undefined,
+        background: expanded ? "rgba(255,255,255,0.012)" : "transparent",
+        cursor: expanded ? "default" : "pointer",
+        opacity: thread.resolved ? 0.5 : 1,
+      }}
+      onClick={expanded ? undefined : onToggle}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontSize: 12, flexShrink: 0, marginTop: 2, color: t.textFaint }}>💬</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: SANS, fontSize: 12, color: t.textDim, fontWeight: 500 }}>
+              {rootComment.author.login}
+            </span>
+            {thread.resolved && (
+              <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>resolved</span>
+            )}
+            {!expanded && (
+              <span
+                style={{
+                  fontFamily: SANS,
+                  fontSize: 12,
+                  color: t.textFaint,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap" as const,
+                  flex: 1,
+                }}
+              >
+                {rootComment.body}
+              </span>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                color: t.textFaint,
+                cursor: "pointer",
+                fontFamily: MONO,
+                fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
+              {expanded
+                ? "↑"
+                : `${thread.comments.length} comment${thread.comments.length !== 1 ? "s" : ""}`}
+            </button>
+          </div>
+          {expanded && (
+            <div style={{ marginTop: 6 }}>
+              {thread.comments.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    marginBottom: 10,
+                    paddingLeft: 8,
+                    borderLeft: `2px solid ${t.border}`,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 6, marginBottom: 3 }}>
+                    <span
+                      style={{
+                        fontFamily: SANS,
+                        fontSize: 11.5,
+                        color: t.textDim,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {c.author.login}
+                    </span>
+                    <span style={{ fontFamily: MONO, fontSize: 10.5, color: t.textFaint }}>
+                      {formatRelativeTime(c.createdAt)}
+                    </span>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontFamily: SANS,
+                      fontSize: 12.5,
+                      color: t.text,
+                      lineHeight: 1.55,
+                      whiteSpace: "pre-wrap" as const,
+                    }}
+                  >
+                    {c.body}
+                  </p>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <textarea
+                  value={replyBody}
+                  onChange={(e) => setReplyBody(e.target.value)}
+                  placeholder="Reply…"
+                  rows={2}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      void handleSubmitReply();
+                    }
+                    e.stopPropagation();
+                  }}
+                  style={{
+                    flex: 1,
+                    fontFamily: SANS,
+                    fontSize: 12,
+                    color: t.text,
+                    background: t.surface,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 6,
+                    padding: "5px 8px",
+                    resize: "vertical" as const,
+                    outline: "none",
+                    boxSizing: "border-box" as const,
+                  }}
+                />
+                <button
+                  onClick={() => void handleSubmitReply()}
+                  disabled={!replyBody.trim() || submitting}
+                  style={{
+                    alignSelf: "flex-end",
+                    fontFamily: SANS,
+                    fontSize: 12,
+                    color: !replyBody.trim() || submitting ? t.textFaint : t.bg,
+                    background: !replyBody.trim() || submitting ? t.surface : t.accent,
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "6px 14px",
+                    cursor: !replyBody.trim() || submitting ? "default" : "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  {submitting ? "…" : "Reply"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingComment({
+  comment,
+  onRemove,
+  onBodyChange,
+}: {
+  comment: QueuedComment;
+  onRemove: () => void;
+  onBodyChange: (body: string) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      style={{
+        padding: "8px 18px 8px 100px",
+        borderTop: `0.5px solid ${t.accent}33`,
+        borderBottom: `0.5px solid ${t.accent}33`,
+        background: `${t.accent}08`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontSize: 12, flexShrink: 0, marginTop: 2, color: t.accent }}>◌</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: t.accent }}>pending</span>
+            {comment.kind === "from-finding" && (
+              <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>
+                {comment.findingTitle}
+              </span>
+            )}
+            <button
+              onClick={onRemove}
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                color: t.textFaint,
+                cursor: "pointer",
+                fontFamily: MONO,
+                fontSize: 11,
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <textarea
+            value={comment.body}
+            onChange={(e) => onBodyChange(e.target.value)}
+            rows={2}
+            onKeyDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              fontFamily: SANS,
+              fontSize: 12,
+              color: t.text,
+              background: t.surface,
+              border: `1px solid ${t.accent}44`,
+              borderRadius: 6,
+              padding: "5px 8px",
+              resize: "vertical" as const,
+              outline: "none",
+              boxSizing: "border-box" as const,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FreeformCompose({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (body: string) => void;
+  onCancel: () => void;
+}) {
+  const t = TOKENS.dark;
+  const [body, setBody] = useState("");
+  return (
+    <div
+      style={{
+        padding: "8px 18px 8px 100px",
+        borderTop: `0.5px solid ${t.border}`,
+        background: t.surface,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8 }}>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Add a comment on this line… (⌘↵ to confirm, Esc to cancel)"
+          rows={2}
+          autoFocus
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              if (body.trim()) onSubmit(body.trim());
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          style={{
+            flex: 1,
+            fontFamily: SANS,
+            fontSize: 12,
+            color: t.text,
+            background: t.bg,
+            border: `1px solid ${t.border}`,
+            borderRadius: 6,
+            padding: "5px 8px",
+            resize: "vertical" as const,
+            outline: "none",
+            boxSizing: "border-box" as const,
+          }}
+        />
+        <button
+          onClick={() => {
+            if (body.trim()) onSubmit(body.trim());
+          }}
+          style={{
+            alignSelf: "flex-end",
+            fontFamily: SANS,
+            fontSize: 12,
+            color: !body.trim() ? t.textFaint : t.bg,
+            background: !body.trim() ? t.surface : t.accent,
+            border: "none",
+            borderRadius: 6,
+            padding: "6px 14px",
+            cursor: !body.trim() ? "default" : "pointer",
+            flexShrink: 0,
+          }}
+        >
+          Queue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatRelativeTime(date: Date): string {
+  const ms = Date.now() - date.getTime();
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function DiffRow({ line }: { line: DiffLine }) {
@@ -1443,7 +1803,20 @@ function HunkBlock({
   onToggleCollapse,
   onToggleFinding,
   onAskVigil,
+  onQueueFinding,
   hasAI,
+  threadsByLine,
+  pendingByLine,
+  expandedThreadKeys,
+  onToggleThread,
+  onReplyToThread,
+  composeLineKey,
+  onOpenCompose,
+  onSubmitFreeform,
+  onCancelCompose,
+  onRemovePending,
+  onPendingBodyChange,
+  showResolved,
 }: {
   hunk: Hunk;
   file: FileDiff;
@@ -1453,7 +1826,20 @@ function HunkBlock({
   onToggleCollapse: () => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
+  onQueueFinding: (f: Finding) => void;
   hasAI: boolean;
+  threadsByLine: Map<string, Thread[]>;
+  pendingByLine: Map<string, QueuedComment[]>;
+  expandedThreadKeys: Set<string>;
+  onToggleThread: (threadId: string) => void;
+  onReplyToThread: (threadId: string, body: string) => Promise<void>;
+  composeLineKey: string | null;
+  onOpenCompose: (lineKey: string) => void;
+  onSubmitFreeform: (lineKey: string, body: string) => void;
+  onCancelCompose: () => void;
+  onRemovePending: (lineKey: string, idx: number) => void;
+  onPendingBodyChange: (lineKey: string, idx: number, body: string) => void;
+  showResolved: boolean;
 }) {
   const t = TOKENS.dark;
   const header = `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@`;
@@ -1501,10 +1887,12 @@ function HunkBlock({
       </div>
       {!collapsed &&
         hunk.lines.map((line, i) => {
-          const lineFindings =
-            line.newLine !== null
-              ? (findingsByLine.get(`${file.newPath}:${line.newLine}`) ?? [])
-              : [];
+          const lineKey = line.newLine !== null ? `${file.newPath}:${line.newLine}` : null;
+          const lineFindings = lineKey ? (findingsByLine.get(lineKey) ?? []) : [];
+          const lineThreads = lineKey
+            ? (threadsByLine.get(lineKey) ?? []).filter((t) => showResolved || !t.resolved)
+            : [];
+          const linePending = lineKey ? (pendingByLine.get(lineKey) ?? []) : [];
           const domId = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
           return (
             <div key={i} id={domId}>
@@ -1518,10 +1906,66 @@ function HunkBlock({
                     expanded={expandedKeys.has(key)}
                     onToggle={() => onToggleFinding(key)}
                     onAskVigil={() => onAskVigil(f)}
+                    onQueueComment={() => onQueueFinding(f)}
                     hasAI={hasAI}
                   />
                 );
               })}
+              {lineThreads.map((thread) => (
+                <InlineThread
+                  key={thread.id}
+                  thread={thread}
+                  expanded={expandedThreadKeys.has(thread.id)}
+                  onToggle={() => onToggleThread(thread.id)}
+                  onReply={(body) => onReplyToThread(thread.id, body)}
+                />
+              ))}
+              {linePending.map((pending, idx) => (
+                <PendingComment
+                  key={idx}
+                  comment={pending}
+                  onRemove={() => lineKey && onRemovePending(lineKey, idx)}
+                  onBodyChange={(body) => lineKey && onPendingBodyChange(lineKey, idx, body)}
+                />
+              ))}
+              {lineKey && composeLineKey === lineKey && (
+                <FreeformCompose
+                  onSubmit={(body) => onSubmitFreeform(lineKey, body)}
+                  onCancel={onCancelCompose}
+                />
+              )}
+              {lineKey && line.kind !== "removed" && composeLineKey !== lineKey && (
+                <div
+                  style={{
+                    padding: "0 18px 0 100px",
+                    height: 0,
+                    overflow: "visible",
+                  }}
+                >
+                  <button
+                    onClick={() => onOpenCompose(lineKey)}
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      color: TOKENS.dark.textFaint,
+                      cursor: "pointer",
+                      fontSize: 11,
+                      opacity: 0,
+                      transition: "opacity 0.1s",
+                    }}
+                    onMouseEnter={(e) =>
+                      ((e.currentTarget as HTMLButtonElement).style.opacity = "1")
+                    }
+                    onMouseLeave={(e) =>
+                      ((e.currentTarget as HTMLButtonElement).style.opacity = "0")
+                    }
+                    title="Add a comment (i)"
+                  >
+                    + comment
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1537,7 +1981,20 @@ function FileSection({
   onToggleHunk,
   onToggleFinding,
   onAskVigil,
+  onQueueFinding,
   hasAI,
+  threadsByLine,
+  pendingByLine,
+  expandedThreadKeys,
+  onToggleThread,
+  onReplyToThread,
+  composeLineKey,
+  onOpenCompose,
+  onSubmitFreeform,
+  onCancelCompose,
+  onRemovePending,
+  onPendingBodyChange,
+  showResolved,
 }: {
   file: FileDiff;
   findingsByLine: Map<string, Finding[]>;
@@ -1546,7 +2003,20 @@ function FileSection({
   onToggleHunk: (key: string) => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
+  onQueueFinding: (f: Finding) => void;
   hasAI: boolean;
+  threadsByLine: Map<string, Thread[]>;
+  pendingByLine: Map<string, QueuedComment[]>;
+  expandedThreadKeys: Set<string>;
+  onToggleThread: (threadId: string) => void;
+  onReplyToThread: (threadId: string, body: string) => Promise<void>;
+  composeLineKey: string | null;
+  onOpenCompose: (lineKey: string) => void;
+  onSubmitFreeform: (lineKey: string, body: string) => void;
+  onCancelCompose: () => void;
+  onRemovePending: (lineKey: string, idx: number) => void;
+  onPendingBodyChange: (lineKey: string, idx: number, body: string) => void;
+  showResolved: boolean;
 }) {
   const t = TOKENS.dark;
   const adds = file.hunks.reduce((s, h) => s + h.lines.filter((l) => l.kind === "added").length, 0);
@@ -1612,7 +2082,20 @@ function FileSection({
             onToggleCollapse={() => onToggleHunk(key)}
             onToggleFinding={onToggleFinding}
             onAskVigil={onAskVigil}
+            onQueueFinding={onQueueFinding}
             hasAI={hasAI}
+            threadsByLine={threadsByLine}
+            pendingByLine={pendingByLine}
+            expandedThreadKeys={expandedThreadKeys}
+            onToggleThread={onToggleThread}
+            onReplyToThread={onReplyToThread}
+            composeLineKey={composeLineKey}
+            onOpenCompose={onOpenCompose}
+            onSubmitFreeform={onSubmitFreeform}
+            onCancelCompose={onCancelCompose}
+            onRemovePending={onRemovePending}
+            onPendingBodyChange={onPendingBodyChange}
+            showResolved={showResolved}
           />
         );
       })}
@@ -1651,9 +2134,22 @@ function DiffCenter({
   onToggleHunk,
   onToggleFinding,
   onAskVigil,
+  onQueueFinding,
   hasAI,
   passes,
   reviewDone,
+  threads,
+  queuedComments,
+  expandedThreadKeys,
+  onToggleThread,
+  onReplyToThread,
+  composeLineKey,
+  onOpenCompose,
+  onSubmitFreeform,
+  onCancelCompose,
+  onRemovePending,
+  onPendingBodyChange,
+  showResolved,
 }: {
   diff: Diff | null;
   loadError: string | null;
@@ -1663,9 +2159,22 @@ function DiffCenter({
   onToggleHunk: (key: string) => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
+  onQueueFinding: (f: Finding) => void;
   hasAI: boolean;
   passes: PassMap;
   reviewDone: boolean;
+  threads: readonly Thread[];
+  queuedComments: QueuedComment[];
+  expandedThreadKeys: Set<string>;
+  onToggleThread: (threadId: string) => void;
+  onReplyToThread: (threadId: string, body: string) => Promise<void>;
+  composeLineKey: string | null;
+  onOpenCompose: (lineKey: string) => void;
+  onSubmitFreeform: (lineKey: string, body: string) => void;
+  onCancelCompose: () => void;
+  onRemovePending: (lineKey: string, idx: number) => void;
+  onPendingBodyChange: (lineKey: string, idx: number, body: string) => void;
+  showResolved: boolean;
 }) {
   const t = TOKENS.dark;
 
@@ -1680,6 +2189,28 @@ function DiffCenter({
     }
     return map;
   }, [findings]);
+
+  const threadsByLine = useMemo(() => {
+    const map = new Map<string, Thread[]>();
+    for (const t of threads) {
+      const key = `${t.file}:${t.line}`;
+      const arr = map.get(key) ?? [];
+      arr.push(t);
+      map.set(key, arr);
+    }
+    return map;
+  }, [threads]);
+
+  const pendingByLine = useMemo(() => {
+    const map = new Map<string, QueuedComment[]>();
+    for (const c of queuedComments) {
+      const key = `${c.path}:${c.line}`;
+      const arr = map.get(key) ?? [];
+      arr.push(c);
+      map.set(key, arr);
+    }
+    return map;
+  }, [queuedComments]);
 
   const runningPasses = Object.entries(passes).filter(([, v]) => v.phase === "running");
 
@@ -1715,7 +2246,20 @@ function DiffCenter({
               onToggleHunk={onToggleHunk}
               onToggleFinding={onToggleFinding}
               onAskVigil={onAskVigil}
+              onQueueFinding={onQueueFinding}
               hasAI={hasAI}
+              threadsByLine={threadsByLine}
+              pendingByLine={pendingByLine}
+              expandedThreadKeys={expandedThreadKeys}
+              onToggleThread={onToggleThread}
+              onReplyToThread={onReplyToThread}
+              composeLineKey={composeLineKey}
+              onOpenCompose={onOpenCompose}
+              onSubmitFreeform={onSubmitFreeform}
+              onCancelCompose={onCancelCompose}
+              onRemovePending={onRemovePending}
+              onPendingBodyChange={onPendingBodyChange}
+              showResolved={showResolved}
             />
           ))
         )}
@@ -2299,6 +2843,11 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const cachedReviewQuery = useCachedReview(pr.ref, headSha);
   const invalidateReview = useInvalidateReview();
   const queryClient = useQueryClient();
+  const { query: threadsQuery, refresh: refreshThreads } = useThreads(pr.ref);
+  const threads = useMemo<readonly Thread[]>(() => {
+    if (!threadsQuery.data?.ok) return [];
+    return threadsQuery.data.value;
+  }, [threadsQuery.data]);
 
   const [findings, setFindings] = useState<Finding[]>([]);
   const [passes, setPasses] = useState<PassMap>({});
@@ -2332,6 +2881,10 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [suppressedKeys, setSuppressedKeys] = useState<Set<string>>(new Set());
+  const [queuedComments, setQueuedComments] = useState<QueuedComment[]>([]);
+  const [expandedThreadKeys, setExpandedThreadKeys] = useState<Set<string>>(new Set());
+  const [composeLineKey, setComposeLineKey] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   useEffect(() => {
     if (!headSha) return;
@@ -2607,6 +3160,12 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       if (e.key === "r" && reviewDone) {
         void handleRerunReview();
       }
+      if (e.key === "R") {
+        void refreshThreads();
+      }
+      if (e.key === "v") {
+        setShowResolved((v) => !v);
+      }
     },
     [
       diff,
@@ -2623,6 +3182,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
       handleRerunReview,
       handleSuppress,
       setActiveTab,
+      refreshThreads,
     ],
   );
 
@@ -2660,14 +3220,89 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     const review: NewReview = {
       verdict: verdictState.verdict,
       body: verdictState.body,
-      comments: [],
+      comments: queuedComments.map((c) => ({
+        kind: "inline" as const,
+        body: c.body,
+        path: c.path,
+        line: c.line,
+      })),
     };
     const result = await api.invoke("platform:submitReview", pr.ref, review);
     if (result.ok) {
       setSubmitted(true);
       setVerdictState(null);
+      setQueuedComments([]);
     }
     setSubmitting(false);
+  }
+
+  function handleQueueFinding(finding: Finding) {
+    const lines = finding.lines;
+    if (!lines) return;
+    setQueuedComments((prev) => [
+      ...prev,
+      {
+        kind: "from-finding",
+        findingTitle: finding.title,
+        body: `**${finding.title}**\n\n${finding.description}`,
+        path: finding.file,
+        line: lines.start,
+      },
+    ]);
+  }
+
+  async function handleReplyToThread(threadId: string, body: string) {
+    const result = await api.invoke("platform:replyToThread", pr.ref, threadId, body);
+    if (result.ok) {
+      queryClient.setQueryData(["threads", pr.ref], (old: typeof threadsQuery.data) => {
+        if (!old?.ok) return old;
+        return {
+          ok: true,
+          value: old.value.map((t) =>
+            t.id === threadId ? { ...t, comments: [...t.comments, result.value] } : t,
+          ),
+        };
+      });
+    }
+  }
+
+  function handleSubmitFreeform(lineKey: string, body: string) {
+    const [path, lineStr] = lineKey.split(":");
+    const line = parseInt(lineStr ?? "1", 10);
+    if (!path) return;
+    setQueuedComments((prev) => [...prev, { kind: "freeform", body, path, line }]);
+    setComposeLineKey(null);
+  }
+
+  function handleRemovePending(lineKey: string, idx: number) {
+    setQueuedComments((prev) => {
+      const inLine = prev
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => `${c.path}:${c.line}` === lineKey);
+      const target = inLine[idx];
+      if (!target) return prev;
+      return prev.filter((_, i) => i !== target.i);
+    });
+  }
+
+  function handlePendingBodyChange(lineKey: string, idx: number, body: string) {
+    setQueuedComments((prev) => {
+      const inLine = prev
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => `${c.path}:${c.line}` === lineKey);
+      const target = inLine[idx];
+      if (!target) return prev;
+      return prev.map((c, i) => (i === target.i ? { ...c, body } : c));
+    });
+  }
+
+  function handleToggleThread(threadId: string) {
+    setExpandedThreadKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
   }
 
   const files = diff?.files ?? [];
@@ -2713,9 +3348,22 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
             onToggleHunk={handleToggleHunk}
             onToggleFinding={handleToggleFinding}
             onAskVigil={handleAskVigil}
+            onQueueFinding={handleQueueFinding}
             hasAI={hasAI}
             passes={passes}
             reviewDone={reviewDone}
+            threads={threads}
+            queuedComments={queuedComments}
+            expandedThreadKeys={expandedThreadKeys}
+            onToggleThread={handleToggleThread}
+            onReplyToThread={handleReplyToThread}
+            composeLineKey={composeLineKey}
+            onOpenCompose={setComposeLineKey}
+            onSubmitFreeform={handleSubmitFreeform}
+            onCancelCompose={() => setComposeLineKey(null)}
+            onRemovePending={handleRemovePending}
+            onPendingBodyChange={handlePendingBodyChange}
+            showResolved={showResolved}
           />
           <ConversationPanel
             challengeState={challengeState}
