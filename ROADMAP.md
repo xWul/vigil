@@ -1,6 +1,6 @@
 # Roadmap — Vigil
 
-> **Status:** Living document. Last updated 2026-05-20. Phases 0–8 complete. Phase 10 backlog items (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update) complete. Azure DevOps full diff hunks implemented. Phase 9 (distribution) in progress — README and CHANGELOG versioned, pending `pnpm dist` verification and GitHub Release.
+> **Status:** Living document. Last updated 2026-05-26. Phases 0–8 complete. Phase 10 backlog items complete (finding suppression, system notifications, workspace tab persistence, `.vigilrc` auto-read, auto-update, AzDO full diff hunks, PR comment thread view). Phase 9 (distribution) in progress — `pnpm dist` verified, pending GitHub Release `v0.1.0`.
 > **Purpose:** Sequence the work on Vigil so each milestone is shippable
 > and teaches something concrete. Items here are intentions, not
 > contracts — reorder freely as the project teaches us what matters.
@@ -371,7 +371,7 @@ _Phase 8 complete 2026-05-19._
 
 **Goal:** Someone other than the author can install and use Vigil.
 
-- [ ] `pnpm dist` verified end-to-end on macOS
+- [x] `pnpm dist` verified end-to-end on macOS
 - [ ] Code signing for macOS (requires Apple Developer account — user action)
 - [x] README polished: "Getting Started" install steps, "How to use" walkthrough
 - [ ] GitHub Release `v0.1.0` with macOS `.dmg` attached
@@ -397,8 +397,10 @@ Not blockers for v0.1 but natural next investments after release:
       config set to `xWul/vigil`. Requires code signing on macOS to work end-to-end.
 - [x] **System notification on review complete**: Electron `Notification` API.
       Fires when review finishes while window is out of focus.
-- [ ] **Azure DevOps full diff hunks**: Phase 2 deferred hunk parsing for AzDO.
-      Real AzDO users get file-level diffs only, which limits usefulness.
+- [x] **Azure DevOps full diff hunks**: `AzureDevOpsProvider.getDiff` now fetches
+      both file versions at their merge commits and diffs them locally using the
+      `diff` package, producing full line-level hunks. Static analyzers and the
+      AI passes now receive complete changed-line context for AzDO PRs.
 - [x] **Finding suppression**: mark a finding as "acknowledged / won't fix" so
       it doesn't reappear on re-run. Stored per `(headSha, findingKey)`.
 - [x] **Workspace state persistence**: active tab remembered per PR via
@@ -407,8 +409,10 @@ Not blockers for v0.1 but natural next investments after release:
       a project's architecture up front — too project-specific to do generically
       without a complex config surface. Circular dependency detection (already
       shipping) covers the universally-useful case. Deferred indefinitely.
-- [ ] **PR comment thread view**: show existing review comments from other
-      reviewers in the workspace. Read-only is enough for v0.2.
+- [x] **PR comment thread view**: existing review threads from GitHub and Azure
+      DevOps appear inline in the diff, anchored to their source line. Threads
+      are collapsible, accept immediate replies, and pending inline comments
+      queue alongside the review verdict. ADR-0014.
 
 ---
 
