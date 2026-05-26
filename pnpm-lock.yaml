@@ -40,6 +40,9 @@ importers:
       simple-git:
         specifier: ^3.36.0
         version: 3.36.0
+      typescript:
+        specifier: 5.7.2
+        version: 5.7.2
       zustand:
         specifier: 5.0.2
         version: 5.0.2(@types/react@19.0.0)(react@19.2.6)
@@ -110,9 +113,6 @@ importers:
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
-      typescript:
-        specifier: 5.7.2
-        version: 5.7.2
       typescript-eslint:
         specifier: 8.18.0
         version: 8.18.0(eslint@9.17.0(jiti@2.7.0))(typescript@5.7.2)

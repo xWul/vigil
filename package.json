@@ -67,6 +67,7 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "simple-git": "^3.36.0",
+    "typescript": "5.7.2",
     "zustand": "5.0.2"
   },
   "devDependencies": {
@@ -92,7 +93,6 @@
     "prettier": "3.4.2",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.21.0",
-    "typescript": "5.7.2",
     "typescript-eslint": "8.18.0",
     "vite": "6.0.3",
     "vitest": "3.0.0"
