@@ -15,6 +15,7 @@ import type {
   PlatformError,
   PRRef,
   PullRequest,
+  Thread,
 } from "./model/index.js";
 import type { PlatformProvider } from "./PlatformProvider.js";
 import { parseUnifiedDiff } from "./parseUnifiedDiff.js";
@@ -71,12 +72,23 @@ interface AdoChangesResponse {
 
 interface AdoThread {
   id: number;
+  status?: number; // 1 = active; 2+ = resolved (fixed, wontFix, closed, byDesign, pending)
+  threadContext?: {
+    filePath: string;
+    rightFileStart?: { line: number; offset: number };
+  };
   comments: {
     id: number;
     content: string;
+    commentType?: number; // 1 = text, 2 = codeChange, 3 = system
+    isDeleted?: boolean;
     author: { displayName: string; uniqueName: string };
     publishedDate: string;
   }[];
+}
+
+interface AdoThreadsResponse {
+  value: AdoThread[];
 }
 
 // ---------------------------------------------------------------------------
@@ -457,6 +469,80 @@ export class AzureDevOpsProvider implements PlatformProvider {
       `?path=${encodedPath}&versionDescriptor.version=${commitSha}&versionDescriptor.versionType=commit`,
     );
     return adoRequestText(url, session.accessToken);
+  }
+
+  async getThreads(
+    session: AuthSession,
+    ref: PRRef,
+  ): Promise<Result<readonly Thread[], PlatformError>> {
+    if (ref.platform !== "azure-devops") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+
+    const url = adoUrl(
+      `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}/threads`,
+      "",
+    );
+    const result = await adoRequest<AdoThreadsResponse>(url, session.accessToken);
+    if (!result.ok) return result;
+
+    const threads: Thread[] = [];
+    for (const t of result.value.value) {
+      if (!t.threadContext?.rightFileStart) continue; // skip PR-level threads
+      const line = t.threadContext.rightFileStart.line;
+      const file = t.threadContext.filePath.replace(/^\//, "");
+
+      const visibleComments = t.comments.filter(
+        (c) => !c.isDeleted && (c.commentType === undefined || c.commentType === 1),
+      );
+      if (visibleComments.length === 0) continue;
+
+      threads.push({
+        id: String(t.id),
+        file,
+        line,
+        comments: visibleComments.map((c) => ({
+          id: String(c.id),
+          body: c.content,
+          author: { displayName: c.author.displayName, login: c.author.uniqueName },
+          createdAt: new Date(c.publishedDate),
+        })),
+        resolved: (t.status ?? 1) !== 1,
+      });
+    }
+
+    return ok(threads);
+  }
+
+  async replyToThread(
+    session: AuthSession,
+    ref: PRRef,
+    threadId: string,
+    body: string,
+  ): Promise<Result<Comment, PlatformError>> {
+    if (ref.platform !== "azure-devops") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+
+    const url = adoUrl(
+      `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}/threads/${threadId}/comments`,
+      "",
+    );
+    const result = await adoRequest<AdoThread["comments"][number]>(url, session.accessToken, {
+      method: "POST",
+      body: JSON.stringify({ parentCommentId: 0, content: body, commentType: 1 }),
+    });
+    if (!result.ok) return result;
+
+    return ok({
+      id: String(result.value.id),
+      body: result.value.content,
+      author: {
+        displayName: result.value.author.displayName,
+        login: result.value.author.uniqueName,
+      },
+      createdAt: new Date(result.value.publishedDate),
+    });
   }
 }
 

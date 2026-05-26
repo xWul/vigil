@@ -11,6 +11,7 @@ import type {
   PlatformError,
   PRRef,
   PullRequest,
+  Thread,
 } from "./model/index.js";
 
 // ── Invoke channels (renderer → main, each returns Promise<Result<T, E>>) ───
@@ -30,6 +31,12 @@ export interface IpcContract {
   "platform:getPRWithDiff": (ref: PRRef) => Result<{ pr: PullRequest; diff: Diff }, PlatformError>;
   "platform:submitReview": (ref: PRRef, review: NewReview) => Result<void, PlatformError>;
   "platform:postComment": (ref: PRRef, comment: NewComment) => Result<Comment, PlatformError>;
+  "platform:getThreads": (ref: PRRef) => Result<readonly Thread[], PlatformError>;
+  "platform:replyToThread": (
+    ref: PRRef,
+    threadId: string,
+    body: string,
+  ) => Result<Comment, PlatformError>;
 
   // Review
   "review:run": (ref: PRRef) => Result<ReviewResult, ReviewError>;

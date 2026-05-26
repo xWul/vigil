@@ -214,6 +214,32 @@ export function registerHandlers(
     return provider.postComment(session, ref, comment);
   });
 
+  handle("platform:getThreads", async (ref) => {
+    const platform = ref.platform === "github" ? "github" : "azure-devops";
+    const session = await loadSession(tokenStore, platform);
+    if (!session) return err({ code: "forbidden" } as const);
+
+    const provider =
+      ref.platform === "github"
+        ? new GitHubProvider(logger)
+        : new AzureDevOpsProvider(ref.platform === "azure-devops" ? ref.org : "", logger);
+
+    return provider.getThreads(session, ref);
+  });
+
+  handle("platform:replyToThread", async (ref, threadId, body) => {
+    const platform = ref.platform === "github" ? "github" : "azure-devops";
+    const session = await loadSession(tokenStore, platform);
+    if (!session) return err({ code: "forbidden" } as const);
+
+    const provider =
+      ref.platform === "github"
+        ? new GitHubProvider(logger)
+        : new AzureDevOpsProvider(ref.platform === "azure-devops" ? ref.org : "", logger);
+
+    return provider.replyToThread(session, ref, threadId, body);
+  });
+
   // ── Review ────────────────────────────────────────────────────────────────
 
   handle("review:run", async (ref) => {

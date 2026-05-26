@@ -11,4 +11,5 @@ export type {
   PRRef,
   PullRequest,
   ReviewVerdict,
+  Thread,
 } from "../../../shared/model/index.js";
