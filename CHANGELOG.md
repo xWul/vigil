@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Analysis loader**: opening a PR now shows shimmer placeholders in the Overview tab
+  while the diff loads, and a thin progress bar under the tab strip throughout the
+  analysis pipeline. The bar is indeterminate until the first pass fires, then tracks
+  pass completion in real time.
+
 - **Multi-language static analysis**: complexity, code smells, regression, and debug-artifact
   analysis now cover Java, Python, C#, Go, and Ruby in addition to TypeScript/JavaScript.
   Python PRs also receive cross-file context enrichment (imported modules resolved and

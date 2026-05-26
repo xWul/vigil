@@ -24,7 +24,15 @@ import {
 } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 import type { TabId } from "./AnalysisTabs.js";
-import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
+import {
+  TabBar,
+  AnalysisProgressBar,
+  OverviewSkeleton,
+  OverviewTab,
+  RisksTab,
+  SemanticTab,
+  ArchTab,
+} from "./AnalysisTabs.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -2686,6 +2694,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         findings={findings}
         reviewCompletedAt={reviewCompletedAt}
       />
+      <AnalysisProgressBar passes={passes} reviewDone={reviewDone} />
 
       {activeTab === "diff" ? (
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
@@ -2721,29 +2730,33 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         </div>
       ) : activeTab === "overview" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <OverviewTab
-            pr={pr}
-            findings={findings}
-            diff={diff}
-            passes={passes}
-            reviewDone={reviewDone}
-            reviewCompletedAt={reviewCompletedAt}
-            onFindingClick={(finding) => {
-              const idx = sortedFindings.findIndex(
-                (f) =>
-                  f.file === finding.file &&
-                  f.lines?.start === finding.lines?.start &&
-                  f.title === finding.title,
-              );
-              if (idx !== -1) {
-                setFocusedFindingIdx(idx);
-                setActiveTab("diff");
-              }
-            }}
-            onSuppressFinding={handleSuppress}
-            suppressedCount={suppressedCount}
-            onClearSuppressed={handleClearSuppressed}
-          />
+          {diff === null && !loadError ? (
+            <OverviewSkeleton />
+          ) : (
+            <OverviewTab
+              pr={pr}
+              findings={findings}
+              diff={diff}
+              passes={passes}
+              reviewDone={reviewDone}
+              reviewCompletedAt={reviewCompletedAt}
+              onFindingClick={(finding) => {
+                const idx = sortedFindings.findIndex(
+                  (f) =>
+                    f.file === finding.file &&
+                    f.lines?.start === finding.lines?.start &&
+                    f.title === finding.title,
+                );
+                if (idx !== -1) {
+                  setFocusedFindingIdx(idx);
+                  setActiveTab("diff");
+                }
+              }}
+              onSuppressFinding={handleSuppress}
+              suppressedCount={suppressedCount}
+              onClearSuppressed={handleClearSuppressed}
+            />
+          )}
         </div>
       ) : activeTab === "risks" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>

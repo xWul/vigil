@@ -223,6 +223,153 @@ export function TabBar({
   );
 }
 
+// ── AnalysisProgressBar ───────────────────────────────────────────────────────
+
+export function AnalysisProgressBar({
+  passes,
+  reviewDone,
+}: {
+  passes: PassMap;
+  reviewDone: boolean;
+}) {
+  const t = TOKENS.dark;
+
+  if (reviewDone) return null;
+
+  const entries = Object.entries(passes) as [FindingPass, PassPhase][];
+  const total = entries.length;
+  const done = entries.filter(([, v]) => v.phase === "done").length;
+  const indeterminate = total === 0;
+  const pct = indeterminate ? 0 : (done / total) * 100;
+
+  return (
+    <div
+      style={{
+        height: 2,
+        background: t.border,
+        flexShrink: 0,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      {indeterminate ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "20%",
+            background: t.accent,
+            animation: "vigil-slide 1.4s ease-in-out infinite",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: t.accent,
+            transition: "width 0.25s ease",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── OverviewSkeleton ──────────────────────────────────────────────────────────
+
+export function OverviewSkeleton() {
+  const t = TOKENS.dark;
+
+  function Block({
+    w,
+    h,
+    delay = 0,
+  }: {
+    w: string | number;
+    h: number;
+    delay?: number;
+  }) {
+    return (
+      <div
+        style={{
+          width: w,
+          height: h,
+          borderRadius: 3,
+          background: t.textFaint,
+          animation: `vigil-pulse 1.6s ease-in-out ${delay}ms infinite`,
+        }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
+      {/* Pulse strip skeleton */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, 1fr)",
+          borderBottom: `0.5px solid ${t.border}`,
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            style={{
+              padding: "20px 28px",
+              borderRight: i === 5 ? "none" : `0.5px solid ${t.border}`,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <Block w="40%" h={10} delay={i * 60} />
+            <Block w="55%" h={28} delay={i * 60 + 100} />
+            <Block w="35%" h={10} delay={i * 60 + 200} />
+          </div>
+        ))}
+      </div>
+      {/* Content area skeleton */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 0,
+        }}
+      >
+        <div
+          style={{
+            padding: "28px 32px",
+            borderRight: `0.5px solid ${t.border}`,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
+          <Block w="30%" h={10} delay={0} />
+          {[60, 80, 70, 55].map((w, i) => (
+            <Block key={i} w={`${w}%`} h={14} delay={i * 80} />
+          ))}
+        </div>
+        <div
+          style={{
+            padding: "28px 32px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
+          <Block w="30%" h={10} delay={40} />
+          {[65, 75, 50, 85].map((w, i) => (
+            <Block key={i} w={`${w}%`} h={14} delay={i * 80 + 40} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── OverviewTab ───────────────────────────────────────────────────────────────
 
 function SeverityBreakdown({
