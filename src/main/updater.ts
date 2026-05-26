@@ -1,4 +1,6 @@
-import { autoUpdater } from "electron-updater";
+import pkg from "electron-updater";
+
+const { autoUpdater } = pkg;
 
 import type { UpdateStatus } from "../shared/ipc-contract.js";
 import type { Logger } from "../shared/logger.js";
