@@ -17,6 +17,7 @@ export const queryKeys = {
   prs: () => ["prs"] as const,
   diff: (ref: PRRef) => ["diff", ref] as const,
   review: (ref: PRRef, headSha: string) => ["review", ref, headSha] as const,
+  threads: (ref: PRRef) => ["threads", ref] as const,
   settings: () => ["settings"] as const,
 };
 
@@ -72,6 +73,18 @@ export function useSettings() {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
+}
+
+export function useThreads(ref: PRRef) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.threads(ref),
+    queryFn: () => api.invoke("platform:getThreads", ref),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.threads(ref) });
+  return { query, refresh };
 }
 
 export function useInvalidateReview() {

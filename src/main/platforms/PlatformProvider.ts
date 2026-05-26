@@ -8,9 +8,10 @@ import type {
   PlatformError,
   PRRef,
   PullRequest,
+  Thread,
 } from "./model/index.js";
 
-export type { Comment, Diff, NewComment, NewReview, PlatformError, PRRef, PullRequest };
+export type { Comment, Diff, NewComment, NewReview, PlatformError, PRRef, PullRequest, Thread };
 
 export interface PlatformProvider {
   readonly id: "github" | "azure-devops";
@@ -41,4 +42,13 @@ export interface PlatformProvider {
     path: string,
     commitSha: string,
   ): Promise<Result<string, PlatformError>>;
+
+  getThreads(session: AuthSession, ref: PRRef): Promise<Result<readonly Thread[], PlatformError>>;
+
+  replyToThread(
+    session: AuthSession,
+    ref: PRRef,
+    threadId: string,
+    body: string,
+  ): Promise<Result<Comment, PlatformError>>;
 }

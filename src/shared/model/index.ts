@@ -65,6 +65,14 @@ export interface Comment {
   readonly createdAt: Date;
 }
 
+export interface Thread {
+  readonly id: string;
+  readonly file: string;
+  readonly line: number;
+  readonly comments: readonly Comment[];
+  readonly resolved: boolean;
+}
+
 export type NewComment =
   | { readonly kind: "inline"; readonly body: string; readonly path: string; readonly line: number }
   | { readonly kind: "pr_comment"; readonly body: string };

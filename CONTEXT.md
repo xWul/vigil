@@ -339,8 +339,9 @@ marker; they appear as pinned cards in the right panel.
 
 The in-progress review being composed in the workspace before
 submission. Contains a verdict (`approved | changes_requested |
-commented`), an optional overall body, and a list of QueuedComments
-(findings the reviewer has chosen to post as inline comments).
+commented`), an optional overall body, and a list of `QueuedComments`
+— both findings the reviewer chose to post and freeform inline comments
+written directly on diff lines.
 
 Submitted as a single `platform:submitReview` call. Distinct from
 `NewReview` (the final submitted form) — the draft is mutable workspace
@@ -444,5 +445,52 @@ Vigil does not auto-read `.vigilrc` from repositories in the current
 version — it is generated from the workspace config panel via "Export as
 .vigilrc" and committed manually. Auto-reading is planned for a future
 phase (see ADR-0012).
+
+---
+
+## QueuedComment
+
+A staged entry in a `ReviewDraft` representing a not-yet-posted inline
+comment. Two kinds, discriminated:
+
+- `from-finding` — originated from a `Finding`; carries the finding title
+  as a badge so the reviewer can distinguish Vigil's suggestions from their
+  own prose
+- `freeform` — written directly on a diff line by the reviewer
+
+Both kinds carry a `body`, `path`, and `line`. Both are shown inline in
+the diff at their line position as "pending" threads before submission.
+
+On `ReviewDraft` submission, each `QueuedComment` produces a new `Thread`
+on the platform. The source `Finding` is unaffected — it remains an
+analysis result regardless of whether it was queued.
+
+Distinct from a `Thread` (which exists on the platform and is visible to
+all participants) and from a `Finding` (which is Vigil's internal analysis
+output and is never directly posted).
+
+---
+
+## Thread
+
+A line-anchored or PR-level comment conversation on a pull request.
+Consists of a root comment plus zero or more replies. A thread anchored
+to a specific line in the diff carries the file path and new-file line
+number; a PR-level thread carries no line position.
+
+Maps to GitHub's review thread model and to ADO's `Thread` object
+(with `threadContext` for line-anchored threads). Vigil uses a single
+internal `Thread` type for both platforms.
+
+Supported operations in Vigil: read and reply. Resolve/unresolve is
+not supported — thread resolution is managed on the platform directly.
+Replies are posted immediately (not staged in a `ReviewDraft`); only
+new threads from `QueuedComments` go through the draft submission flow.
+
+Fetched eagerly on PR open, in parallel with the diff.
+
+Distinct from a `ChallengeThread` — a `Thread` lives on the platform and
+is visible to all PR participants; a `ChallengeThread` is a private
+AI conversation inside Vigil and is never posted.
 
 ---
