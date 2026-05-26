@@ -19,13 +19,13 @@
       "repo": "vigil"
     },
     "mac": {
-      "icon": "assets/icon.icns"
+      "icon": "assets/icons/icon.icns"
     },
     "win": {
-      "icon": "assets/icon.ico"
+      "icon": "assets/icons/icon.ico"
     },
     "linux": {
-      "icon": "assets/icon.png"
+      "icon": "assets/icons/512x512.png"
     }
   },
   "packageManager": "pnpm@10.0.0",

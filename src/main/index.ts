@@ -71,23 +71,22 @@ void app.whenReady().then(() => {
     if (!icon.isEmpty()) app.dock.setIcon(icon);
   }
 
-  const mainWindow = createWindow();
+  createWindow();
 
   let updater: Updater | null = null;
   if (app.isPackaged) {
     updater = setupAutoUpdater(
-      (status) => mainWindow.webContents.send("app:updateStatus", status),
+      (status) => BrowserWindow.getAllWindows()[0]?.webContents.send("app:updateStatus", status),
       logger,
     );
     setTimeout(() => updater?.checkForUpdates(), 5_000);
   }
 
-  registerHandlers(mainWindow, tokenStore, settingsStore, logger, reviewCache, repoCache, updater);
+  registerHandlers(tokenStore, settingsStore, logger, reviewCache, repoCache, updater);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      const win = createWindow();
-      registerHandlers(win, tokenStore, settingsStore, logger, reviewCache, repoCache, null);
+      createWindow();
     }
   });
 });
