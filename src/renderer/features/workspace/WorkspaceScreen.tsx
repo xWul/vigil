@@ -1234,14 +1234,38 @@ function InlineFindingRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: SANS,
-              fontSize: 12.5,
-              color: expanded ? t.text : t.textDim,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               lineHeight: 1.5,
-              transition: "color .12s",
             }}
           >
-            {finding.title}
+            {finding.source === "ai" && (
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: t.accent,
+                  border: `0.5px solid ${t.accent}`,
+                  borderRadius: 3,
+                  padding: "1px 5px",
+                  letterSpacing: "0.06em",
+                  flexShrink: 0,
+                }}
+              >
+                AI
+              </span>
+            )}
+            <span
+              style={{
+                fontFamily: SANS,
+                fontSize: 12.5,
+                color: expanded ? t.text : t.textDim,
+                transition: "color .12s",
+              }}
+            >
+              {finding.title}
+            </span>
           </div>
           {expanded && (
             <>
