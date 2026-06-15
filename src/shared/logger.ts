@@ -11,13 +11,38 @@ function isLogLevel(s: string): s is LogLevel {
   return s in LEVEL_RANK;
 }
 
-export function redact(meta: Record<string, unknown>): Record<string, unknown> {
-  const SENSITIVE = /token|secret|key|password|pat/i;
-  const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(meta)) {
-    result[k] = SENSITIVE.test(k) ? "[redacted]" : v;
+const URL_CREDENTIAL = /(https?:\/\/)[^@/\s]+@/gi;
+const BEARER_TOKEN = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
+
+export function scrubString(s: string): string {
+  return s.replace(URL_CREDENTIAL, "$1[redacted]@").replace(BEARER_TOKEN, "$1[redacted]");
+}
+
+const SENSITIVE_KEY = /token|secret|key|password|pat/i;
+const MAX_DEPTH = 8;
+
+function walkValue(value: unknown, seen: WeakSet<object>, depth: number): unknown {
+  if (depth > MAX_DEPTH) return "[truncated]";
+  if (typeof value === "string") return scrubString(value);
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return "[circular]";
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const result = value.map((item) => walkValue(item, seen, depth + 1));
+    seen.delete(value);
+    return result;
   }
+  const obj = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    result[k] = SENSITIVE_KEY.test(k) ? "[redacted]" : walkValue(v, seen, depth + 1);
+  }
+  seen.delete(value);
   return result;
+}
+
+export function redact(meta: Record<string, unknown>): Record<string, unknown> {
+  return walkValue(meta, new WeakSet(), 0) as Record<string, unknown>;
 }
 
 export interface Logger {

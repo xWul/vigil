@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConsoleLogger, NoopLogger, redact } from "./logger.js";
+import { ConsoleLogger, NoopLogger, redact, scrubString } from "./logger.js";
 
 describe("redact()", () => {
   it("replaces values of sensitive keys with [redacted]", () => {
@@ -38,6 +38,65 @@ describe("redact()", () => {
 
   it("handles empty meta", () => {
     expect(redact({})).toEqual({});
+  });
+
+  it("redacts sensitive keys in nested objects", () => {
+    expect(redact({ session: { accessToken: "abc" } })).toEqual({
+      session: { accessToken: "[redacted]" },
+    });
+  });
+
+  it("redacts sensitive keys inside arrays of objects", () => {
+    expect(redact({ items: [{ apiKey: "k" }] })).toEqual({
+      items: [{ apiKey: "[redacted]" }],
+    });
+  });
+
+  it("scrubs URL-embedded credentials in string values", () => {
+    const result = redact({
+      message: "fatal: unable to access 'https://x-access-token:abc@github.com/a/b.git'",
+    });
+    const msg = result["message"] as string;
+    expect(msg).not.toContain("abc");
+    expect(msg).toContain("https://[redacted]@github.com/a/b.git");
+  });
+
+  it("scrubs Bearer tokens in string values", () => {
+    const result = redact({ message: "Authorization: Bearer abc.def" });
+    const msg = result["message"] as string;
+    expect(msg).not.toContain("abc.def");
+    expect(msg).toContain("Bearer [redacted]");
+  });
+
+  it("passes non-sensitive scalars through unchanged", () => {
+    expect(redact({ label: "ok", count: 42, flag: true, empty: null })).toEqual({
+      label: "ok",
+      count: 42,
+      flag: true,
+      empty: null,
+    });
+  });
+
+  it("does not throw on circular references", () => {
+    const obj: Record<string, unknown> = { x: 1 };
+    obj["self"] = obj;
+    expect(() => redact(obj)).not.toThrow();
+    const result = redact(obj);
+    expect(result["x"]).toBe(1);
+  });
+});
+
+describe("scrubString()", () => {
+  it("replaces URL userinfo credentials", () => {
+    expect(scrubString("https://user:token@host/path")).toBe("https://[redacted]@host/path");
+  });
+
+  it("replaces Bearer tokens", () => {
+    expect(scrubString("Authorization: Bearer eyJ.abc")).toBe("Authorization: Bearer [redacted]");
+  });
+
+  it("passes clean strings through unchanged", () => {
+    expect(scrubString("no secrets here")).toBe("no secrets here");
   });
 });
 
