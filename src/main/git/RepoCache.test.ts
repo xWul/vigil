@@ -3,9 +3,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { repoKey, remoteUrl, RepoCache } from "./RepoCache.js";
+import { repoKey, remoteUrl, authHeader, RepoCache } from "./RepoCache.js";
 import type { PRRef } from "../platforms/model/index.js";
 import type { AuthSession } from "../auth/AuthProvider.js";
+
+// Capture the URL passed to git.clone so the disk-safety test can assert it.
+const { cloneSpy } = vi.hoisted(() => ({
+  cloneSpy: vi.fn<(url: string, dest: string, opts: string[]) => Promise<void>>(),
+}));
+
+vi.mock("simple-git", () => ({
+  default: vi.fn(() => ({
+    clone: cloneSpy,
+    env: vi.fn(function (this: Record<string, unknown>) {
+      return this;
+    }),
+    remote: vi.fn().mockResolvedValue(""),
+    fetch: vi.fn().mockResolvedValue({}),
+    show: vi.fn().mockResolvedValue(""),
+  })),
+}));
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -31,6 +48,21 @@ const patSession: AuthSession = {
   accessToken: "pat123",
 };
 
+const adoSession: AuthSession = {
+  provider: "azure-devops",
+  accessToken: "ado_oauth_token",
+  refreshToken: "ado_refresh",
+  expiresAt: Date.now() + 3600_000,
+  displayName: "Bob",
+  upn: "bob@company.com",
+};
+
+const githubPatSession: AuthSession = {
+  provider: "pat",
+  platform: "github",
+  accessToken: "ghp_pat123",
+};
+
 // ── repoKey ───────────────────────────────────────────────────────────────────
 
 describe("repoKey", () => {
@@ -46,16 +78,42 @@ describe("repoKey", () => {
 // ── remoteUrl ─────────────────────────────────────────────────────────────────
 
 describe("remoteUrl", () => {
-  it("builds a github url with x-access-token credential", () => {
-    expect(remoteUrl(githubSession, githubRef)).toBe(
-      "https://x-access-token:ghp_token@github.com/acme/api.git",
-    );
+  it("builds a tokenless github url", () => {
+    expect(remoteUrl(githubRef)).toBe("https://github.com/acme/api.git");
   });
 
-  it("builds an azure devops url with pat credential", () => {
-    expect(remoteUrl(patSession, adoRef)).toBe(
-      "https://:pat123@dev.azure.com/myorg/myproj/_git/myrepo",
-    );
+  it("builds a tokenless azure devops url", () => {
+    expect(remoteUrl(adoRef)).toBe("https://dev.azure.com/myorg/myproj/_git/myrepo");
+  });
+
+  it("does not contain any credential pattern", () => {
+    const ghUrl = remoteUrl(githubRef);
+    const adoUrl = remoteUrl(adoRef);
+    expect(ghUrl).not.toMatch(/@/);
+    expect(adoUrl).not.toMatch(/@/);
+  });
+});
+
+// ── authHeader ────────────────────────────────────────────────────────────────
+
+describe("authHeader", () => {
+  it("github session → basic x-access-token:<token>", () => {
+    const header = authHeader(githubSession);
+    expect(header).toBe(`basic ${Buffer.from("x-access-token:ghp_token").toString("base64")}`);
+  });
+
+  it("azure-devops session → Bearer <token>", () => {
+    expect(authHeader(adoSession)).toBe("Bearer ado_oauth_token");
+  });
+
+  it("pat session (platform azure-devops) → basic :<token>", () => {
+    const header = authHeader(patSession);
+    expect(header).toBe(`basic ${Buffer.from(":pat123").toString("base64")}`);
+  });
+
+  it("pat session (platform github) → basic x-access-token:<token>", () => {
+    const header = authHeader(githubPatSession);
+    expect(header).toBe(`basic ${Buffer.from("x-access-token:ghp_pat123").toString("base64")}`);
   });
 });
 
@@ -163,5 +221,40 @@ describe("RepoCache.evict", () => {
     await cache.evict();
 
     expect(existsSync(repoDir)).toBe(true);
+  });
+});
+
+// ── disk safety: no token in URL passed to git clone ─────────────────────────
+
+describe("RepoCache disk safety", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "vigil-disksafety-test-"));
+    cloneSpy.mockReset();
+    cloneSpy.mockImplementation((_url: string, dest: string) => {
+      mkdirSync(join(dest, ".git"), { recursive: true });
+      return Promise.resolve();
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("passes a tokenless URL to git clone", async () => {
+    const cache = new RepoCache(tmpDir);
+    // @ts-expect-error — bypass git version check
+    cache.gitCheckPromise = Promise.resolve(true);
+    cache.ensureCloned(githubSession, githubRef);
+
+    await vi.waitFor(() => {
+      if (!cloneSpy.mock.calls.length) throw new Error("clone not called yet");
+    });
+
+    const [capturedUrl] = cloneSpy.mock.calls[0]!;
+    expect(capturedUrl).not.toMatch(/@/);
+    expect(capturedUrl).not.toContain("ghp_token");
+    expect(capturedUrl).toBe("https://github.com/acme/api.git");
   });
 });

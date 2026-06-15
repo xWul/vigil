@@ -15,7 +15,7 @@ import simpleGit from "simple-git";
 
 import { err, ok } from "../../shared/result.js";
 import type { Result } from "../../shared/result.js";
-import { NoopLogger } from "../../shared/logger.js";
+import { scrubString, NoopLogger } from "../../shared/logger.js";
 import type { Logger } from "../../shared/logger.js";
 import type { AuthSession } from "../auth/AuthProvider.js";
 import type { PRRef } from "../platforms/model/index.js";
@@ -54,12 +54,29 @@ export function repoKey(ref: PRRef): string {
   return repoPathSegments(ref).join("/");
 }
 
-export function remoteUrl(session: AuthSession, ref: PRRef): string {
-  const token = session.accessToken;
+export function remoteUrl(ref: PRRef): string {
   if (ref.platform === "github") {
-    return `https://x-access-token:${token}@github.com/${ref.owner}/${ref.repo}.git`;
+    return `https://github.com/${ref.owner}/${ref.repo}.git`;
   }
-  return `https://:${token}@dev.azure.com/${ref.org}/${ref.project}/_git/${ref.repo}`;
+  return `https://dev.azure.com/${ref.org}/${ref.project}/_git/${ref.repo}`;
+}
+
+export function authHeader(session: AuthSession): string {
+  if (session.provider === "azure-devops") {
+    return `Bearer ${session.accessToken}`;
+  }
+  if (session.provider === "pat" && session.platform === "azure-devops") {
+    return `basic ${Buffer.from(`:${session.accessToken}`).toString("base64")}`;
+  }
+  return `basic ${Buffer.from(`x-access-token:${session.accessToken}`).toString("base64")}`;
+}
+
+function gitAuthEnv(session: AuthSession): Record<string, string> {
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.extraHeader",
+    GIT_CONFIG_VALUE_0: `Authorization: ${authHeader(session)}`,
+  };
 }
 
 function readMeta(metaPath: string): RepoCacheMeta | null {
@@ -94,7 +111,7 @@ async function checkGitAvailable(): Promise<boolean> {
     if (!match) return false;
     const major = parseInt(match[1]!, 10);
     const minor = parseInt(match[2]!, 10);
-    return major > 2 || (major === 2 && minor >= 22);
+    return major > 2 || (major === 2 && minor >= 31);
   } catch {
     return false;
   }
@@ -126,7 +143,7 @@ export class RepoCache {
       this.gitCheckPromise = checkGitAvailable().then((available) => {
         if (!available) {
           this.logger.warn("git.unavailable", {
-            message: "git >= 2.22 not found; local repo cache disabled",
+            message: "git >= 2.31 not found; local repo cache disabled",
           });
         }
         return available;
@@ -165,7 +182,7 @@ export class RepoCache {
         : this._clone(session, ref, repoDir, metaPath)
     )
       .catch((e) => {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = scrubString(e instanceof Error ? e.message : String(e));
         this.logger.warn("git.cache.error", { key, message });
         this.emit({ repoKey: key, status: "error", error: message });
       })
@@ -187,8 +204,8 @@ export class RepoCache {
     this.logger.info("git.cache.clone.start", { key });
 
     mkdirSync(dirname(repoDir), { recursive: true });
-    const url = remoteUrl(session, ref);
-    await simpleGit().clone(url, repoDir, ["--filter=blob:none", "--no-checkout"]);
+    const git = simpleGit().env({ ...process.env, ...gitAuthEnv(session) });
+    await git.clone(remoteUrl(ref), repoDir, ["--filter=blob:none", "--no-checkout"]);
 
     writeMeta(metaPath, { lastFetchAt: Date.now() });
     this.logger.info("git.cache.clone.done", { key });
@@ -205,9 +222,8 @@ export class RepoCache {
     this.emit({ repoKey: key, status: "fetching" });
     this.logger.info("git.cache.fetch.start", { key });
 
-    const url = remoteUrl(session, ref);
-    const git = simpleGit(repoDir);
-    await git.remote(["set-url", "origin", url]);
+    const git = simpleGit(repoDir).env({ ...process.env, ...gitAuthEnv(session) });
+    await git.remote(["set-url", "origin", remoteUrl(ref)]);
     await git.fetch(["--filter=blob:none"]);
 
     writeMeta(metaPath, { lastFetchAt: Date.now() });
