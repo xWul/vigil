@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Updated dev tooling (vitest, vite) past known security advisories affecting the local dev server.
+- Log redaction now covers nested objects and credentials embedded in strings (URLs, Bearer headers).
 
 ### Fixed
 
