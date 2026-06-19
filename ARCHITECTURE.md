@@ -1,6 +1,6 @@
 # Architecture — Vigil
 
-> **Status:** Living document. Last updated 2026-05-11.
+> **Status:** Living document. Last updated 2026-05-19.
 > **Audience:** Engineers (including future-me and AI coding assistants) working on Vigil.
 > **Companion docs:** [`CLAUDE.md`](./CLAUDE.md) for AI coding assistant instructions, [`docs/adr/`](./docs/adr/) for individual decisions, [`docs/specs/`](./docs/specs/) for per-feature specifications.
 
@@ -367,7 +367,13 @@ pnpm typecheck
 
 ### Auto-update
 
-Out of scope for v1. For an open-source portfolio project, GitHub Releases is sufficient; users download new versions manually. If the project grows, electron-updater is the standard choice.
+Vigil uses `electron-updater` backed by GitHub Releases (`xWul/vigil`). The updater
+is initialised in `src/main/updater.ts` and only activates in packaged builds
+(`app.isPackaged`). It checks for updates 5 s after startup, downloads silently, and
+installs on next quit. The renderer receives progress via the `app:updateStatus` push
+channel and can trigger a manual check (`app:checkForUpdate`) or immediate install
+(`app:installUpdate`). Code signing is required for macOS gatekeeper approval of
+auto-updates; see [`docs/build-and-release.md`](./docs/build-and-release.md) (TBD).
 
 ---
 

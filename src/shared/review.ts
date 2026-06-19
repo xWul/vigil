@@ -10,7 +10,8 @@ export type FindingPass =
   | "debug-artifacts"
   | "type-safety"
   | "change-classification"
-  | "regression";
+  | "regression"
+  | "architecture";
 
 export interface Finding {
   readonly severity: Severity;

@@ -1,6 +1,9 @@
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { CodeAnalyzer, Finding, ReviewContext, ReviewError } from "../CodeAnalyzer.js";
+import { detectLanguage } from "../language.js";
 
 interface Pattern {
   regex: RegExp;
@@ -47,13 +50,23 @@ const PATTERNS: Pattern[] = [
   },
 ];
 
+type TypeSafetyConfig = ResolvedAnalyzerConfig["analyzers"]["typeSafety"];
+
 export class TypeSafetyAnalyzer implements CodeAnalyzer {
   readonly id = "type-safety" as const;
+  private readonly cfg: TypeSafetyConfig;
+
+  constructor(config?: TypeSafetyConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.typeSafety;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
+
     const findings: Finding[] = [];
 
     for (const file of context.diff.files) {
+      if (detectLanguage(file.newPath) !== "typescript") continue;
       for (const hunk of file.hunks) {
         for (const line of hunk.lines) {
           if (line.kind !== "added") continue;

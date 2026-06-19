@@ -8,17 +8,42 @@ import type {
   NewReview,
   PullRequest,
   ReviewVerdict,
+  Thread,
 } from "../../../shared/model/index.js";
 import type { Finding, FindingPass } from "../../../shared/review.js";
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG, resolveAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { api } from "../../api.js";
+import {
+  useDiff,
+  useSettings,
+  useCachedReview,
+  useInvalidateReview,
+  useThreads,
+  queryKeys,
+} from "../../lib/queries.js";
 import { TOKENS, SANS, MONO } from "../../shared/theme.js";
 import type { TabId } from "./AnalysisTabs.js";
-import { TabBar, OverviewTab, RisksTab, SemanticTab, ArchTab } from "./AnalysisTabs.js";
+import {
+  TabBar,
+  AnalysisProgressBar,
+  OverviewSkeleton,
+  OverviewTab,
+  RisksTab,
+  SemanticTab,
+  ArchTab,
+} from "./AnalysisTabs.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type PassPhase = { phase: "running" } | { phase: "done"; count: number };
 type PassMap = Partial<Record<FindingPass, PassPhase>>;
+
+type QueuedComment =
+  | { kind: "from-finding"; findingTitle: string; body: string; path: string; line: number }
+  | { kind: "freeform"; body: string; path: string; line: number };
 
 interface ConvoMessage {
   role: "user" | "assistant";
@@ -132,6 +157,765 @@ function KbdHint({ children, dark }: { children: React.ReactNode; dark?: boolean
     >
       {children}
     </span>
+  );
+}
+
+// ── HelpOverlay ───────────────────────────────────────────────────────────────
+
+const WORKSPACE_SHORTCUTS = [
+  { keys: ["Tab"], label: "Next tab" },
+  { keys: ["⇧", "Tab"], label: "Previous tab" },
+  { keys: ["j", "k"], label: "Next / previous file" },
+  { keys: ["n", "p"], label: "Next / previous finding" },
+  { keys: ["↵"], label: "Expand finding detail" },
+  { keys: ["a"], label: "Add finding to review" },
+  { keys: ["x"], label: "Suppress focused finding" },
+  { keys: ["m"], label: "Approve PR" },
+  { keys: ["r"], label: "Re-run review" },
+  { keys: ["Esc"], label: "Dismiss / go back" },
+  { keys: ["?"], label: "Show this overlay" },
+  { keys: [","], label: "Analyzer settings" },
+];
+
+function HelpOverlay({ onClose }: { onClose: () => void }) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 20,
+        background: "rgba(10,9,8,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 460,
+          background: t.bg,
+          border: `0.5px solid ${t.border}`,
+          borderRadius: 12,
+          padding: "28px 32px",
+          fontFamily: SANS,
+          color: t.text,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 22,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 500 }}>Keyboard shortcuts</span>
+          <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>
+            press ? to toggle
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            rowGap: 12,
+            columnGap: 24,
+          }}
+        >
+          {WORKSPACE_SHORTCUTS.map((s, i) => (
+            <div key={i} style={{ display: "contents" }}>
+              <span style={{ fontSize: 13, color: t.textDim }}>{s.label}</span>
+              <span style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                {s.keys.map((k, j) => (
+                  <KbdHint key={j}>{k}</KbdHint>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AnalyzerSettingsOverlay ───────────────────────────────────────────────────
+
+type SettingsDraft = ResolvedAnalyzerConfig;
+
+function toMinimalConfig(cfg: ResolvedAnalyzerConfig): string {
+  const d = DEFAULT_ANALYZER_CONFIG;
+  const c = cfg.analyzers;
+  const dc = d.analyzers;
+
+  function diff<T>(val: T, def: T): T | undefined {
+    return val !== def ? val : undefined;
+  }
+
+  const det = c.regression.detectors;
+  const ddet = dc.regression.detectors;
+  const detectors = {
+    ...(det.conditionChanges !== ddet.conditionChanges && {
+      conditionChanges: det.conditionChanges,
+    }),
+    ...(det.errorHandling !== ddet.errorHandling && { errorHandling: det.errorHandling }),
+    ...(det.numericChanges !== ddet.numericChanges && { numericChanges: det.numericChanges }),
+    ...(det.asyncPatterns !== ddet.asyncPatterns && { asyncPatterns: det.asyncPatterns }),
+    ...(det.sideEffects !== ddet.sideEffects && { sideEffects: det.sideEffects }),
+  };
+
+  const analyzers = {
+    ...((c.complexity.enabled !== dc.complexity.enabled ||
+      c.complexity.threshold !== dc.complexity.threshold) && {
+      complexity: {
+        ...(diff(c.complexity.enabled, dc.complexity.enabled) !== undefined && {
+          enabled: c.complexity.enabled,
+        }),
+        ...(diff(c.complexity.threshold, dc.complexity.threshold) !== undefined && {
+          threshold: c.complexity.threshold,
+        }),
+      },
+    }),
+    ...((c.smells.enabled !== dc.smells.enabled ||
+      c.smells.maxFunctionLines !== dc.smells.maxFunctionLines ||
+      c.smells.maxParams !== dc.smells.maxParams ||
+      c.smells.maxNesting !== dc.smells.maxNesting) && {
+      smells: {
+        ...(diff(c.smells.enabled, dc.smells.enabled) !== undefined && {
+          enabled: c.smells.enabled,
+        }),
+        ...(diff(c.smells.maxFunctionLines, dc.smells.maxFunctionLines) !== undefined && {
+          maxFunctionLines: c.smells.maxFunctionLines,
+        }),
+        ...(diff(c.smells.maxParams, dc.smells.maxParams) !== undefined && {
+          maxParams: c.smells.maxParams,
+        }),
+        ...(diff(c.smells.maxNesting, dc.smells.maxNesting) !== undefined && {
+          maxNesting: c.smells.maxNesting,
+        }),
+      },
+    }),
+    ...((c.duplication.enabled !== dc.duplication.enabled ||
+      c.duplication.minBlockLines !== dc.duplication.minBlockLines) && {
+      duplication: {
+        ...(diff(c.duplication.enabled, dc.duplication.enabled) !== undefined && {
+          enabled: c.duplication.enabled,
+        }),
+        ...(diff(c.duplication.minBlockLines, dc.duplication.minBlockLines) !== undefined && {
+          minBlockLines: c.duplication.minBlockLines,
+        }),
+      },
+    }),
+    ...((c.regression.enabled !== dc.regression.enabled || Object.keys(detectors).length > 0) && {
+      regression: {
+        ...(diff(c.regression.enabled, dc.regression.enabled) !== undefined && {
+          enabled: c.regression.enabled,
+        }),
+        ...(Object.keys(detectors).length > 0 && { detectors }),
+      },
+    }),
+    ...(c.debugArtifacts.enabled !== dc.debugArtifacts.enabled && {
+      debugArtifacts: { enabled: c.debugArtifacts.enabled },
+    }),
+    ...(c.typeSafety.enabled !== dc.typeSafety.enabled && {
+      typeSafety: { enabled: c.typeSafety.enabled },
+    }),
+    ...((c.changeClassification.enabled !== dc.changeClassification.enabled ||
+      c.changeClassification.intentMismatch !== dc.changeClassification.intentMismatch) && {
+      changeClassification: {
+        ...(diff(c.changeClassification.enabled, dc.changeClassification.enabled) !== undefined && {
+          enabled: c.changeClassification.enabled,
+        }),
+        ...(diff(c.changeClassification.intentMismatch, dc.changeClassification.intentMismatch) !==
+          undefined && { intentMismatch: c.changeClassification.intentMismatch }),
+      },
+    }),
+    ...(c.architecture.enabled !== dc.architecture.enabled && {
+      architecture: { enabled: c.architecture.enabled },
+    }),
+  };
+
+  const out = {
+    ...(Object.keys(analyzers).length > 0 && { analyzers }),
+    ...(cfg.maxFindingsPerAnalyzer !== d.maxFindingsPerAnalyzer && {
+      maxFindingsPerAnalyzer: cfg.maxFindingsPerAnalyzer,
+    }),
+  };
+
+  return JSON.stringify(out, null, 2);
+}
+
+function SettingsToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        cursor: "pointer",
+        padding: "6px 0",
+      }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 13, color: t.textDim }}>{label}</span>
+      <div
+        onClick={() => onChange(!checked)}
+        style={{
+          width: 36,
+          height: 20,
+          borderRadius: 10,
+          background: checked ? TOKENS.dark.accent : TOKENS.dark.border,
+          position: "relative",
+          transition: "background 0.15s",
+          flexShrink: 0,
+          cursor: "pointer",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 3,
+            left: checked ? 19 : 3,
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            background: "#fff",
+            transition: "left 0.15s",
+          }}
+        />
+      </div>
+    </label>
+  );
+}
+
+function SettingsNumber({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "6px 0",
+      }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 13, color: t.textDim }}>{label}</span>
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isInteger(n) && n >= min && n <= max) onChange(n);
+        }}
+        style={{
+          width: 64,
+          background: t.bg,
+          border: `0.5px solid ${t.border}`,
+          borderRadius: 6,
+          padding: "4px 8px",
+          fontFamily: MONO,
+          fontSize: 12,
+          color: t.text,
+          textAlign: "right",
+        }}
+      />
+    </div>
+  );
+}
+
+function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const t = TOKENS.dark;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          color: t.textFaint,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          marginBottom: 8,
+          paddingBottom: 6,
+          borderBottom: `0.5px solid ${t.border}`,
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AnalyzerSettingsOverlay({
+  prRef,
+  onClose,
+  onSaved,
+}: {
+  prRef: PullRequest["ref"];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const t = TOKENS.dark;
+  const [draft, setDraft] = useState<SettingsDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.invoke("settings:getAnalyzerConfig", prRef).then((result) => {
+      setDraft(resolveAnalyzerConfig(result.ok ? result.value : {}));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function updateDraft(updater: (d: SettingsDraft) => SettingsDraft) {
+    setDraft((prev) => updater(prev ?? DEFAULT_ANALYZER_CONFIG));
+  }
+
+  function toggleEnabled(analyzer: keyof ResolvedAnalyzerConfig["analyzers"], value: boolean) {
+    updateDraft((d) => ({
+      ...d,
+      analyzers: { ...d.analyzers, [analyzer]: { ...d.analyzers[analyzer], enabled: value } },
+    }));
+  }
+
+  function handleExport() {
+    if (!draft) return;
+    const json = toMinimalConfig(draft);
+    void navigator.clipboard.writeText(json).then(() => {
+      setToast(
+        json === "{}"
+          ? "All settings are at defaults — nothing to export."
+          : "Copied .vigilrc to clipboard.",
+      );
+      setTimeout(() => setToast(null), 3000);
+    });
+  }
+
+  async function handleSave() {
+    if (!draft) return;
+    setSaving(true);
+    const result = await api.invoke("settings:setAnalyzerConfig", prRef, draft);
+    setSaving(false);
+    if (result.ok) {
+      setToast("Settings saved. Re-run the review to apply changes.");
+      setTimeout(() => {
+        setToast(null);
+        onSaved();
+      }, 1500);
+    } else {
+      setToast("Failed to save settings.");
+      setTimeout(() => setToast(null), 3000);
+    }
+  }
+
+  if (!draft) {
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 20,
+          background: "rgba(10,9,8,0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{ fontFamily: MONO, fontSize: 12, color: t.textFaint }}>Loading…</span>
+      </div>
+    );
+  }
+
+  const cfg = draft;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 20,
+        background: "rgba(10,9,8,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 520,
+          maxHeight: "80vh",
+          display: "flex",
+          flexDirection: "column",
+          background: t.bg,
+          border: `0.5px solid ${t.border}`,
+          borderRadius: 12,
+          fontFamily: SANS,
+          color: t.text,
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "20px 24px 16px",
+            borderBottom: `0.5px solid ${t.border}`,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 500 }}>Analyzer settings</span>
+          <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>
+            per-repo · applies on next re-run
+          </span>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+          <SettingsSection title="Complexity">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.complexity.enabled}
+              onChange={(v) => toggleEnabled("complexity", v)}
+            />
+            {cfg.analyzers.complexity.enabled && (
+              <SettingsNumber
+                label="Cyclomatic complexity threshold"
+                value={cfg.analyzers.complexity.threshold}
+                min={3}
+                max={50}
+                onChange={(v) =>
+                  updateDraft((d) => ({
+                    ...d,
+                    analyzers: {
+                      ...d.analyzers,
+                      complexity: { ...d.analyzers.complexity, threshold: v },
+                    },
+                  }))
+                }
+              />
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Code smells">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.smells.enabled}
+              onChange={(v) => toggleEnabled("smells", v)}
+            />
+            {cfg.analyzers.smells.enabled && (
+              <>
+                <SettingsNumber
+                  label="Max function lines"
+                  value={cfg.analyzers.smells.maxFunctionLines}
+                  min={10}
+                  max={500}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        smells: { ...d.analyzers.smells, maxFunctionLines: v },
+                      },
+                    }))
+                  }
+                />
+                <SettingsNumber
+                  label="Max parameters"
+                  value={cfg.analyzers.smells.maxParams}
+                  min={1}
+                  max={20}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        smells: { ...d.analyzers.smells, maxParams: v },
+                      },
+                    }))
+                  }
+                />
+                <SettingsNumber
+                  label="Max nesting depth"
+                  value={cfg.analyzers.smells.maxNesting}
+                  min={1}
+                  max={10}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        smells: { ...d.analyzers.smells, maxNesting: v },
+                      },
+                    }))
+                  }
+                />
+              </>
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Duplication">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.duplication.enabled}
+              onChange={(v) => toggleEnabled("duplication", v)}
+            />
+            {cfg.analyzers.duplication.enabled && (
+              <SettingsNumber
+                label="Min duplicate block lines"
+                value={cfg.analyzers.duplication.minBlockLines}
+                min={3}
+                max={30}
+                onChange={(v) =>
+                  updateDraft((d) => ({
+                    ...d,
+                    analyzers: {
+                      ...d.analyzers,
+                      duplication: { ...d.analyzers.duplication, minBlockLines: v },
+                    },
+                  }))
+                }
+              />
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Regression detection">
+            <SettingsToggle
+              label="Enabled"
+              checked={cfg.analyzers.regression.enabled}
+              onChange={(v) => toggleEnabled("regression", v)}
+            />
+            {cfg.analyzers.regression.enabled && (
+              <>
+                <SettingsToggle
+                  label="Condition changes"
+                  checked={cfg.analyzers.regression.detectors.conditionChanges}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, conditionChanges: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Error handling changes"
+                  checked={cfg.analyzers.regression.detectors.errorHandling}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, errorHandling: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Numeric constant changes"
+                  checked={cfg.analyzers.regression.detectors.numericChanges}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, numericChanges: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Async pattern changes"
+                  checked={cfg.analyzers.regression.detectors.asyncPatterns}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, asyncPatterns: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+                <SettingsToggle
+                  label="Side-effect additions"
+                  checked={cfg.analyzers.regression.detectors.sideEffects}
+                  onChange={(v) =>
+                    updateDraft((d) => ({
+                      ...d,
+                      analyzers: {
+                        ...d.analyzers,
+                        regression: {
+                          ...d.analyzers.regression,
+                          detectors: { ...d.analyzers.regression.detectors, sideEffects: v },
+                        },
+                      },
+                    }))
+                  }
+                />
+              </>
+            )}
+          </SettingsSection>
+
+          <SettingsSection title="Other analyzers">
+            <SettingsToggle
+              label="Debug artifacts"
+              checked={cfg.analyzers.debugArtifacts.enabled}
+              onChange={(v) => toggleEnabled("debugArtifacts", v)}
+            />
+            <SettingsToggle
+              label="Type safety"
+              checked={cfg.analyzers.typeSafety.enabled}
+              onChange={(v) => toggleEnabled("typeSafety", v)}
+            />
+            <SettingsToggle
+              label="Change classification"
+              checked={cfg.analyzers.changeClassification.enabled}
+              onChange={(v) => toggleEnabled("changeClassification", v)}
+            />
+            {cfg.analyzers.changeClassification.enabled && (
+              <SettingsToggle
+                label="Intent mismatch warning"
+                checked={cfg.analyzers.changeClassification.intentMismatch}
+                onChange={(v) =>
+                  updateDraft((d) => ({
+                    ...d,
+                    analyzers: {
+                      ...d.analyzers,
+                      changeClassification: {
+                        ...d.analyzers.changeClassification,
+                        intentMismatch: v,
+                      },
+                    },
+                  }))
+                }
+              />
+            )}
+            <SettingsToggle
+              label="Architecture (circular imports)"
+              checked={cfg.analyzers.architecture.enabled}
+              onChange={(v) => toggleEnabled("architecture", v)}
+            />
+          </SettingsSection>
+
+          <SettingsSection title="Limits">
+            <SettingsNumber
+              label="Max findings per analyzer"
+              value={cfg.maxFindingsPerAnalyzer}
+              min={1}
+              max={50}
+              onChange={(v) => updateDraft((d) => ({ ...d, maxFindingsPerAnalyzer: v }))}
+            />
+          </SettingsSection>
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "14px 24px",
+            borderTop: `0.5px solid ${t.border}`,
+            flexShrink: 0,
+          }}
+        >
+          {toast && (
+            <span style={{ fontFamily: MONO, fontSize: 11, color: t.textDim, flex: 1 }}>
+              {toast}
+            </span>
+          )}
+          {!toast && <div style={{ flex: 1 }} />}
+          <button
+            onClick={() => updateDraft(() => DEFAULT_ANALYZER_CONFIG)}
+            style={{
+              background: "transparent",
+              border: 0,
+              padding: "8px 12px",
+              fontFamily: SANS,
+              fontSize: 13,
+              color: t.textFaint,
+              cursor: "pointer",
+            }}
+          >
+            Restore defaults
+          </button>
+          <button
+            onClick={handleExport}
+            style={{
+              background: "transparent",
+              border: `0.5px solid ${t.border}`,
+              padding: "8px 12px",
+              borderRadius: 7,
+              fontFamily: SANS,
+              fontSize: 13,
+              color: t.textDim,
+              cursor: "pointer",
+            }}
+          >
+            Copy .vigilrc
+          </button>
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving}
+            style={{
+              background: t.accent,
+              border: 0,
+              padding: "8px 18px",
+              borderRadius: 7,
+              fontFamily: SANS,
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#0c1416",
+              cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -428,12 +1212,14 @@ function InlineFindingRow({
   expanded,
   onToggle,
   onAskVigil,
+  onQueueComment,
   hasAI,
 }: {
   finding: Finding;
   expanded: boolean;
   onToggle: () => void;
   onAskVigil: () => void;
+  onQueueComment: () => void;
   hasAI: boolean;
 }) {
   const t = TOKENS.dark;
@@ -464,14 +1250,38 @@ function InlineFindingRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: SANS,
-              fontSize: 12.5,
-              color: expanded ? t.text : t.textDim,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               lineHeight: 1.5,
-              transition: "color .12s",
             }}
           >
-            {finding.title}
+            {finding.source === "ai" && (
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: t.accent,
+                  border: `0.5px solid ${t.accent}`,
+                  borderRadius: 3,
+                  padding: "1px 5px",
+                  letterSpacing: "0.06em",
+                  flexShrink: 0,
+                }}
+              >
+                AI
+              </span>
+            )}
+            <span
+              style={{
+                fontFamily: SANS,
+                fontSize: 12.5,
+                color: expanded ? t.text : t.textDim,
+                transition: "color .12s",
+              }}
+            >
+              {finding.title}
+            </span>
           </div>
           {expanded && (
             <>
@@ -526,6 +1336,25 @@ function InlineFindingRow({
                     Ask Vigil about this
                   </button>
                 )}
+                {finding.lines !== null && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onQueueComment();
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      color: t.textDim,
+                      fontFamily: SANS,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Queue as comment
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -561,6 +1390,339 @@ function InlineFindingRow({
       </div>
     </div>
   );
+}
+
+function InlineThread({
+  thread,
+  expanded,
+  onToggle,
+  onReply,
+}: {
+  thread: Thread;
+  expanded: boolean;
+  onToggle: () => void;
+  onReply: (body: string) => Promise<void>;
+}) {
+  const t = TOKENS.dark;
+  const [replyBody, setReplyBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmitReply() {
+    const body = replyBody.trim();
+    if (!body || submitting) return;
+    setSubmitting(true);
+    await onReply(body);
+    setReplyBody("");
+    setSubmitting(false);
+  }
+
+  const rootComment = thread.comments[0];
+  if (!rootComment) return null;
+
+  return (
+    <div
+      style={{
+        padding: "8px 18px 8px 100px",
+        borderTop: `0.5px solid ${t.border}`,
+        borderBottom: expanded ? `0.5px solid ${t.border}` : undefined,
+        background: expanded ? "rgba(255,255,255,0.012)" : "transparent",
+        cursor: expanded ? "default" : "pointer",
+        opacity: thread.resolved ? 0.5 : 1,
+      }}
+      onClick={expanded ? undefined : onToggle}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontSize: 12, flexShrink: 0, marginTop: 2, color: t.textFaint }}>💬</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: SANS, fontSize: 12, color: t.textDim, fontWeight: 500 }}>
+              {rootComment.author.login}
+            </span>
+            {thread.resolved && (
+              <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>resolved</span>
+            )}
+            {!expanded && (
+              <span
+                style={{
+                  fontFamily: SANS,
+                  fontSize: 12,
+                  color: t.textFaint,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap" as const,
+                  flex: 1,
+                }}
+              >
+                {rootComment.body}
+              </span>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                color: t.textFaint,
+                cursor: "pointer",
+                fontFamily: MONO,
+                fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
+              {expanded
+                ? "↑"
+                : `${thread.comments.length} comment${thread.comments.length !== 1 ? "s" : ""}`}
+            </button>
+          </div>
+          {expanded && (
+            <div style={{ marginTop: 6 }}>
+              {thread.comments.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    marginBottom: 10,
+                    paddingLeft: 8,
+                    borderLeft: `2px solid ${t.border}`,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 6, marginBottom: 3 }}>
+                    <span
+                      style={{
+                        fontFamily: SANS,
+                        fontSize: 11.5,
+                        color: t.textDim,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {c.author.login}
+                    </span>
+                    <span style={{ fontFamily: MONO, fontSize: 10.5, color: t.textFaint }}>
+                      {formatRelativeTime(c.createdAt)}
+                    </span>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontFamily: SANS,
+                      fontSize: 12.5,
+                      color: t.text,
+                      lineHeight: 1.55,
+                      whiteSpace: "pre-wrap" as const,
+                    }}
+                  >
+                    {c.body}
+                  </p>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <textarea
+                  value={replyBody}
+                  onChange={(e) => setReplyBody(e.target.value)}
+                  placeholder="Reply…"
+                  rows={2}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      void handleSubmitReply();
+                    }
+                    e.stopPropagation();
+                  }}
+                  style={{
+                    flex: 1,
+                    fontFamily: SANS,
+                    fontSize: 12,
+                    color: t.text,
+                    background: t.surface,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 6,
+                    padding: "5px 8px",
+                    resize: "vertical" as const,
+                    outline: "none",
+                    boxSizing: "border-box" as const,
+                  }}
+                />
+                <button
+                  onClick={() => void handleSubmitReply()}
+                  disabled={!replyBody.trim() || submitting}
+                  style={{
+                    alignSelf: "flex-end",
+                    fontFamily: SANS,
+                    fontSize: 12,
+                    color: !replyBody.trim() || submitting ? t.textFaint : t.bg,
+                    background: !replyBody.trim() || submitting ? t.surface : t.accent,
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "6px 14px",
+                    cursor: !replyBody.trim() || submitting ? "default" : "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  {submitting ? "…" : "Reply"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingComment({
+  comment,
+  onRemove,
+  onBodyChange,
+}: {
+  comment: QueuedComment;
+  onRemove: () => void;
+  onBodyChange: (body: string) => void;
+}) {
+  const t = TOKENS.dark;
+  return (
+    <div
+      style={{
+        padding: "8px 18px 8px 100px",
+        borderTop: `0.5px solid ${t.accent}33`,
+        borderBottom: `0.5px solid ${t.accent}33`,
+        background: `${t.accent}08`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontSize: 12, flexShrink: 0, marginTop: 2, color: t.accent }}>◌</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: t.accent }}>pending</span>
+            {comment.kind === "from-finding" && (
+              <span style={{ fontFamily: MONO, fontSize: 10, color: t.textFaint }}>
+                {comment.findingTitle}
+              </span>
+            )}
+            <button
+              onClick={onRemove}
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                color: t.textFaint,
+                cursor: "pointer",
+                fontFamily: MONO,
+                fontSize: 11,
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <textarea
+            value={comment.body}
+            onChange={(e) => onBodyChange(e.target.value)}
+            rows={2}
+            onKeyDown={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              fontFamily: SANS,
+              fontSize: 12,
+              color: t.text,
+              background: t.surface,
+              border: `1px solid ${t.accent}44`,
+              borderRadius: 6,
+              padding: "5px 8px",
+              resize: "vertical" as const,
+              outline: "none",
+              boxSizing: "border-box" as const,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FreeformCompose({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (body: string) => void;
+  onCancel: () => void;
+}) {
+  const t = TOKENS.dark;
+  const [body, setBody] = useState("");
+  return (
+    <div
+      style={{
+        padding: "8px 18px 8px 100px",
+        borderTop: `0.5px solid ${t.border}`,
+        background: t.surface,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8 }}>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Add a comment on this line… (⌘↵ to confirm, Esc to cancel)"
+          rows={2}
+          autoFocus
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              if (body.trim()) onSubmit(body.trim());
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          style={{
+            flex: 1,
+            fontFamily: SANS,
+            fontSize: 12,
+            color: t.text,
+            background: t.bg,
+            border: `1px solid ${t.border}`,
+            borderRadius: 6,
+            padding: "5px 8px",
+            resize: "vertical" as const,
+            outline: "none",
+            boxSizing: "border-box" as const,
+          }}
+        />
+        <button
+          onClick={() => {
+            if (body.trim()) onSubmit(body.trim());
+          }}
+          style={{
+            alignSelf: "flex-end",
+            fontFamily: SANS,
+            fontSize: 12,
+            color: !body.trim() ? t.textFaint : t.bg,
+            background: !body.trim() ? t.surface : t.accent,
+            border: "none",
+            borderRadius: 6,
+            padding: "6px 14px",
+            cursor: !body.trim() ? "default" : "pointer",
+            flexShrink: 0,
+          }}
+        >
+          Queue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatRelativeTime(date: Date): string {
+  const ms = Date.now() - date.getTime();
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function DiffRow({ line }: { line: DiffLine }) {
@@ -641,7 +1803,20 @@ function HunkBlock({
   onToggleCollapse,
   onToggleFinding,
   onAskVigil,
+  onQueueFinding,
   hasAI,
+  threadsByLine,
+  pendingByLine,
+  expandedThreadKeys,
+  onToggleThread,
+  onReplyToThread,
+  composeLineKey,
+  onOpenCompose,
+  onSubmitFreeform,
+  onCancelCompose,
+  onRemovePending,
+  onPendingBodyChange,
+  showResolved,
 }: {
   hunk: Hunk;
   file: FileDiff;
@@ -651,7 +1826,20 @@ function HunkBlock({
   onToggleCollapse: () => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
+  onQueueFinding: (f: Finding) => void;
   hasAI: boolean;
+  threadsByLine: Map<string, Thread[]>;
+  pendingByLine: Map<string, QueuedComment[]>;
+  expandedThreadKeys: Set<string>;
+  onToggleThread: (threadId: string) => void;
+  onReplyToThread: (threadId: string, body: string) => Promise<void>;
+  composeLineKey: string | null;
+  onOpenCompose: (lineKey: string) => void;
+  onSubmitFreeform: (lineKey: string, body: string) => void;
+  onCancelCompose: () => void;
+  onRemovePending: (lineKey: string, idx: number) => void;
+  onPendingBodyChange: (lineKey: string, idx: number, body: string) => void;
+  showResolved: boolean;
 }) {
   const t = TOKENS.dark;
   const header = `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@`;
@@ -699,10 +1887,12 @@ function HunkBlock({
       </div>
       {!collapsed &&
         hunk.lines.map((line, i) => {
-          const lineFindings =
-            line.newLine !== null
-              ? (findingsByLine.get(`${file.newPath}:${line.newLine}`) ?? [])
-              : [];
+          const lineKey = line.newLine !== null ? `${file.newPath}:${line.newLine}` : null;
+          const lineFindings = lineKey ? (findingsByLine.get(lineKey) ?? []) : [];
+          const lineThreads = lineKey
+            ? (threadsByLine.get(lineKey) ?? []).filter((t) => showResolved || !t.resolved)
+            : [];
+          const linePending = lineKey ? (pendingByLine.get(lineKey) ?? []) : [];
           const domId = line.newLine !== null ? lineId(file.newPath, line.newLine) : undefined;
           return (
             <div key={i} id={domId}>
@@ -716,10 +1906,66 @@ function HunkBlock({
                     expanded={expandedKeys.has(key)}
                     onToggle={() => onToggleFinding(key)}
                     onAskVigil={() => onAskVigil(f)}
+                    onQueueComment={() => onQueueFinding(f)}
                     hasAI={hasAI}
                   />
                 );
               })}
+              {lineThreads.map((thread) => (
+                <InlineThread
+                  key={thread.id}
+                  thread={thread}
+                  expanded={expandedThreadKeys.has(thread.id)}
+                  onToggle={() => onToggleThread(thread.id)}
+                  onReply={(body) => onReplyToThread(thread.id, body)}
+                />
+              ))}
+              {linePending.map((pending, idx) => (
+                <PendingComment
+                  key={idx}
+                  comment={pending}
+                  onRemove={() => lineKey && onRemovePending(lineKey, idx)}
+                  onBodyChange={(body) => lineKey && onPendingBodyChange(lineKey, idx, body)}
+                />
+              ))}
+              {lineKey && composeLineKey === lineKey && (
+                <FreeformCompose
+                  onSubmit={(body) => onSubmitFreeform(lineKey, body)}
+                  onCancel={onCancelCompose}
+                />
+              )}
+              {lineKey && line.kind !== "removed" && composeLineKey !== lineKey && (
+                <div
+                  style={{
+                    padding: "0 18px 0 100px",
+                    height: 0,
+                    overflow: "visible",
+                  }}
+                >
+                  <button
+                    onClick={() => onOpenCompose(lineKey)}
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      color: TOKENS.dark.textFaint,
+                      cursor: "pointer",
+                      fontSize: 11,
+                      opacity: 0,
+                      transition: "opacity 0.1s",
+                    }}
+                    onMouseEnter={(e) =>
+                      ((e.currentTarget as HTMLButtonElement).style.opacity = "1")
+                    }
+                    onMouseLeave={(e) =>
+                      ((e.currentTarget as HTMLButtonElement).style.opacity = "0")
+                    }
+                    title="Add a comment (i)"
+                  >
+                    + comment
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -735,7 +1981,20 @@ function FileSection({
   onToggleHunk,
   onToggleFinding,
   onAskVigil,
+  onQueueFinding,
   hasAI,
+  threadsByLine,
+  pendingByLine,
+  expandedThreadKeys,
+  onToggleThread,
+  onReplyToThread,
+  composeLineKey,
+  onOpenCompose,
+  onSubmitFreeform,
+  onCancelCompose,
+  onRemovePending,
+  onPendingBodyChange,
+  showResolved,
 }: {
   file: FileDiff;
   findingsByLine: Map<string, Finding[]>;
@@ -744,7 +2003,20 @@ function FileSection({
   onToggleHunk: (key: string) => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
+  onQueueFinding: (f: Finding) => void;
   hasAI: boolean;
+  threadsByLine: Map<string, Thread[]>;
+  pendingByLine: Map<string, QueuedComment[]>;
+  expandedThreadKeys: Set<string>;
+  onToggleThread: (threadId: string) => void;
+  onReplyToThread: (threadId: string, body: string) => Promise<void>;
+  composeLineKey: string | null;
+  onOpenCompose: (lineKey: string) => void;
+  onSubmitFreeform: (lineKey: string, body: string) => void;
+  onCancelCompose: () => void;
+  onRemovePending: (lineKey: string, idx: number) => void;
+  onPendingBodyChange: (lineKey: string, idx: number, body: string) => void;
+  showResolved: boolean;
 }) {
   const t = TOKENS.dark;
   const adds = file.hunks.reduce((s, h) => s + h.lines.filter((l) => l.kind === "added").length, 0);
@@ -810,7 +2082,20 @@ function FileSection({
             onToggleCollapse={() => onToggleHunk(key)}
             onToggleFinding={onToggleFinding}
             onAskVigil={onAskVigil}
+            onQueueFinding={onQueueFinding}
             hasAI={hasAI}
+            threadsByLine={threadsByLine}
+            pendingByLine={pendingByLine}
+            expandedThreadKeys={expandedThreadKeys}
+            onToggleThread={onToggleThread}
+            onReplyToThread={onReplyToThread}
+            composeLineKey={composeLineKey}
+            onOpenCompose={onOpenCompose}
+            onSubmitFreeform={onSubmitFreeform}
+            onCancelCompose={onCancelCompose}
+            onRemovePending={onRemovePending}
+            onPendingBodyChange={onPendingBodyChange}
+            showResolved={showResolved}
           />
         );
       })}
@@ -849,9 +2134,22 @@ function DiffCenter({
   onToggleHunk,
   onToggleFinding,
   onAskVigil,
+  onQueueFinding,
   hasAI,
   passes,
   reviewDone,
+  threads,
+  queuedComments,
+  expandedThreadKeys,
+  onToggleThread,
+  onReplyToThread,
+  composeLineKey,
+  onOpenCompose,
+  onSubmitFreeform,
+  onCancelCompose,
+  onRemovePending,
+  onPendingBodyChange,
+  showResolved,
 }: {
   diff: Diff | null;
   loadError: string | null;
@@ -861,9 +2159,22 @@ function DiffCenter({
   onToggleHunk: (key: string) => void;
   onToggleFinding: (key: string) => void;
   onAskVigil: (f: Finding) => void;
+  onQueueFinding: (f: Finding) => void;
   hasAI: boolean;
   passes: PassMap;
   reviewDone: boolean;
+  threads: readonly Thread[];
+  queuedComments: QueuedComment[];
+  expandedThreadKeys: Set<string>;
+  onToggleThread: (threadId: string) => void;
+  onReplyToThread: (threadId: string, body: string) => Promise<void>;
+  composeLineKey: string | null;
+  onOpenCompose: (lineKey: string) => void;
+  onSubmitFreeform: (lineKey: string, body: string) => void;
+  onCancelCompose: () => void;
+  onRemovePending: (lineKey: string, idx: number) => void;
+  onPendingBodyChange: (lineKey: string, idx: number, body: string) => void;
+  showResolved: boolean;
 }) {
   const t = TOKENS.dark;
 
@@ -878,6 +2189,28 @@ function DiffCenter({
     }
     return map;
   }, [findings]);
+
+  const threadsByLine = useMemo(() => {
+    const map = new Map<string, Thread[]>();
+    for (const t of threads) {
+      const key = `${t.file}:${t.line}`;
+      const arr = map.get(key) ?? [];
+      arr.push(t);
+      map.set(key, arr);
+    }
+    return map;
+  }, [threads]);
+
+  const pendingByLine = useMemo(() => {
+    const map = new Map<string, QueuedComment[]>();
+    for (const c of queuedComments) {
+      const key = `${c.path}:${c.line}`;
+      const arr = map.get(key) ?? [];
+      arr.push(c);
+      map.set(key, arr);
+    }
+    return map;
+  }, [queuedComments]);
 
   const runningPasses = Object.entries(passes).filter(([, v]) => v.phase === "running");
 
@@ -913,7 +2246,20 @@ function DiffCenter({
               onToggleHunk={onToggleHunk}
               onToggleFinding={onToggleFinding}
               onAskVigil={onAskVigil}
+              onQueueFinding={onQueueFinding}
               hasAI={hasAI}
+              threadsByLine={threadsByLine}
+              pendingByLine={pendingByLine}
+              expandedThreadKeys={expandedThreadKeys}
+              onToggleThread={onToggleThread}
+              onReplyToThread={onReplyToThread}
+              composeLineKey={composeLineKey}
+              onOpenCompose={onOpenCompose}
+              onSubmitFreeform={onSubmitFreeform}
+              onCancelCompose={onCancelCompose}
+              onRemovePending={onRemovePending}
+              onPendingBodyChange={onPendingBodyChange}
+              showResolved={showResolved}
             />
           ))
         )}
@@ -1265,6 +2611,8 @@ function BottomStrip({
   onRequestChanges,
   onApprove,
   onRerun,
+  onHelp,
+  onSettings,
   submitting,
   submitted,
   reviewDone,
@@ -1274,6 +2622,8 @@ function BottomStrip({
   onRequestChanges: () => void;
   onApprove: () => void;
   onRerun: () => void;
+  onHelp: () => void;
+  onSettings: () => void;
   submitting: boolean;
   submitted: boolean;
   reviewDone: boolean;
@@ -1341,7 +2691,43 @@ function BottomStrip({
           <KbdHint>n</KbdHint> <KbdHint>p</KbdHint>
           <span style={{ marginLeft: 8 }}>findings</span>
         </span>
-        <KbdHint>?</KbdHint>
+        <button
+          onClick={onHelp}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "transparent",
+            border: 0,
+            padding: 0,
+            cursor: "pointer",
+            color: TOKENS.dark.textFaint,
+            fontFamily: MONO,
+            fontSize: 11,
+          }}
+        >
+          <KbdHint>?</KbdHint>
+          <span>shortcuts</span>
+        </button>
+        <button
+          onClick={onSettings}
+          title="Analyzer settings (,)"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "transparent",
+            border: 0,
+            padding: 0,
+            cursor: "pointer",
+            color: TOKENS.dark.textFaint,
+            fontFamily: MONO,
+            fontSize: 11,
+          }}
+        >
+          <KbdHint>,</KbdHint>
+          <span>settings</span>
+        </button>
       </div>
       <div style={{ flex: 1 }} />
       {reviewDone && !submitted && (
@@ -1416,18 +2802,69 @@ function BottomStrip({
   );
 }
 
+// ── Workspace state persistence helpers ──────────────────────────────────────
+
+const TAB_IDS: ReadonlySet<string> = new Set([
+  "overview",
+  "diff",
+  "semantic",
+  "risks",
+  "arch",
+  "convo",
+]);
+
+function isTabId(value: string | null): value is TabId {
+  return value !== null && TAB_IDS.has(value);
+}
+
+function workspaceTabKey(ref: PullRequest["ref"]): string {
+  if (ref.platform === "github") return `vigil:tab:github:${ref.owner}:${ref.repo}:${ref.number}`;
+  return `vigil:tab:azure-devops:${ref.org}:${ref.project}:${ref.repo}:${ref.id}`;
+}
+
 // ── WorkspaceScreen ───────────────────────────────────────────────────────────
 
 export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () => void }) {
-  const [diff, setDiff] = useState<Diff | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const diffQuery = useDiff(pr.ref);
+  const settingsQuery = useSettings();
+  const diff = diffQuery.data?.ok ? diffQuery.data.value.diff : null;
+  const loadError = diffQuery.isError
+    ? "platform_error"
+    : diffQuery.data && !diffQuery.data.ok
+      ? diffQuery.data.error.code
+      : null;
+  const headSha = diffQuery.data?.ok ? diffQuery.data.value.pr.headSha : "";
+  const hasAI = settingsQuery.data?.ok
+    ? (settingsQuery.data.value.aiProvider === "anthropic" &&
+        settingsQuery.data.value.hasAnthropicKey) ||
+      (settingsQuery.data.value.aiProvider === "openai" && settingsQuery.data.value.hasOpenAIKey)
+    : false;
+
+  const cachedReviewQuery = useCachedReview(pr.ref, headSha);
+  const invalidateReview = useInvalidateReview();
+  const queryClient = useQueryClient();
+  const { query: threadsQuery, refresh: refreshThreads } = useThreads(pr.ref);
+  const threads = useMemo<readonly Thread[]>(() => {
+    if (!threadsQuery.data?.ok) return [];
+    return threadsQuery.data.value;
+  }, [threadsQuery.data]);
+
   const [findings, setFindings] = useState<Finding[]>([]);
   const [passes, setPasses] = useState<PassMap>({});
   const [reviewDone, setReviewDone] = useState(false);
-  const [hasAI, setHasAI] = useState(false);
-  const [headSha, setHeadSha] = useState("");
 
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const tabStorageKey = workspaceTabKey(pr.ref);
+  const [activeTab, _setActiveTab] = useState<TabId>(() => {
+    const saved = localStorage.getItem(tabStorageKey);
+    return isTabId(saved) ? saved : "overview";
+  });
+  const setActiveTab = useCallback(
+    (tab: TabId) => {
+      localStorage.setItem(tabStorageKey, tab);
+      _setActiveTab(tab);
+    },
+    [tabStorageKey],
+  );
   const [reviewCompletedAt, setReviewCompletedAt] = useState<Date | null>(null);
 
   const [activeFileIdx, setActiveFileIdx] = useState(0);
@@ -1441,90 +2878,119 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [suppressedKeys, setSuppressedKeys] = useState<Set<string>>(new Set());
+  const [queuedComments, setQueuedComments] = useState<QueuedComment[]>([]);
+  const [expandedThreadKeys, setExpandedThreadKeys] = useState<Set<string>>(new Set());
+  const [composeLineKey, setComposeLineKey] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
+
+  useEffect(() => {
+    if (!headSha) return;
+    void api.invoke("findings:getSuppressed", pr.ref, headSha).then((result) => {
+      if (result.ok) setSuppressedKeys(new Set(result.value));
+    });
+  }, [headSha, pr.ref]);
+
+  const persistSuppressed = useCallback(
+    (keys: Set<string>) => {
+      if (!headSha) return;
+      void api.invoke("findings:setSuppressed", pr.ref, headSha, [...keys]);
+    },
+    [headSha, pr.ref],
+  );
 
   const regressionFindings = useMemo(
     () => findings.filter((f) => f.pass === "regression"),
     [findings],
   );
 
+  const archFindings = useMemo(() => findings.filter((f) => f.pass === "architecture"), [findings]);
+
   const sortedFindings = useMemo(
     () =>
       findings
-        .filter((f) => f.lines !== null)
+        .filter((f) => f.lines !== null && !suppressedKeys.has(findingKey(f)))
         .sort((a, b) => {
           const fc = a.file.localeCompare(b.file);
           if (fc !== 0) return fc;
           return (a.lines?.start ?? 0) - (b.lines?.start ?? 0);
         }),
-    [findings],
+    [findings, suppressedKeys],
+  );
+
+  const suppressedCount = useMemo(
+    () => findings.filter((f) => f.lines !== null && suppressedKeys.has(findingKey(f))).length,
+    [findings, suppressedKeys],
   );
 
   const focusedFinding =
     focusedFindingIdx !== null ? (sortedFindings[focusedFindingIdx] ?? null) : null;
 
-  // Load diff + settings + start review
+  const handleSuppress = useCallback(
+    (finding: Finding) => {
+      const key = findingKey(finding);
+      setSuppressedKeys((prev) => {
+        const next = new Set(prev);
+        next.add(key);
+        persistSuppressed(next);
+        return next;
+      });
+      setFocusedFindingIdx(null);
+    },
+    [persistSuppressed],
+  );
+
+  const handleClearSuppressed = useCallback(() => {
+    setSuppressedKeys(new Set());
+    persistSuppressed(new Set());
+  }, [persistSuppressed]);
+
+  // When cached review arrives (first load or after invalidation), populate findings.
   useEffect(() => {
-    let mounted = true;
+    if (!cachedReviewQuery.data?.ok || !cachedReviewQuery.data.value) return;
+    setFindings([...cachedReviewQuery.data.value.findings]);
+    setReviewDone(true);
+    setReviewCompletedAt(new Date());
+  }, [cachedReviewQuery.data]);
 
-    async function init() {
-      // Settings and diff are independent — start both immediately.
-      void api.invoke("settings:get").then((r) => {
-        if (!mounted || !r.ok) return;
-        setHasAI(
-          (r.value.aiProvider === "anthropic" && r.value.hasAnthropicKey) ||
-            (r.value.aiProvider === "openai" && r.value.hasOpenAIKey),
-        );
-      });
+  // When diff is ready and there's no cached review, start the review pipeline.
+  useEffect(() => {
+    if (!headSha) return;
+    if (cachedReviewQuery.isLoading) return;
+    if (cachedReviewQuery.data?.ok && cachedReviewQuery.data.value) return;
 
-      const diffResult = await api.invoke("platform:getPRWithDiff", pr.ref);
-      if (!mounted) return;
-
-      if (!diffResult.ok) {
-        setLoadError(diffResult.error.code);
-        return;
+    void api.invoke("review:run", pr.ref).then((result) => {
+      if (result.ok) {
+        setFindings([...result.value.findings]);
+        // Seed the TanStack cache so revisiting this PR skips re-running the review.
+        queryClient.setQueryData(queryKeys.review(pr.ref, headSha), {
+          ok: true,
+          value: result.value,
+        });
       }
-      setDiff(diffResult.value.diff);
-      const sha = diffResult.value.pr.headSha;
-      setHeadSha(sha);
+      setReviewDone(true);
+      setReviewCompletedAt(new Date());
+    });
+    // Only re-run when headSha becomes available or cache miss is confirmed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headSha, cachedReviewQuery.isLoading]);
 
-      const cached = await api.invoke("review:getCached", pr.ref, sha);
-      if (!mounted) return;
-
-      if (cached.ok && cached.value) {
-        setFindings([...cached.value.findings]);
-        setReviewDone(true);
-        setReviewCompletedAt(new Date());
-        return;
-      }
-
-      // Fire review in the background — findings stream via review:finding events.
-      void api.invoke("review:run", pr.ref).then((result) => {
-        if (!mounted) return;
-        if (result.ok) setFindings([...result.value.findings]);
-        setReviewDone(true);
-        setReviewCompletedAt(new Date());
-      });
-    }
-
-    void init();
-    return () => {
-      mounted = false;
-    };
-  }, [pr]);
-
-  async function handleRerunReview() {
+  const handleRerunReview = useCallback(async () => {
     if (!headSha) return;
     await api.invoke("review:invalidate", pr.ref, headSha);
     setFindings([]);
     setPasses({});
     setReviewDone(false);
     setReviewCompletedAt(null);
+    await invalidateReview(pr.ref, headSha);
     void api.invoke("review:run", pr.ref).then((result) => {
       if (result.ok) setFindings([...result.value.findings]);
       setReviewDone(true);
       setReviewCompletedAt(new Date());
     });
-  }
+  }, [headSha, pr.ref, invalidateReview]);
 
   // Stream review events + challenge chunks
   useEffect(() => {
@@ -1640,8 +3106,21 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         );
         return;
       }
+      if (e.key === "?") {
+        setHelpOpen((v) => !v);
+        return;
+      }
+      if (e.key === ",") {
+        setSettingsOpen((v) => !v);
+        return;
+      }
+      if (helpOpen || settingsOpen) return;
       if (e.key === "Escape") {
-        if (verdictState) {
+        if (settingsOpen) {
+          setSettingsOpen(false);
+        } else if (helpOpen) {
+          setHelpOpen(false);
+        } else if (verdictState) {
           setVerdictState(null);
         } else if (challengeState) {
           setChallengeState(null);
@@ -1671,18 +3150,39 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         if (sortedFindings.length === 0) return;
         setFocusedFindingIdx((i) => (i === null ? sortedFindings.length - 1 : Math.max(0, i - 1)));
       }
+      if (e.key === "x" && focusedFinding) {
+        handleSuppress(focusedFinding);
+        return;
+      }
       if (e.key === "m") {
         setVerdictState({ verdict: "approved", body: "" });
+      }
+      if (e.key === "r" && reviewDone) {
+        void handleRerunReview();
+      }
+      if (e.key === "R") {
+        void refreshThreads();
+      }
+      if (e.key === "v") {
+        setShowResolved((v) => !v);
       }
     },
     [
       diff,
       sortedFindings.length,
       focusedFindingIdx,
+      focusedFinding,
       verdictState,
       challengeState,
       onBack,
       activeTab,
+      helpOpen,
+      settingsOpen,
+      reviewDone,
+      handleRerunReview,
+      handleSuppress,
+      setActiveTab,
+      refreshThreads,
     ],
   );
 
@@ -1720,14 +3220,89 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
     const review: NewReview = {
       verdict: verdictState.verdict,
       body: verdictState.body,
-      comments: [],
+      comments: queuedComments.map((c) => ({
+        kind: "inline" as const,
+        body: c.body,
+        path: c.path,
+        line: c.line,
+      })),
     };
     const result = await api.invoke("platform:submitReview", pr.ref, review);
     if (result.ok) {
       setSubmitted(true);
       setVerdictState(null);
+      setQueuedComments([]);
     }
     setSubmitting(false);
+  }
+
+  function handleQueueFinding(finding: Finding) {
+    const lines = finding.lines;
+    if (!lines) return;
+    setQueuedComments((prev) => [
+      ...prev,
+      {
+        kind: "from-finding",
+        findingTitle: finding.title,
+        body: `**${finding.title}**\n\n${finding.description}`,
+        path: finding.file,
+        line: lines.start,
+      },
+    ]);
+  }
+
+  async function handleReplyToThread(threadId: string, body: string) {
+    const result = await api.invoke("platform:replyToThread", pr.ref, threadId, body);
+    if (result.ok) {
+      queryClient.setQueryData(["threads", pr.ref], (old: typeof threadsQuery.data) => {
+        if (!old?.ok) return old;
+        return {
+          ok: true,
+          value: old.value.map((t) =>
+            t.id === threadId ? { ...t, comments: [...t.comments, result.value] } : t,
+          ),
+        };
+      });
+    }
+  }
+
+  function handleSubmitFreeform(lineKey: string, body: string) {
+    const [path, lineStr] = lineKey.split(":");
+    const line = parseInt(lineStr ?? "1", 10);
+    if (!path) return;
+    setQueuedComments((prev) => [...prev, { kind: "freeform", body, path, line }]);
+    setComposeLineKey(null);
+  }
+
+  function handleRemovePending(lineKey: string, idx: number) {
+    setQueuedComments((prev) => {
+      const inLine = prev
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => `${c.path}:${c.line}` === lineKey);
+      const target = inLine[idx];
+      if (!target) return prev;
+      return prev.filter((_, i) => i !== target.i);
+    });
+  }
+
+  function handlePendingBodyChange(lineKey: string, idx: number, body: string) {
+    setQueuedComments((prev) => {
+      const inLine = prev
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => `${c.path}:${c.line}` === lineKey);
+      const target = inLine[idx];
+      if (!target) return prev;
+      return prev.map((c, i) => (i === target.i ? { ...c, body } : c));
+    });
+  }
+
+  function handleToggleThread(threadId: string) {
+    setExpandedThreadKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
   }
 
   const files = diff?.files ?? [];
@@ -1754,6 +3329,7 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         findings={findings}
         reviewCompletedAt={reviewCompletedAt}
       />
+      <AnalysisProgressBar passes={passes} reviewDone={reviewDone} />
 
       {activeTab === "diff" ? (
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
@@ -1772,9 +3348,22 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
             onToggleHunk={handleToggleHunk}
             onToggleFinding={handleToggleFinding}
             onAskVigil={handleAskVigil}
+            onQueueFinding={handleQueueFinding}
             hasAI={hasAI}
             passes={passes}
             reviewDone={reviewDone}
+            threads={threads}
+            queuedComments={queuedComments}
+            expandedThreadKeys={expandedThreadKeys}
+            onToggleThread={handleToggleThread}
+            onReplyToThread={handleReplyToThread}
+            composeLineKey={composeLineKey}
+            onOpenCompose={setComposeLineKey}
+            onSubmitFreeform={handleSubmitFreeform}
+            onCancelCompose={() => setComposeLineKey(null)}
+            onRemovePending={handleRemovePending}
+            onPendingBodyChange={handlePendingBodyChange}
+            showResolved={showResolved}
           />
           <ConversationPanel
             challengeState={challengeState}
@@ -1789,14 +3378,33 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         </div>
       ) : activeTab === "overview" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <OverviewTab
-            pr={pr}
-            findings={findings}
-            diff={diff}
-            passes={passes}
-            reviewDone={reviewDone}
-            reviewCompletedAt={reviewCompletedAt}
-          />
+          {diff === null && !loadError ? (
+            <OverviewSkeleton />
+          ) : (
+            <OverviewTab
+              pr={pr}
+              findings={findings}
+              diff={diff}
+              passes={passes}
+              reviewDone={reviewDone}
+              reviewCompletedAt={reviewCompletedAt}
+              onFindingClick={(finding) => {
+                const idx = sortedFindings.findIndex(
+                  (f) =>
+                    f.file === finding.file &&
+                    f.lines?.start === finding.lines?.start &&
+                    f.title === finding.title,
+                );
+                if (idx !== -1) {
+                  setFocusedFindingIdx(idx);
+                  setActiveTab("diff");
+                }
+              }}
+              onSuppressFinding={handleSuppress}
+              suppressedCount={suppressedCount}
+              onClearSuppressed={handleClearSuppressed}
+            />
+          )}
         </div>
       ) : activeTab === "risks" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
@@ -1817,11 +3425,11 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         </div>
       ) : activeTab === "semantic" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <SemanticTab />
+          <SemanticTab findings={regressionFindings} />
         </div>
       ) : activeTab === "arch" ? (
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <ArchTab />
+          <ArchTab findings={archFindings} />
         </div>
       ) : null}
 
@@ -1841,11 +3449,22 @@ export function WorkspaceScreen({ pr, onBack }: { pr: PullRequest; onBack: () =>
         onRequestChanges={() => setVerdictState({ verdict: "changes_requested", body: "" })}
         onApprove={() => setVerdictState({ verdict: "approved", body: "" })}
         onRerun={() => void handleRerunReview()}
+        onHelp={() => setHelpOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
         submitting={submitting}
         submitted={submitted}
         reviewDone={reviewDone}
         prUrl={pr.url}
       />
+
+      {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+      {settingsOpen && (
+        <AnalyzerSettingsOverlay
+          prRef={pr.ref}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   );
 }

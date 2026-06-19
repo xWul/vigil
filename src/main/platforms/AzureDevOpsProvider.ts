@@ -1,3 +1,5 @@
+import { createPatch } from "diff";
+
 import { err, ok } from "../../shared/result.js";
 import type { Result } from "../../shared/result.js";
 import { NoopLogger } from "../../shared/logger.js";
@@ -7,13 +9,16 @@ import type {
   Comment,
   Diff,
   FileDiff,
+  Hunk,
   NewComment,
   NewReview,
   PlatformError,
   PRRef,
   PullRequest,
+  Thread,
 } from "./model/index.js";
 import type { PlatformProvider } from "./PlatformProvider.js";
+import { parseUnifiedDiff } from "./parseUnifiedDiff.js";
 
 const ADO_API_VERSION = "7.1";
 const VSSPS_BASE = "https://app.vssps.visualstudio.com";
@@ -67,12 +72,23 @@ interface AdoChangesResponse {
 
 interface AdoThread {
   id: number;
+  status?: number; // 1 = active; 2+ = resolved (fixed, wontFix, closed, byDesign, pending)
+  threadContext?: {
+    filePath: string;
+    rightFileStart?: { line: number; offset: number };
+  };
   comments: {
     id: number;
     content: string;
+    commentType?: number; // 1 = text, 2 = codeChange, 3 = system
+    isDeleted?: boolean;
     author: { displayName: string; uniqueName: string };
     publishedDate: string;
   }[];
+}
+
+interface AdoThreadsResponse {
+  value: AdoThread[];
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +295,17 @@ export class AzureDevOpsProvider implements PlatformProvider {
     }
     this.logger.debug("ado.getDiff.start", { id: ref.id });
 
+    const prUrl = adoUrl(
+      `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}`,
+      "",
+    );
+    const prResult = await adoRequest<AdoPullRequest>(prUrl, session.accessToken);
+    if (!prResult.ok) return prResult;
+
+    const headSha = prResult.value.lastMergeSourceCommit?.commitId;
+    const baseSha = prResult.value.lastMergeTargetCommit?.commitId;
+    if (!headSha || !baseSha) return ok({ files: [] });
+
     const iterationsUrl = adoUrl(
       `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}/iterations`,
       "",
@@ -291,9 +318,7 @@ export class AzureDevOpsProvider implements PlatformProvider {
 
     const iterations = iterationsResult.value.value;
     const latestId = iterations[iterations.length - 1]?.id;
-    if (latestId === undefined) {
-      return ok({ files: [] });
-    }
+    if (latestId === undefined) return ok({ files: [] });
 
     const changesUrl = adoUrl(
       `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}/iterations/${latestId}/changes`,
@@ -302,17 +327,45 @@ export class AzureDevOpsProvider implements PlatformProvider {
     const changesResult = await adoRequest<AdoChangesResponse>(changesUrl, session.accessToken);
     if (!changesResult.ok) return changesResult;
 
-    // Full diff content (hunks/lines) requires fetching file contents at both commits.
-    // This is deferred to Phase 3 when the AI pipeline needs line-level data.
-    const files: FileDiff[] = changesResult.value.changeEntries.map((entry) => ({
-      status: adoChangeTypeToStatus(entry.changeType),
-      oldPath: entry.originalPath ?? null,
-      newPath: entry.item.path,
-      hunks: [],
-    }));
+    const files = await Promise.all(
+      changesResult.value.changeEntries.map(async (entry) => {
+        const status = adoChangeTypeToStatus(entry.changeType);
+        return {
+          status,
+          oldPath: entry.originalPath ?? null,
+          newPath: entry.item.path,
+          hunks: await this.fetchHunks(session, ref, entry, status, headSha, baseSha),
+        };
+      }),
+    );
 
     this.logger.debug("ado.getDiff.complete", { fileCount: files.length });
     return ok({ files });
+  }
+
+  private async fetchHunks(
+    session: AuthSession,
+    ref: PRRef,
+    entry: AdoChangeEntry,
+    status: FileDiff["status"],
+    headSha: string,
+    baseSha: string,
+  ): Promise<readonly Hunk[]> {
+    const newPath = entry.item.path;
+    const oldPath = entry.originalPath ?? entry.item.path;
+
+    const [oldResult, newResult] = await Promise.all([
+      status === "added"
+        ? (Promise.resolve(ok("")) as Promise<Result<string, PlatformError>>)
+        : this.getFileContent(session, ref, oldPath, baseSha),
+      status === "deleted"
+        ? (Promise.resolve(ok("")) as Promise<Result<string, PlatformError>>)
+        : this.getFileContent(session, ref, newPath, headSha),
+    ]);
+
+    if (!oldResult.ok || !newResult.ok) return [];
+
+    return parseUnifiedDiff(createPatch(newPath, oldResult.value, newResult.value));
   }
 
   async postComment(
@@ -416,6 +469,80 @@ export class AzureDevOpsProvider implements PlatformProvider {
       `?path=${encodedPath}&versionDescriptor.version=${commitSha}&versionDescriptor.versionType=commit`,
     );
     return adoRequestText(url, session.accessToken);
+  }
+
+  async getThreads(
+    session: AuthSession,
+    ref: PRRef,
+  ): Promise<Result<readonly Thread[], PlatformError>> {
+    if (ref.platform !== "azure-devops") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+
+    const url = adoUrl(
+      `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}/threads`,
+      "",
+    );
+    const result = await adoRequest<AdoThreadsResponse>(url, session.accessToken);
+    if (!result.ok) return result;
+
+    const threads: Thread[] = [];
+    for (const t of result.value.value) {
+      if (!t.threadContext?.rightFileStart) continue; // skip PR-level threads
+      const line = t.threadContext.rightFileStart.line;
+      const file = t.threadContext.filePath.replace(/^\//, "");
+
+      const visibleComments = t.comments.filter(
+        (c) => !c.isDeleted && (c.commentType === undefined || c.commentType === 1),
+      );
+      if (visibleComments.length === 0) continue;
+
+      threads.push({
+        id: String(t.id),
+        file,
+        line,
+        comments: visibleComments.map((c) => ({
+          id: String(c.id),
+          body: c.content,
+          author: { displayName: c.author.displayName, login: c.author.uniqueName },
+          createdAt: new Date(c.publishedDate),
+        })),
+        resolved: (t.status ?? 1) !== 1,
+      });
+    }
+
+    return ok(threads);
+  }
+
+  async replyToThread(
+    session: AuthSession,
+    ref: PRRef,
+    threadId: string,
+    body: string,
+  ): Promise<Result<Comment, PlatformError>> {
+    if (ref.platform !== "azure-devops") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+
+    const url = adoUrl(
+      `${this.base}/${ref.project}/_apis/git/repositories/${ref.repo}/pullrequests/${ref.id}/threads/${threadId}/comments`,
+      "",
+    );
+    const result = await adoRequest<AdoThread["comments"][number]>(url, session.accessToken, {
+      method: "POST",
+      body: JSON.stringify({ parentCommentId: 0, content: body, commentType: 1 }),
+    });
+    if (!result.ok) return result;
+
+    return ok({
+      id: String(result.value.id),
+      body: result.value.content,
+      author: {
+        displayName: result.value.author.displayName,
+        login: result.value.author.uniqueName,
+      },
+      createdAt: new Date(result.value.publishedDate),
+    });
   }
 }
 

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 
 import type { PullRequest } from "../../../shared/model/index.js";
-import type { ReviewResult } from "../../../shared/review.js";
-import { api } from "../../api.js";
+import { usePRList, useSettings } from "../../lib/queries.js";
+import type { PRRow } from "../../lib/queries.js";
 import { TOKENS, SANS, MONO, type Theme, type Tokens } from "../../shared/theme.js";
 import "./ReviewQueue.css";
 
@@ -10,16 +10,6 @@ import "./ReviewQueue.css";
 
 type RiskLevel = "high" | "med" | "low" | null;
 type SortKey = "risk" | "age" | "blocking";
-
-interface PRRow {
-  pr: PullRequest;
-  review: ReviewResult | null;
-}
-
-type ScreenState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; rows: PRRow[] };
 
 const SORTS: { id: SortKey; label: string }[] = [
   { id: "risk", label: "By risk" },
@@ -98,6 +88,45 @@ function Kbd({ children }: { children: React.ReactNode }) {
 
 function Sep({ t }: { t: Tokens }) {
   return <span style={{ color: t.textFaint, padding: "0 8px" }}>·</span>;
+}
+
+// ── SetupAiNudge ──────────────────────────────────────────────────────────────
+
+function SetupAiNudge({ t, onOpenSettings }: { t: Tokens; onOpenSettings: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "8px 36px",
+        background: `oklch(0.55 0.12 85 / 0.08)`,
+        borderBottom: `0.5px solid oklch(0.55 0.12 85 / 0.22)`,
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 12.5, color: t.textDim }}>
+        AI reviews are disabled — no API key configured.
+      </span>
+      <button
+        onClick={onOpenSettings}
+        style={{
+          background: "transparent",
+          border: `0.5px solid oklch(0.55 0.12 85 / 0.45)`,
+          borderRadius: 5,
+          padding: "3px 10px",
+          color: t.amber,
+          fontFamily: SANS,
+          fontSize: 12,
+          cursor: "pointer",
+          flexShrink: 0,
+        }}
+      >
+        Set up in Settings →
+      </button>
+    </div>
+  );
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
@@ -581,70 +610,35 @@ export function ReviewQueue({
 }) {
   const t = TOKENS[theme];
 
-  const [screen, setScreen] = useState<ScreenState>({ status: "loading" });
-  const [syncedAt, setSyncedAt] = useState<Date | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("risk");
   const [selected, setSelected] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [loadKey, setLoadKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const triggerRefresh = () => setLoadKey((k) => k + 1);
+  const { data: rows, isLoading, isError, error, isFetching, dataUpdatedAt, refetch } = usePRList();
+  const { data: settingsResult } = useSettings();
 
-  // Load PRs and cached reviews; silent=true keeps current rows visible while refreshing
-  useEffect(() => {
-    let mounted = true;
-    const silent = loadKey > 0;
-    if (silent) setRefreshing(true);
+  const syncedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+  const refreshing = isFetching;
+  const triggerRefresh = () => void refetch();
 
-    async function load() {
-      const listResult = await api.invoke("platform:listPRs");
-      if (!mounted) return;
-
-      if (!listResult.ok) {
-        if (!silent) setScreen({ status: "error", message: listResult.error.code });
-        setRefreshing(false);
-        return;
-      }
-
-      const prs = listResult.value;
-      const reviewResults = await Promise.all(
-        prs.map((pr) => api.invoke("review:getCached", pr.ref, pr.headSha)),
-      );
-      if (!mounted) return;
-
-      const rows: PRRow[] = prs.map((pr, i) => {
-        const rv = reviewResults[i];
-        return { pr, review: rv?.ok === true ? rv.value : null };
-      });
-
-      setScreen({ status: "ready", rows });
-      setSyncedAt(new Date());
-      setRefreshing(false);
-    }
-
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, [loadKey]);
-
-  // Auto-refresh every 60 seconds
-  useEffect(() => {
-    const id = setInterval(triggerRefresh, 60_000);
-    return () => clearInterval(id);
-  }, []);
+  const needsAiSetup = useMemo(() => {
+    if (!settingsResult?.ok) return false;
+    const s = settingsResult.value;
+    if (s.aiProvider === "anthropic") return !s.hasAnthropicKey;
+    if (s.aiProvider === "openai") return !s.hasOpenAIKey;
+    return true;
+  }, [settingsResult]);
 
   const visibleRows = useMemo(() => {
-    if (screen.status !== "ready") return [];
+    if (!rows) return [];
 
     const q = search.trim().toLowerCase();
     const filtered = q
-      ? screen.rows.filter(({ pr, review }) => {
+      ? rows.filter(({ pr, review }) => {
           const haystack = [
             pr.title,
             repoName(pr),
@@ -656,7 +650,7 @@ export function ReviewQueue({
             .toLowerCase();
           return haystack.includes(q);
         })
-      : screen.rows.slice();
+      : rows.slice();
 
     if (sort === "risk") {
       filtered.sort((a, b) => {
@@ -678,7 +672,7 @@ export function ReviewQueue({
     }
 
     return filtered;
-  }, [screen, search, sort]);
+  }, [rows, search, sort]);
 
   // Clamp selection when list shrinks
   useEffect(() => {
@@ -855,12 +849,18 @@ export function ReviewQueue({
         searchRef={searchRef}
       />
 
+      {needsAiSetup && onOpenSettings && <SetupAiNudge t={t} onOpenSettings={onOpenSettings} />}
+
       <div className="vigil-scroll" style={{ flex: 1, overflow: "auto", paddingBottom: 8 }}>
-        {screen.status === "loading" && <LoadingState t={t} />}
-        {screen.status === "error" && (
-          <EmptyState t={t} message={`Failed to load PRs: ${screen.message}`} />
+        {isLoading && <LoadingState t={t} />}
+        {isError && (
+          <EmptyState
+            t={t}
+            message={`Failed to load PRs: ${error instanceof Error ? error.message : "unknown"}`}
+          />
         )}
-        {screen.status === "ready" &&
+        {!isLoading &&
+          !isError &&
           (visibleRows.length === 0 ? (
             <EmptyState t={t} />
           ) : (

@@ -1,3 +1,5 @@
+import type { ResolvedAnalyzerConfig } from "../../../shared/analyzer-config.js";
+import { DEFAULT_ANALYZER_CONFIG } from "../../../shared/analyzer-config.js";
 import { ok } from "../../../shared/result.js";
 import type { Result } from "../../../shared/result.js";
 import type { FileDiff } from "../../platforms/model/index.js";
@@ -17,8 +19,10 @@ function classifyFile(file: FileDiff): FileLabel {
   if (TEST_PATTERN.test(path)) return "test";
   if (CONFIG_PATTERN.test(path)) return "config";
 
-  // Deleted files: no hunks to scan, classify by path only
-  if (file.status === "deleted") return "behavior";
+  // Deleted files have no hunks to scan. Deletions remove behavior rather than adding it,
+  // so classifying them as "behavior" would produce false-positive intent-mismatch findings
+  // on cleanup PRs (e.g., "refactor: remove old auth module" deleting a source file).
+  if (file.status === "deleted") return "refactor";
 
   for (const hunk of file.hunks) {
     for (const line of hunk.lines) {
@@ -30,10 +34,18 @@ function classifyFile(file: FileDiff): FileLabel {
   return "refactor";
 }
 
+type ChangeClassificationConfig = ResolvedAnalyzerConfig["analyzers"]["changeClassification"];
+
 export class ChangeClassifierAnalyzer implements CodeAnalyzer {
   readonly id = "change-classification" as const;
+  private readonly cfg: ChangeClassificationConfig;
+
+  constructor(config?: ChangeClassificationConfig) {
+    this.cfg = config ?? DEFAULT_ANALYZER_CONFIG.analyzers.changeClassification;
+  }
 
   analyze(context: ReviewContext): Promise<Result<readonly Finding[], ReviewError>> {
+    if (!this.cfg.enabled) return Promise.resolve(ok([]));
     const counts = { behavior: 0, refactor: 0, test: 0, config: 0 };
     const behaviorFiles: string[] = [];
 
@@ -75,7 +87,11 @@ export class ChangeClassifierAnalyzer implements CodeAnalyzer {
       source: "static",
     });
 
-    if (behaviorFiles.length > 0 && INTENT_KEYWORDS.test(context.pr.title)) {
+    if (
+      this.cfg.intentMismatch &&
+      behaviorFiles.length > 0 &&
+      INTENT_KEYWORDS.test(context.pr.title)
+    ) {
       findings.push({
         severity: "medium",
         title: "Intent mismatch: PR describes a refactor but contains behavior changes",

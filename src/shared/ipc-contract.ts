@@ -1,5 +1,6 @@
 import type { Result } from "./result.js";
 import type { AuthError, ConnectedAccount } from "./auth.js";
+import type { AnalyzerConfig } from "./analyzer-config.js";
 import type { Settings, SettingsError, WritableSettings } from "./settings.js";
 import type { FindingPass, ReviewError, ReviewResult, Finding } from "./review.js";
 import type {
@@ -10,6 +11,7 @@ import type {
   PlatformError,
   PRRef,
   PullRequest,
+  Thread,
 } from "./model/index.js";
 
 // ── Invoke channels (renderer → main, each returns Promise<Result<T, E>>) ───
@@ -29,6 +31,12 @@ export interface IpcContract {
   "platform:getPRWithDiff": (ref: PRRef) => Result<{ pr: PullRequest; diff: Diff }, PlatformError>;
   "platform:submitReview": (ref: PRRef, review: NewReview) => Result<void, PlatformError>;
   "platform:postComment": (ref: PRRef, comment: NewComment) => Result<Comment, PlatformError>;
+  "platform:getThreads": (ref: PRRef) => Result<readonly Thread[], PlatformError>;
+  "platform:replyToThread": (
+    ref: PRRef,
+    threadId: string,
+    body: string,
+  ) => Result<Comment, PlatformError>;
 
   // Review
   "review:run": (ref: PRRef) => Result<ReviewResult, ReviewError>;
@@ -49,7 +57,36 @@ export interface IpcContract {
     key: string,
   ) => Result<void, SettingsError>;
   "settings:deleteApiKey": (provider: "anthropic" | "openai") => Result<void, SettingsError>;
+  "settings:getAnalyzerConfig": (ref: PRRef) => Result<AnalyzerConfig, SettingsError>;
+  "settings:setAnalyzerConfig": (ref: PRRef, config: AnalyzerConfig) => Result<void, SettingsError>;
+
+  // Findings
+  "findings:getSuppressed": (
+    ref: PRRef,
+    headSha: string,
+  ) => Result<readonly string[], SettingsError>;
+  "findings:setSuppressed": (
+    ref: PRRef,
+    headSha: string,
+    keys: readonly string[],
+  ) => Result<void, SettingsError>;
+
+  // App
+  "app:copyDiagnostics": () => Result<void, never>;
+  "app:getVersion": () => Result<string, never>;
+  "app:checkForUpdate": () => Result<void, never>;
+  "app:installUpdate": () => Result<void, never>;
 }
+
+// ── Update status ────────────────────────────────────────────────────────────
+
+export type UpdateStatus =
+  | { readonly status: "checking" }
+  | { readonly status: "available"; readonly version: string }
+  | { readonly status: "downloading"; readonly progress: number }
+  | { readonly status: "ready"; readonly version: string }
+  | { readonly status: "up-to-date" }
+  | { readonly status: "error"; readonly message: string };
 
 // ── Push events (main → renderer, one-way) ───────────────────────────────────
 
@@ -67,4 +104,5 @@ export interface IpcEvents {
     readonly status: "cloning" | "fetching" | "ready" | "error";
     readonly error?: string;
   };
+  "app:updateStatus": UpdateStatus;
 }

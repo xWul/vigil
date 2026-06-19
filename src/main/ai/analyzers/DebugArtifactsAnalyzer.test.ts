@@ -125,4 +125,72 @@ describe("DebugArtifactsAnalyzer", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toHaveLength(0);
   });
+
+  it("does not flag console.log in a Python file", async () => {
+    const context = makeContext([makeFile("src/service.py", [makeLine("  console.log(x);")])]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it("flags print() in a Python file", async () => {
+    const context = makeContext([
+      makeFile("src/service.py", [makeLine('  print("debug value:", x)', "added", 3)]),
+    ]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.severity).toBe("low");
+      expect(result.value[0]?.lines).toEqual({ start: 3, end: 3 });
+    }
+  });
+
+  it("does not flag print() in a TypeScript file", async () => {
+    const context = makeContext([makeFile("src/foo.ts", [makeLine("  print(x);")])]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(result.value.filter((f) => f.title === "Debug print call")).toHaveLength(0);
+  });
+
+  it("flags System.out.println in a Java file", async () => {
+    const context = makeContext([
+      makeFile("src/Service.java", [makeLine('    System.out.println("debug");')]),
+    ]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((f) => f.title === "Debug print call")).toBe(true);
+    }
+  });
+
+  it("flags Console.WriteLine in a C# file", async () => {
+    const context = makeContext([
+      makeFile("src/Service.cs", [makeLine('    Console.WriteLine("debug");')]),
+    ]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((f) => f.title === "Debug print call")).toBe(true);
+    }
+  });
+
+  it("flags fmt.Println in a Go file", async () => {
+    const context = makeContext([makeFile("src/service.go", [makeLine('  fmt.Println("debug")')])]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((f) => f.title === "Debug print call")).toBe(true);
+    }
+  });
+
+  it("flags TODO/FIXME in a Python file (universal patterns)", async () => {
+    const context = makeContext([makeFile("src/service.py", [makeLine("  # TODO: fix this")])]);
+    const result = await analyzer.analyze(context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((f) => f.severity === "info")).toBe(true);
+    }
+  });
 });

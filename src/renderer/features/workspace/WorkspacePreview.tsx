@@ -407,6 +407,54 @@ const MOCK_FINDINGS: readonly Finding[] = [
       "payment.ts now throws on charge failure while the rest of the service layer returns Result objects. This mixes two error-handling conventions in the same layer. Standardise on one pattern — callers of processPayment will need to wrap it in a try/catch where they currently expect a Result.",
     evidence: "",
   },
+  // Change classification — summary (always emitted by ChangeClassifierAnalyzer)
+  {
+    pass: "change-classification",
+    source: "static",
+    severity: "info",
+    file: "",
+    lines: null,
+    title: "Change breakdown: 3 behavior",
+    description:
+      "Behavior files: src/api/payment.ts, src/utils/retry.ts, src/middleware/auth.ts. Note: classification is heuristic — rename-heavy PRs may show false behavior positives.",
+    evidence: "",
+  },
+  // Change classification — intent mismatch (title says "refactor" but all files have control-flow changes)
+  {
+    pass: "change-classification",
+    source: "static",
+    severity: "medium",
+    file: "",
+    lines: null,
+    title: "Intent mismatch: PR describes a refactor but contains behavior changes",
+    description:
+      "The PR title suggests a refactor but 3 file(s) contain control-flow changes: src/api/payment.ts, src/utils/retry.ts, src/middleware/auth.ts. Verify these changes are intentional. Note: classification is heuristic — rename-heavy diffs may trigger false positives.",
+    evidence: "refactor: migrate payment processor to async queue pipeline",
+  },
+  // Architecture — direct circular dependency
+  {
+    pass: "architecture",
+    source: "static",
+    severity: "medium",
+    file: "src/api/payment.ts",
+    lines: { start: 3, end: 3 },
+    title: "Circular import: api/payment.ts ↔ middleware/auth.ts",
+    description:
+      "api/payment.ts participates in a circular dependency. Circular imports can cause initialization-order bugs and make dependency relationships hard to reason about.",
+    evidence: "src/api/payment.ts\nsrc/middleware/auth.ts\nsrc/api/payment.ts",
+  },
+  // Architecture — three-hop cycle
+  {
+    pass: "architecture",
+    source: "static",
+    severity: "medium",
+    file: "src/utils/retry.ts",
+    lines: { start: 2, end: 2 },
+    title: "Circular import: utils/retry.ts → middleware/auth.ts → api/payment.ts → utils/retry.ts",
+    description:
+      "utils/retry.ts participates in a circular dependency. Circular imports can cause initialization-order bugs and make dependency relationships hard to reason about.",
+    evidence: "src/utils/retry.ts\nsrc/middleware/auth.ts\nsrc/api/payment.ts\nsrc/utils/retry.ts",
+  },
 ];
 
 const MOCK_REVIEW_RESULT: ReviewResult = {
@@ -476,12 +524,25 @@ function createMockApi(): MockRendererApi {
           return Promise.resolve({ ok: true, value: { pr: MOCK_PR, diff: MOCK_DIFF } });
         case "settings:get":
           return Promise.resolve({ ok: true, value: MOCK_SETTINGS });
+        case "settings:getAnalyzerConfig":
+          return Promise.resolve({ ok: true, value: {} });
+        case "settings:setAnalyzerConfig":
+          return Promise.resolve({ ok: true, value: undefined });
+        case "findings:getSuppressed":
+          return Promise.resolve({ ok: true, value: [] });
+        case "findings:setSuppressed":
+          return Promise.resolve({ ok: true, value: undefined });
         case "review:run":
           return Promise.resolve({ ok: true, value: MOCK_REVIEW_RESULT });
         case "platform:submitReview":
           return new Promise((resolve) =>
             setTimeout(() => resolve({ ok: true, value: undefined }), 700),
           );
+        case "app:getVersion":
+          return Promise.resolve({ ok: true, value: "0.0.0" });
+        case "app:checkForUpdate":
+        case "app:installUpdate":
+          return Promise.resolve({ ok: true, value: undefined });
         case "review:challenge": {
           // Simulate a streaming response with realistic text
           const chunks = [

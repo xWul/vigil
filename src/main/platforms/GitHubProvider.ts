@@ -16,6 +16,7 @@ import type {
   PRRef,
   PullRequest,
   ReviewVerdict,
+  Thread,
 } from "./model/index.js";
 import type { PlatformProvider } from "./PlatformProvider.js";
 
@@ -330,6 +331,99 @@ export class GitHubProvider implements PlatformProvider {
 
       const content = Buffer.from(data.content, "base64").toString("utf-8");
       return ok(content);
+    } catch (e) {
+      return err(toPlatformError(e));
+    }
+  }
+
+  async getThreads(
+    session: AuthSession,
+    ref: PRRef,
+  ): Promise<Result<readonly Thread[], PlatformError>> {
+    if (ref.platform !== "github") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+    const octokit = createOctokit(session);
+
+    try {
+      const { data } = await octokit.rest.pulls.listReviewComments({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: ref.number,
+        per_page: 100,
+      });
+
+      // GitHub REST returns a flat list. Group by in_reply_to_id chain.
+      // Root comments have no in_reply_to_id; replies point to the root's id.
+      // resolved state is not available via REST — only GraphQL exposes isResolved.
+      const roots = data.filter((c) => !c.in_reply_to_id);
+      const replies = data.filter((c) => c.in_reply_to_id);
+
+      const threads: Thread[] = roots.map((root) => ({
+        id: String(root.id),
+        file: root.path,
+        line: root.line ?? root.original_line ?? 1,
+        comments: [
+          {
+            id: String(root.id),
+            body: root.body,
+            author: {
+              displayName: root.user?.login ?? "unknown",
+              login: root.user?.login ?? "unknown",
+            },
+            createdAt: new Date(root.created_at),
+          },
+          ...replies
+            .filter((r) => r.in_reply_to_id === root.id)
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            .map((r) => ({
+              id: String(r.id),
+              body: r.body,
+              author: {
+                displayName: r.user?.login ?? "unknown",
+                login: r.user?.login ?? "unknown",
+              },
+              createdAt: new Date(r.created_at),
+            })),
+        ],
+        resolved: false, // REST API does not expose thread resolution; requires GraphQL
+      }));
+
+      return ok(threads);
+    } catch (e) {
+      return err(toPlatformError(e));
+    }
+  }
+
+  async replyToThread(
+    session: AuthSession,
+    ref: PRRef,
+    threadId: string,
+    body: string,
+  ): Promise<Result<Comment, PlatformError>> {
+    if (ref.platform !== "github") {
+      return err({ code: "platform_error", message: "ref platform mismatch" });
+    }
+    const octokit = createOctokit(session);
+
+    try {
+      // threadId is the root comment id for GitHub
+      const { data } = await octokit.rest.pulls.createReplyForReviewComment({
+        owner: ref.owner,
+        repo: ref.repo,
+        pull_number: ref.number,
+        comment_id: parseInt(threadId, 10),
+        body,
+      });
+      return ok({
+        id: String(data.id),
+        body: data.body,
+        author: {
+          displayName: data.user?.login ?? "unknown",
+          login: data.user?.login ?? "unknown",
+        },
+        createdAt: new Date(data.created_at),
+      });
     } catch (e) {
       return err(toPlatformError(e));
     }

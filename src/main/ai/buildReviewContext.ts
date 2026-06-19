@@ -5,13 +5,15 @@ import type { FileDiff } from "../platforms/model/index.js";
 import type { PlatformProvider, PRRef } from "../platforms/PlatformProvider.js";
 import type { ReviewContext, ReviewError } from "./CodeAnalyzer.js";
 import type { RepoCache } from "../git/RepoCache.js";
+import { extractExportedSymbols } from "./extractSymbols.js";
+import { getHeuristics, resolvePythonImport } from "./heuristics.js";
+import { detectLanguage } from "./language.js";
 
 export const DEFAULT_TOKEN_BUDGET = 160_000;
 // Cross-file import context is capped at 20 % of the total budget so it
 // cannot crowd out the diff or the changed files themselves.
 const CROSS_FILE_BUDGET_FRACTION = 0.2;
 
-const TS_JS_RE = /\.[jt]sx?$/;
 const RELATIVE_IMPORT_RE = /from\s+['"](\.[^'"]+)['"]/g;
 
 function estimateTokens(text: string): number {
@@ -44,21 +46,39 @@ export function resolveRelativeImport(fromFile: string, importSpec: string): str
 /**
  * Return repo-relative paths for every relative import found across the
  * given files, excluding paths already present in the map.
+ *
+ * TypeScript/JavaScript: resolves `.js`-suffixed specifiers to `.ts` sources.
+ * Python: resolves `from .foo import bar` style relative imports.
+ * Other languages use absolute imports and are skipped.
  */
 export function collectImportCandidates(files: ReadonlyMap<string, string>): string[] {
   const seen = new Set<string>(files.keys());
   const candidates: string[] = [];
   for (const [filePath, content] of files) {
-    if (!TS_JS_RE.test(filePath)) continue;
-    RELATIVE_IMPORT_RE.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = RELATIVE_IMPORT_RE.exec(content)) !== null) {
-      const resolved = resolveRelativeImport(filePath, match[1]!);
-      if (!seen.has(resolved)) {
-        seen.add(resolved);
-        candidates.push(resolved);
+    const lang = detectLanguage(filePath);
+    if (lang === "typescript") {
+      RELATIVE_IMPORT_RE.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = RELATIVE_IMPORT_RE.exec(content)) !== null) {
+        const resolved = resolveRelativeImport(filePath, match[1]!);
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          candidates.push(resolved);
+        }
+      }
+    } else if (lang === "python") {
+      const h = getHeuristics("python")!;
+      const re = new RegExp(h.relativeImport!.source, "g");
+      let match: RegExpExecArray | null;
+      while ((match = re.exec(content)) !== null) {
+        const resolved = resolvePythonImport(filePath, match[1]!, match[2] ?? "");
+        if (resolved && !seen.has(resolved)) {
+          seen.add(resolved);
+          candidates.push(resolved);
+        }
       }
     }
+    // Other languages use absolute imports — cannot resolve to file paths
   }
   return candidates;
 }
@@ -138,9 +158,10 @@ export async function buildReviewContext(
       if (crossFileTokens >= crossFileCap || usedTokens >= tokenBudget) break;
       const result = await repoCache.readFile(ref, pr.headSha, importPath);
       if (!result.ok) continue;
-      const t = estimateTokens(result.value);
+      const symbolSummary = extractExportedSymbols(result.value, importPath);
+      const t = estimateTokens(symbolSummary);
       if (crossFileTokens + t <= crossFileCap && usedTokens + t <= tokenBudget) {
-        files.set(importPath, result.value);
+        files.set(importPath, symbolSummary);
         usedTokens += t;
         crossFileTokens += t;
       }

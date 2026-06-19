@@ -126,10 +126,12 @@ export function TabBar({
   const riskHigh = findings.some(
     (f) => f.pass === "regression" && (f.severity === "high" || f.severity === "critical"),
   );
+  const archCount = findings.filter((f) => f.pass === "architecture").length;
 
   function tabCount(id: TabId): { n: number; sev: "high" | "med" | null } | null {
     if (id === "diff" && diffCount > 0) return { n: diffCount, sev: null };
     if (id === "risks" && riskCount > 0) return { n: riskCount, sev: riskHigh ? "high" : "med" };
+    if (id === "arch" && archCount > 0) return { n: archCount, sev: "med" };
     return null;
   }
 
@@ -221,7 +223,173 @@ export function TabBar({
   );
 }
 
+// ── AnalysisProgressBar ───────────────────────────────────────────────────────
+
+export function AnalysisProgressBar({
+  passes,
+  reviewDone,
+}: {
+  passes: PassMap;
+  reviewDone: boolean;
+}) {
+  const t = TOKENS.dark;
+
+  if (reviewDone) return null;
+
+  const entries = Object.entries(passes) as [FindingPass, PassPhase][];
+  const total = entries.length;
+  const done = entries.filter(([, v]) => v.phase === "done").length;
+  const indeterminate = total === 0;
+  const pct = indeterminate ? 0 : (done / total) * 100;
+
+  return (
+    <div
+      style={{
+        height: 2,
+        background: t.border,
+        flexShrink: 0,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      {indeterminate ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "20%",
+            background: t.accent,
+            animation: "vigil-slide 1.4s ease-in-out infinite",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: t.accent,
+            transition: "width 0.25s ease",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── OverviewSkeleton ──────────────────────────────────────────────────────────
+
+export function OverviewSkeleton() {
+  const t = TOKENS.dark;
+
+  function Block({ w, h, delay = 0 }: { w: string | number; h: number; delay?: number }) {
+    return (
+      <div
+        style={{
+          width: w,
+          height: h,
+          borderRadius: 3,
+          background: t.textFaint,
+          animation: `vigil-pulse 1.6s ease-in-out ${delay}ms infinite`,
+        }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
+      {/* Pulse strip skeleton */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, 1fr)",
+          borderBottom: `0.5px solid ${t.border}`,
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            style={{
+              padding: "20px 28px",
+              borderRight: i === 5 ? "none" : `0.5px solid ${t.border}`,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <Block w="40%" h={10} delay={i * 60} />
+            <Block w="55%" h={28} delay={i * 60 + 100} />
+            <Block w="35%" h={10} delay={i * 60 + 200} />
+          </div>
+        ))}
+      </div>
+      {/* Content area skeleton */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 0,
+        }}
+      >
+        <div
+          style={{
+            padding: "28px 32px",
+            borderRight: `0.5px solid ${t.border}`,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
+          <Block w="30%" h={10} delay={0} />
+          {[60, 80, 70, 55].map((w, i) => (
+            <Block key={i} w={`${w}%`} h={14} delay={i * 80} />
+          ))}
+        </div>
+        <div
+          style={{
+            padding: "28px 32px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
+          <Block w="30%" h={10} delay={40} />
+          {[65, 75, 50, 85].map((w, i) => (
+            <Block key={i} w={`${w}%`} h={14} delay={i * 80 + 40} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── OverviewTab ───────────────────────────────────────────────────────────────
+
+function SeverityBreakdown({
+  high,
+  med,
+  low,
+  reviewDone,
+}: {
+  high: number;
+  med: number;
+  low: number;
+  reviewDone: boolean;
+}) {
+  const t = TOKENS.dark;
+  if (!reviewDone && high === 0 && med === 0 && low === 0) {
+    return <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>running…</span>;
+  }
+  if (high === 0 && med === 0 && low === 0) {
+    return <span style={{ fontFamily: MONO, fontSize: 11, color: t.green }}>none</span>;
+  }
+  return (
+    <span style={{ display: "flex", gap: 10, fontFamily: MONO, fontSize: 11 }}>
+      {high > 0 && <span style={{ color: t.red }}>{high} high</span>}
+      {med > 0 && <span style={{ color: t.amber }}>{med} med</span>}
+      {low > 0 && <span style={{ color: t.textDim }}>{low} low</span>}
+    </span>
+  );
+}
 
 function PulseMetric({
   label,
@@ -234,7 +402,7 @@ function PulseMetric({
   label: string;
   value: string | number;
   unit?: string;
-  note?: string;
+  note?: React.ReactNode;
   noteColor?: string;
   last?: boolean;
 }) {
@@ -299,6 +467,10 @@ export function OverviewTab({
   passes,
   reviewDone,
   reviewCompletedAt,
+  onFindingClick,
+  onSuppressFinding,
+  suppressedCount,
+  onClearSuppressed,
 }: {
   pr: PullRequest;
   findings: readonly Finding[];
@@ -306,6 +478,10 @@ export function OverviewTab({
   passes: PassMap;
   reviewDone: boolean;
   reviewCompletedAt: Date | null;
+  onFindingClick?: (finding: Finding) => void;
+  onSuppressFinding?: (finding: Finding) => void;
+  suppressedCount?: number;
+  onClearSuppressed?: () => void;
 }) {
   const t = TOKENS.dark;
 
@@ -313,6 +489,7 @@ export function OverviewTab({
     (f) => f.severity === "critical" || f.severity === "high",
   ).length;
   const medCount = findings.filter((f) => f.severity === "medium").length;
+  const lowCount = findings.filter((f) => f.severity === "low" || f.severity === "info").length;
   const regressionCount = findings.filter((f) => f.pass === "regression").length;
   const filesChanged = diff?.files.length ?? 0;
   const linesAdded =
@@ -365,16 +542,12 @@ export function OverviewTab({
           label="Findings"
           value={findings.length}
           note={
-            highCount > 0
-              ? `${highCount} high`
-              : medCount > 0
-                ? `${medCount} medium`
-                : reviewDone
-                  ? "none critical"
-                  : "running…"
-          }
-          noteColor={
-            highCount > 0 ? t.red : medCount > 0 ? t.amber : reviewDone ? t.green : t.textFaint
+            <SeverityBreakdown
+              high={highCount}
+              med={medCount}
+              low={lowCount}
+              reviewDone={reviewDone}
+            />
           }
         />
         <PulseMetric
@@ -466,10 +639,37 @@ export function OverviewTab({
               >
                 Worth your attention
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {topFindings.map((f, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <RiskDot sev={f.severity} size={7} />
+                  <button
+                    key={i}
+                    onClick={() => onFindingClick?.(f)}
+                    disabled={!onFindingClick}
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "flex-start",
+                      background: "transparent",
+                      border: "none",
+                      padding: "10px 12px",
+                      margin: "0 -12px",
+                      borderRadius: 6,
+                      cursor: onFindingClick ? "pointer" : "default",
+                      textAlign: "left" as const,
+                      width: "calc(100% + 24px)",
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (onFindingClick)
+                        (e.currentTarget as HTMLButtonElement).style.background = `${t.surface}`;
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                    }}
+                  >
+                    <div style={{ paddingTop: 3, flexShrink: 0 }}>
+                      <RiskDot sev={f.severity} size={7} />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
@@ -494,9 +694,90 @@ export function OverviewTab({
                         {f.lines ? `:${f.lines.start}` : ""}
                       </div>
                     </div>
-                  </div>
+                    {onFindingClick && (
+                      <div
+                        style={{
+                          flexShrink: 0,
+                          alignSelf: "center",
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: t.textFaint,
+                        }}
+                      >
+                        →
+                      </div>
+                    )}
+                    {onSuppressFinding && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSuppressFinding(f);
+                        }}
+                        title="Suppress finding (x)"
+                        style={{
+                          flexShrink: 0,
+                          alignSelf: "center",
+                          background: "transparent",
+                          border: 0,
+                          padding: "2px 4px",
+                          cursor: "pointer",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          color: t.textFaint,
+                          lineHeight: 1,
+                          opacity: 0,
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "0";
+                        }}
+                        onFocus={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                        }}
+                        onBlur={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = "0";
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </button>
                 ))}
               </div>
+              {suppressedCount !== undefined && suppressedCount > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    color: t.textFaint,
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <span>{suppressedCount} suppressed</span>
+                  {onClearSuppressed && (
+                    <button
+                      onClick={onClearSuppressed}
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        padding: 0,
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        color: t.accent,
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -1005,59 +1286,52 @@ function TypeBadge({ type }: { type: SemanticChangeType }) {
   );
 }
 
-const SEMANTIC_CHANGES: readonly SemanticChange[] = [
-  {
-    n: 1,
+function findingToSemanticChange(f: Finding, n: number): SemanticChange {
+  const { removed, added } = parseEvidence(f.evidence);
+  const riskText =
+    f.severity === "critical" || f.severity === "high"
+      ? "High severity. Review carefully — this pattern is associated with silent regressions in production."
+      : "Medium severity. Verify the change is intentional.";
+  return {
+    n,
     type: "BEHAVIOR",
-    file: "src/api/payment.ts",
-    line: 13,
-    removed: ["if (attempt >= retries) {"],
-    added: ["if (attempt === retries) {"],
-    explanation:
-      "Boundary condition narrowed from ≥ to ===. The old condition fired on every attempt at or beyond the retry limit. The new condition fires only when attempt exactly equals retries — attempts beyond the limit silently bypass the block.",
-    risk: "Silent behavioral change. Inputs above the threshold no longer trigger. Off-by-one risk when retries is 0 or negative.",
-  },
-  {
-    n: 2,
-    type: "BEHAVIOR",
-    file: "src/api/payment.ts",
-    line: 18,
-    removed: ["return null;"],
-    added: ["throw new PaymentError('Retry limit exceeded', 'RETRY_EXHAUSTED');"],
-    explanation:
-      "Error handling contract changed from returning a null fallback to throwing an exception. Callers that null-check the return value will not see the error. Callers without a surrounding try/catch will crash.",
-    risk: "High. All call sites need auditing. The previous contract guaranteed a safe return value.",
-  },
-  {
-    n: 3,
-    type: "BEHAVIOR",
-    file: "src/utils/retry.ts",
-    line: 21,
-    removed: [
-      "await fn();",
-      "await verify(transactionId, amount);",
-      "await cleanup(transactionId);",
-    ],
-    added: ["await Promise.all([fn(), verify(transactionId, amount), cleanup(transactionId)]);"],
-    explanation:
-      "Execution order changed from sequential to parallel. If fn() must complete before verify() can check its result, or if cleanup() depends on verify() succeeding, this will produce incorrect outcomes under certain inputs.",
-    risk: "Medium. Ordering dependencies not covered by existing tests may surface only under load.",
-  },
-  {
-    n: 4,
-    type: "SECURITY",
-    file: "src/middleware/auth.ts",
-    line: 46,
-    removed: ["const decoded = jwt.decode(token);"],
-    added: ["const decoded = jwt.decode(token, { algorithms: ['HS256'] });"],
-    explanation:
-      "Algorithm constraint added to jwt.decode() call. However, jwt.decode() never verifies the signature — it only parses the payload. This change narrows the accepted algorithm but does not validate that the token was issued by a trusted party.",
-    risk: "High. A crafted token with a valid HS256 header will still pass. Use jwt.verify() with a secret to authenticate the token.",
-  },
-];
+    file: f.file,
+    line: f.lines?.start ?? 0,
+    removed,
+    added,
+    explanation: f.description,
+    risk: riskText,
+  };
+}
 
-export function SemanticTab() {
+export function SemanticTab({ findings }: { findings: readonly Finding[] }) {
   const t = TOKENS.dark;
+  const changes = findings.map((f, i) => findingToSemanticChange(f, i + 1));
+
+  if (changes.length === 0) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: SANS,
+            fontSize: 13,
+            color: t.textFaint,
+            textAlign: "center" as const,
+          }}
+        >
+          No behavioral regressions detected in this PR.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
@@ -1071,27 +1345,13 @@ export function SemanticTab() {
         }}
       >
         <div style={{ fontFamily: SANS, fontSize: 13, color: t.textDim, lineHeight: 1.55 }}>
-          {SEMANTIC_CHANGES.length} semantic changes — behavioral shifts, security issues, and
-          refactors grouped by intent.
+          {changes.length} behavioral {changes.length === 1 ? "change" : "changes"} detected —
+          high-risk patterns found by static analysis.
         </div>
-        <div style={{ flex: 1 }} />
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 10.5,
-            color: t.textFaint,
-            background: `${t.accent}14`,
-            border: `0.5px solid ${t.accent}33`,
-            borderRadius: 4,
-            padding: "2px 8px",
-          }}
-        >
-          AI · Claude 3.7
-        </span>
       </div>
 
       <div style={{ padding: "0 32px 32px" }}>
-        {SEMANTIC_CHANGES.map((change) => (
+        {changes.map((change) => (
           <div
             key={change.n}
             style={{
@@ -1235,301 +1495,128 @@ export function SemanticTab() {
 
 // ── ArchTab ───────────────────────────────────────────────────────────────────
 
-interface ArchViolation {
-  file: string;
-  line: number;
-  layer: string;
-  violation: string;
-  severity: "high" | "medium" | "low";
+function parseChain(evidence: string): string[] {
+  return evidence.split("\n").filter(Boolean);
 }
 
-const ARCH_VIOLATIONS: readonly ArchViolation[] = [
-  {
-    file: "src/api/payment.ts",
-    line: 28,
-    layer: "API",
-    violation:
-      "New localStorage access in an API-layer file. Browser storage is a cross-cutting concern — access should be encapsulated in a dedicated utility, not scattered across request handlers.",
-    severity: "medium",
-  },
-  {
-    file: "src/utils/retry.ts",
-    line: 34,
-    layer: "Service",
-    violation:
-      "RetryManager directly imports PaymentError from the domain layer. Utilities should not depend on domain types — invert the dependency so the caller passes an error factory.",
-    severity: "medium",
-  },
-  {
-    file: "src/middleware/auth.ts",
-    line: 52,
-    layer: "Utility",
-    violation:
-      "Auth middleware throws PaymentError (a domain-specific type). Utility-layer code should throw generic errors or accept error constructors as parameters.",
-    severity: "low",
-  },
-];
-
-const ARCH_LAYERS = [
-  { name: "API", files: ["payment.ts"], violation: true },
-  { name: "Service", files: ["retry.ts"], violation: true },
-  { name: "Utility", files: ["auth.ts"], violation: true },
-];
-
-export function ArchTab() {
+export function ArchTab({ findings }: { findings: readonly Finding[] }) {
   const t = TOKENS.dark;
+
+  if (findings.length === 0) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 12,
+        }}
+      >
+        <div style={{ fontFamily: SANS, fontSize: 13, color: t.textFaint }}>
+          No circular dependencies detected among changed files.
+        </div>
+      </div>
+    );
+  }
+
+  const label = findings.length === 1 ? "circular dependency" : "circular dependencies";
 
   return (
     <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
-      {/* Metrics strip */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          padding: "20px 32px 16px",
           borderBottom: `0.5px solid ${t.border}`,
+          display: "flex",
+          alignItems: "baseline",
+          gap: 20,
         }}
       >
-        {[
-          {
-            label: "Layer violations",
-            value: ARCH_VIOLATIONS.length,
-            note: "new in this PR",
-            noteColor: t.amber,
-          },
-          { label: "Coupling changes", value: 2, note: "dependency edges", noteColor: t.textFaint },
-          { label: "Files affected", value: 3, note: "across 3 layers", noteColor: t.textFaint },
-          {
-            label: "Risk level",
-            value: "MED",
-            note: "no critical violations",
-            noteColor: t.textFaint,
-          },
-        ].map((m, i) => (
-          <div
-            key={i}
-            style={{
-              padding: "20px 28px",
-              borderRight: i < 3 ? `0.5px solid ${t.border}` : "none",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
+        <div style={{ fontFamily: SANS, fontSize: 13, color: t.textDim, lineHeight: 1.55 }}>
+          {findings.length} {label} detected — analysis covers changed files and their direct
+          imports.
+        </div>
+      </div>
+
+      <div style={{ padding: "0 32px 32px" }}>
+        {findings.map((finding, i) => {
+          const chain = parseChain(finding.evidence);
+          return (
             <div
+              key={i}
               style={{
-                fontSize: 11,
-                color: t.textFaint,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase" as const,
-                fontFamily: SANS,
+                paddingTop: 28,
+                paddingBottom: 28,
+                borderBottom: i < findings.length - 1 ? `0.5px solid ${t.border}` : "none",
               }}
             >
-              {m.label}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <RiskDot sev="medium" size={6} />
+                <span style={{ fontFamily: SANS, fontSize: 13, color: t.text, fontWeight: 500 }}>
+                  {finding.title}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap" as const,
+                  gap: 6,
+                  background: t.surface,
+                  border: `0.5px solid ${t.border}`,
+                  borderRadius: 6,
+                  padding: "12px 16px",
+                  marginBottom: 14,
+                }}
+              >
+                {chain.map((node, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11.5,
+                        color: j === chain.length - 1 ? t.amber : t.textDim,
+                      }}
+                    >
+                      {shortPath(node)}
+                    </span>
+                    {j < chain.length - 1 && (
+                      <span style={{ fontFamily: MONO, fontSize: 11, color: t.textFaint }}>→</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  fontFamily: SANS,
+                  fontSize: 13,
+                  color: t.textDim,
+                  lineHeight: 1.65,
+                  maxWidth: 680,
+                }}
+              >
+                {finding.description}
+              </div>
             </div>
-            <span
-              style={{
-                fontFamily: MONO,
-                fontSize: 28,
-                color: t.text,
-                letterSpacing: "-0.02em",
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {m.value}
-            </span>
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 11,
-                color: m.noteColor,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {m.note}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 280px",
-          minHeight: "calc(100% - 100px)",
+          padding: "12px 32px",
+          borderTop: `0.5px solid ${t.border}`,
+          fontFamily: MONO,
+          fontSize: 10.5,
+          color: t.textFaint,
         }}
       >
-        {/* Main content */}
-        <div
-          style={{
-            padding: "28px 32px",
-            borderRight: `0.5px solid ${t.border}`,
-            overflowY: "auto",
-          }}
-        >
-          <UpperLabel>Layer map</UpperLabel>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: 32,
-              fontFamily: MONO,
-              fontSize: 12,
-            }}
-          >
-            {ARCH_LAYERS.map((layer, i) => (
-              <div key={layer.name} style={{ display: "flex", alignItems: "center" }}>
-                <div
-                  style={{
-                    padding: "14px 20px",
-                    border: `0.5px solid ${layer.violation ? t.amber : t.border}`,
-                    borderRadius: 6,
-                    background: layer.violation ? `${t.amber}0a` : t.surface,
-                    minWidth: 120,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase" as const,
-                      color: layer.violation ? t.amber : t.textFaint,
-                      marginBottom: 6,
-                    }}
-                  >
-                    {layer.name}
-                  </div>
-                  {layer.files.map((f) => (
-                    <div key={f} style={{ fontSize: 11, color: t.textDim }}>
-                      {f}
-                    </div>
-                  ))}
-                </div>
-                {i < ARCH_LAYERS.length - 1 && (
-                  <div style={{ fontSize: 16, color: t.textFaint, padding: "0 10px" }}>→</div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <UpperLabel>Violations</UpperLabel>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {ARCH_VIOLATIONS.map((v, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "18px 0",
-                  borderBottom: i < ARCH_VIOLATIONS.length - 1 ? `0.5px solid ${t.border}` : "none",
-                  display: "grid",
-                  gridTemplateColumns: "24px 160px 1fr",
-                  gap: 16,
-                  alignItems: "flex-start",
-                }}
-              >
-                <div style={{ paddingTop: 3 }}>
-                  <RiskDot sev={v.severity} size={6} />
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      color: t.textFaint,
-                      marginBottom: 6,
-                    }}
-                  >
-                    {shortPath(v.file)}:{v.line}
-                  </div>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase" as const,
-                      color: t.textFaint,
-                      border: `0.5px solid ${t.border}`,
-                      borderRadius: 3,
-                      padding: "1px 5px",
-                    }}
-                  >
-                    {v.layer}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontFamily: SANS,
-                    fontSize: 12.5,
-                    color: t.textDim,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {v.violation}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right rail */}
-        <div style={{ padding: "28px 24px", overflowY: "auto" }}>
-          <div
-            style={{
-              fontFamily: SANS,
-              fontSize: 11,
-              color: t.textFaint,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase" as const,
-              marginBottom: 14,
-            }}
-          >
-            How Vigil reads architecture
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {[
-              {
-                t: "API layer",
-                d: "Files in src/api/ and src/routes/. Handles HTTP boundaries, request validation, and response formatting. Should not contain business logic.",
-              },
-              {
-                t: "Service layer",
-                d: "Files in src/services/, src/utils/, and retry infrastructure. Contains business rules, orchestration, and retry policies.",
-              },
-              {
-                t: "Utility layer",
-                d: "Shared helpers in src/middleware/ and src/helpers/. Should have no domain dependencies — only primitives and platform APIs.",
-              },
-              {
-                t: "Violation heuristic",
-                d: "A violation is flagged when an import, throw, or write operation crosses an expected layer boundary in the wrong direction.",
-              },
-            ].map((x, i) => (
-              <div key={i}>
-                <div
-                  style={{
-                    fontFamily: SANS,
-                    fontSize: 12.5,
-                    color: t.text,
-                    letterSpacing: "-0.003em",
-                  }}
-                >
-                  {x.t}
-                </div>
-                <div
-                  style={{
-                    marginTop: 3,
-                    fontFamily: SANS,
-                    fontSize: 12,
-                    color: t.textDim,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  {x.d}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        Only relative imports are analyzed. Path alias imports (e.g. @/) are not resolved.
       </div>
     </div>
   );
@@ -1541,10 +1628,6 @@ const PLACEHOLDER_COPY: Partial<Record<TabId, { heading: string; body: string }>
   semantic: {
     heading: "Semantic analysis",
     body: "Groups the diff into numbered semantic changes — behavior changes, refactors, and tests — with before/after code blocks and a plain-English explanation of each change's intent and risk. Requires an AI provider.",
-  },
-  arch: {
-    heading: "Architecture drift",
-    body: "Shows how this PR moves components between architectural layers, highlights cross-layer coupling violations, and recommends how to restore intended boundaries. Requires an AI provider.",
   },
 };
 

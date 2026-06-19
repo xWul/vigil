@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { err, ok } from "../../shared/result.js";
 import type { Result } from "../../shared/result.js";
+import { isTestFile } from "./language.js";
 import { NoopLogger } from "../../shared/logger.js";
 import type { Logger } from "../../shared/logger.js";
 import type { Diff, FileDiff } from "../platforms/model/index.js";
@@ -24,9 +25,6 @@ function loadPrompt(name: string): string {
   return readFileSync(join(PROMPTS_DIR, `${name}.md`), "utf-8");
 }
 
-// Test files — no logic to audit
-const TEST_RE = /\.(test|spec)\.[jt]sx?$/;
-
 // Binary and media assets — no text content worth reviewing
 const BINARY_RE =
   /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff?|avif|woff2?|ttf|otf|eot|mp[34]|wav|ogg|pdf|zip|tar|gz|br|exe|dll|so|dylib)$/i;
@@ -39,7 +37,10 @@ const LOCK_FILENAMES = new Set([
   "Gemfile.lock",
   "Cargo.lock",
   "poetry.lock",
+  "Pipfile.lock",
   "composer.lock",
+  "go.sum",
+  "packages.lock.json",
 ]);
 
 // Documentation — prose, not code
@@ -51,7 +52,7 @@ const GENERATED_RE = /\.(min\.(js|css)|[jt]s\.map|css\.map)$/;
 export function isNonReviewable(filePath: string): boolean {
   const filename = filePath.split("/").at(-1) ?? filePath;
   return (
-    TEST_RE.test(filePath) ||
+    isTestFile(filePath) ||
     BINARY_RE.test(filePath) ||
     LOCK_FILENAMES.has(filename) ||
     DOC_RE.test(filePath) ||
@@ -284,7 +285,23 @@ async function runAIPass(
 export interface RunReviewOptions {
   model: string;
   maxTokensPerPass?: number;
+  maxFindingsPerAnalyzer?: number;
   onPass?: (pass: FindingPass, status: "start" | "complete", count: number) => void;
+}
+
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  info: 0,
+};
+
+function capFindings(findings: readonly Finding[], max: number): Finding[] {
+  if (findings.length <= max) return [...findings];
+  return [...findings]
+    .sort((a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0))
+    .slice(0, max);
 }
 
 export async function runReview(
@@ -295,6 +312,7 @@ export async function runReview(
   logger: Logger = new NoopLogger(),
 ): Promise<Result<ReviewResult, ReviewError>> {
   const maxTokensPerPass = options.maxTokensPerPass ?? 4096;
+  const maxFindingsPerAnalyzer = options.maxFindingsPerAnalyzer ?? 10;
   const onPass = options.onPass ?? (() => undefined);
   const allFindings: Finding[] = [];
   const start = Date.now();
@@ -317,13 +335,15 @@ export async function runReview(
       try {
         const result = await analyzer.analyze(filteredContext);
         if (result.ok) {
+          const capped = capFindings(result.value, maxFindingsPerAnalyzer);
           logger.info("analyzer.complete", {
             id: analyzer.id,
-            findingCount: result.value.length,
+            findingCount: capped.length,
+            rawCount: result.value.length,
             latencyMs: Date.now() - analyzerStart,
           });
-          onPass(pass, "complete", result.value.length);
-          return result.value;
+          onPass(pass, "complete", capped.length);
+          return capped;
         }
         logger.warn("analyzer.failed", { id: analyzer.id, code: result.error.code });
         onPass(pass, "complete", 0);

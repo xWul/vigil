@@ -109,6 +109,16 @@ filtered server-side and never appear in the queue.
 
 ---
 
+## Language
+
+The programming language of a source file — Java, Python, C#, Go, Ruby,
+TypeScript, or similar — inferred from the file's extension. Determines
+which analysis capabilities apply to a file in the review pipeline.
+Distinct from _platform_ (GitHub / Azure DevOps) and _AI provider_
+(Anthropic / OpenAI).
+
+---
+
 ## Diff
 
 The structured, normalized representation of all file changes in a PR.
@@ -207,6 +217,10 @@ Diff-aware analyzers (examine the diff itself, not file content):
 - `TypeSafetyAnalyzer` — flags newly added `as any`, `@ts-ignore`, non-null assertions, and double-cast patterns in added lines only
 - `ChangeClassifierAnalyzer` — classifies each changed file as behavior/refactor/test/config using control-flow keyword heuristics; emits a PR-level summary and (conditionally) an intent-mismatch finding
 - `SilentRegressionAnalyzer` — detects high-risk behavioral change patterns using paired hunk analysis: condition operator changes, error handling removal/change, numeric constant changes in sensitive contexts, async execution pattern changes, and side effect introductions
+
+Context-aware analyzers (examine `context.files` — changed files plus their direct imports):
+
+- `ArchitectureAnalyzer` — detects circular import dependencies among files touched by the PR; relative imports only; only cycles involving at least one changed file are reported; severity always `"medium"`
 
 All analyzers only examine files that appear in the diff. `CodeAnalyzer` failures are silent — a failed analyzer logs a warning and returns empty findings; it never blocks the review.
 
@@ -325,8 +339,9 @@ marker; they appear as pinned cards in the right panel.
 
 The in-progress review being composed in the workspace before
 submission. Contains a verdict (`approved | changes_requested |
-commented`), an optional overall body, and a list of QueuedComments
-(findings the reviewer has chosen to post as inline comments).
+commented`), an optional overall body, and a list of `QueuedComments`
+— both findings the reviewer chose to post and freeform inline comments
+written directly on diff lines.
 
 Submitted as a single `platform:submitReview` call. Distinct from
 `NewReview` (the final submitted form) — the draft is mutable workspace
@@ -344,6 +359,30 @@ sessions.
 
 Distinct from a PR-level conversation (not in scope for Phase 5) —
 each ChallengeThread is anchored to one Finding.
+
+---
+
+## RepoCache
+
+The local clone manager for reviewed repositories. Maintains one blobless
+partial git clone per repo under `{userData}/repos/{platform}/{owner}/{repo}/`.
+Clones on first review, fetches when the local copy is stale (> 15 minutes).
+
+`RepoCache` is injected into the IPC handler layer at startup. It is not
+visible to the renderer — the renderer only receives `git:cacheStatus` push
+events as progress updates.
+
+Key operations:
+
+- `ensureCloned(session, ref)` — fire-and-forget background clone or fetch
+- `readFile(ref, sha, path)` — returns file content at a given commit SHA;
+  returns `err({ code: "not_ready" })` if the clone is not yet available
+
+Callers fall back to `PlatformProvider.getFileContent` on any `not_ready`
+or `not_found` result — `RepoCache` is always additive, never blocking.
+
+Eviction runs at startup: repos older than 30 days are removed; if the
+total exceeds 2 GB, the least-recently-fetched repos are removed first.
 
 ---
 
@@ -369,5 +408,89 @@ a typed handler registration helper.
 
 Channel naming: `namespace:action` (e.g. `auth:signIn`, `review:run`).
 Namespaces: `auth`, `platform`, `review`, `settings`.
+
+---
+
+## AnalyzerConfig
+
+The structured configuration object that controls static analysis behaviour
+for a specific repository. Contains enable/disable flags and numeric
+thresholds for each `CodeAnalyzer`, plus the pipeline-level
+`maxFindingsPerAnalyzer` cap.
+
+`AnalyzerConfig` is per-repo (keyed by `{platform}/{owner}/{repo}`) and
+stored in Electron's `userData` directory. It is not stored in the git
+repository — teams who want to share it commit a `.vigilrc` file manually
+using Vigil's "Export as .vigilrc" clipboard button (see ADR-0012).
+
+`AnalyzerConfig` travels from the IPC handler into each `CodeAnalyzer`
+constructor at review time. It does not appear in `ReviewContext` — it
+governs how analyzers behave, not what they receive as input.
+
+Hardcoded defaults apply for any key absent from the stored config:
+
+- `complexity.threshold` = 10
+- `smells.maxFunctionLines` = 50, `maxParams` = 4, `maxNesting` = 3
+- `duplication.minBlockLines` = 6
+- All detectors and analyzers enabled by default
+- `maxFindingsPerAnalyzer` = 10
+
+---
+
+## `.vigilrc`
+
+The portable, committable form of `AnalyzerConfig`. A JSON file placed at
+the repository root that teams can commit to share analysis conventions.
+Vigil does not auto-read `.vigilrc` from repositories in the current
+version — it is generated from the workspace config panel via "Export as
+.vigilrc" and committed manually. Auto-reading is planned for a future
+phase (see ADR-0012).
+
+---
+
+## QueuedComment
+
+A staged entry in a `ReviewDraft` representing a not-yet-posted inline
+comment. Two kinds, discriminated:
+
+- `from-finding` — originated from a `Finding`; carries the finding title
+  as a badge so the reviewer can distinguish Vigil's suggestions from their
+  own prose
+- `freeform` — written directly on a diff line by the reviewer
+
+Both kinds carry a `body`, `path`, and `line`. Both are shown inline in
+the diff at their line position as "pending" threads before submission.
+
+On `ReviewDraft` submission, each `QueuedComment` produces a new `Thread`
+on the platform. The source `Finding` is unaffected — it remains an
+analysis result regardless of whether it was queued.
+
+Distinct from a `Thread` (which exists on the platform and is visible to
+all participants) and from a `Finding` (which is Vigil's internal analysis
+output and is never directly posted).
+
+---
+
+## Thread
+
+A line-anchored or PR-level comment conversation on a pull request.
+Consists of a root comment plus zero or more replies. A thread anchored
+to a specific line in the diff carries the file path and new-file line
+number; a PR-level thread carries no line position.
+
+Maps to GitHub's review thread model and to ADO's `Thread` object
+(with `threadContext` for line-anchored threads). Vigil uses a single
+internal `Thread` type for both platforms.
+
+Supported operations in Vigil: read and reply. Resolve/unresolve is
+not supported — thread resolution is managed on the platform directly.
+Replies are posted immediately (not staged in a `ReviewDraft`); only
+new threads from `QueuedComments` go through the draft submission flow.
+
+Fetched eagerly on PR open, in parallel with the diff.
+
+Distinct from a `ChallengeThread` — a `Thread` lives on the platform and
+is visible to all PR participants; a `ChallengeThread` is a private
+AI conversation inside Vigil and is never posted.
 
 ---
