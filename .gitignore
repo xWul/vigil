@@ -59,6 +59,7 @@ desktop.ini
 .project
 .classpath
 .settings/
+.claude
 
 # --- TypeScript / JavaScript ---
 *.tgz
