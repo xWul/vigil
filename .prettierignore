@@ -1,0 +1,5 @@
+# Implementation plans — prose docs, not formatted by Prettier
+plans/
+
+# Lock file — managed by pnpm, not formatted
+pnpm-lock.yaml

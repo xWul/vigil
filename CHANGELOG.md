@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`.dmg`) and Windows (`.exe`) artifacts in parallel on every `v*` tag push and publishes
   them to the GitHub Release automatically.
 
+### Security
+
+- Updated dev tooling (vitest, vite) past known security advisories affecting the local dev server.
+
 ### Fixed
 
 - **Azure DevOps diff hunks**: the AI review pipeline now receives full line-level diff data
