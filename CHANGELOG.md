@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Log redaction now covers nested objects and credentials embedded in strings (URLs, Bearer headers).
+- Platform access tokens are no longer written into cached repos' `.git/config`; credentials are now passed to git per-invocation via environment variables and never stored on disk.
+- Existing caches are scrubbed on next fetch. If you used v0.1.0, you can also clear the repo cache folder (`userData/repos`) and, to be safe, rotate your PAT.
 
 ### Fixed
 
